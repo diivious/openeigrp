@@ -30,7 +30,8 @@ void eigrp_siaquery_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 {
 	eigrp_debug_neighbor_sia(nbr, "SIA-QUERY received");
 	eigrp_debug_transmit_event(EIGRP_DEBUG_TRANSMIT_SIA, eigrp,
-				   nbr ? nbr->ei : NULL, nbr, "SIA-QUERY received");
+				   nbr ? nbr->ei : NULL, nbr,
+				   "SIA-QUERY received");
 	eigrp_fsm_action_message_t msg = {0};
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_route_descriptor_t *route;
@@ -49,17 +50,20 @@ void eigrp_siaquery_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			break;
 
 		prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						       &route->dest);
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SIA_QUERY_RX,
-			&route->dest, ei ? ei->ifindex : 0, route->distance,
+						     &route->dest);
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_SIA_QUERY_RX, &route->dest,
+			ei ? ei->ifindex : 0, route->distance,
 			prefix ? prefix->state : EIGRP_FSM_STATE_PASSIVE, 0);
 		if (!prefix) {
 			char prefix_buf[EIGRP_PREFIX_STRLEN] = "invalid";
 
 			eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 					      &route->dest);
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP SIA-QUERY: Neighbor(%s) sent unknown prefix %s",
-				   eigrp_print_addr(&nbr->src), prefix_buf);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"EIGRP SIA-QUERY: Neighbor(%s) sent unknown prefix %s",
+				eigrp_print_addr(&nbr->src), prefix_buf);
 			eigrp_topology_route_free(route);
 			continue;
 		}
@@ -79,23 +83,27 @@ void eigrp_siaquery_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			received_route->prefix = prefix;
 		}
 
-		/* An SIA-QUERY without an outstanding original QUERY is processed
-		 * as a standard QUERY.  If this leaves the destination ACTIVE, the
-		 * response is SIA-REPLY with the route ACTIVE bit set. */
+		/* An SIA-QUERY without an outstanding original QUERY is
+		 * processed as a standard QUERY.  If this leaves the
+		 * destination ACTIVE, the response is SIA-REPLY with the route
+		 * ACTIVE bit set. */
 		msg.packet_type = prefix->state == EIGRP_FSM_STATE_PASSIVE
-				  ? EIGRP_OPC_QUERY : EIGRP_OPC_SIAQUERY;
+					  ? EIGRP_OPC_QUERY
+					  : EIGRP_OPC_SIAQUERY;
 		msg.eigrp = eigrp;
 		msg.data_type = (received_route->type == EIGRP_TLV_IPv4_EXT
 				 || received_route->type == EIGRP_TLV_IPv6_EXT
 				 || received_route->type == EIGRP_TLV_MP_EXT)
-					? EIGRP_EXT : EIGRP_INT;
+					? EIGRP_EXT
+					: EIGRP_INT;
 		msg.adv_router = nbr;
 		msg.route = route;
 		msg.metrics = received_route->metric;
 		msg.prefix = prefix;
-		msg.transient_route = !topology_route &&
-			!eigrp_nbr_route_admit(eigrp, nbr, &prefix->destination,
-						   &msg.metrics);
+		msg.transient_route =
+			!topology_route
+			&& !eigrp_nbr_route_admit(
+				eigrp, nbr, &prefix->destination, &msg.metrics);
 		eigrp_fsm_event(&msg);
 		if (prefix->state != EIGRP_FSM_STATE_PASSIVE)
 			eigrp_siareply_send(eigrp, nbr, prefix, true);
@@ -103,7 +111,6 @@ void eigrp_siaquery_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		if (free_received_route || msg.transient_route)
 			eigrp_topology_route_free(received_route);
 	}
-
 }
 
 void eigrp_siaquery_send(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
@@ -113,10 +120,11 @@ void eigrp_siaquery_send(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 	eigrp_debug_neighbor_sia(nbr, "SIA-QUERY send");
 	eigrp_debug_transmit_event(EIGRP_DEBUG_TRANSMIT_SIA, eigrp,
-				   nbr ? nbr->ei : NULL, nbr, "queue SIA-QUERY");
-	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SIA_QUERY_TX,
-		&prefix->destination, nbr && nbr->ei ? nbr->ei->ifindex : 0,
-		0, 0, 0);
+				   nbr ? nbr->ei : NULL, nbr,
+				   "queue SIA-QUERY");
+	(void)eigrp_eventlog_msg_add(
+		eigrp, EIGRP_EVENTLOG_OPCODE_SIA_QUERY_TX, &prefix->destination,
+		nbr && nbr->ei ? nbr->ei->ifindex : 0, 0, 0, 0);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_SIAQUERY);
 	work->nbr = nbr;
 	work->prefix = prefix;

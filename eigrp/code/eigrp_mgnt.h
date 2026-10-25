@@ -57,10 +57,11 @@ typedef struct eigrp_intf_state {
 typedef eigrp_result_t (*eigrp_intf_state_iterate_cb)(
 	const eigrp_intf_state_t *state, void *arg);
 
-eigrp_result_t eigrp_intf_state_iterate(
-	eigrp_af_config_t *config, eigrp_instance_t *runtime,
-	const char *interface_name, eigrp_intf_state_iterate_cb callback,
-	void *arg);
+eigrp_result_t eigrp_intf_state_iterate(eigrp_af_config_t *config,
+					eigrp_instance_t *runtime,
+					const char *interface_name,
+					eigrp_intf_state_iterate_cb callback,
+					void *arg);
 
 /* Neighbor state snapshot. */
 typedef struct eigrp_nbr_state {
@@ -75,7 +76,8 @@ typedef struct eigrp_nbr_state {
 	uint32_t sequence_number;
 	uint32_t prefix_count;
 	/* Prefix-limit admission is separate from the adjacency FSM. */
-	char limit_status; /* A adjacency, P suspended, D locked; 0 unpenalized. */
+	char limit_status; /* A adjacency, P suspended, D locked; 0 unpenalized.
+			    */
 	uint16_t limit_restart_cnt;
 	uint32_t limit_restart_seconds;
 	uint32_t limit_reset_seconds;
@@ -94,10 +96,10 @@ typedef struct eigrp_nbr_state {
 typedef eigrp_result_t (*eigrp_nbr_state_iterate_cb)(
 	const eigrp_nbr_state_t *state, void *arg);
 
-eigrp_result_t eigrp_nbr_state_iterate(
-	eigrp_af_config_t *config, eigrp_instance_t *runtime,
-	const char *interface_name, bool static_only,
-	eigrp_nbr_state_iterate_cb callback, void *arg);
+eigrp_result_t
+eigrp_nbr_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime,
+			const char *interface_name, bool static_only,
+			eigrp_nbr_state_iterate_cb callback, void *arg);
 
 /* Topology snapshots. */
 typedef struct eigrp_topology_prefix_state {
@@ -150,17 +152,19 @@ typedef struct eigrp_timer_state {
 	uint32_t expiration_seconds;
 } eigrp_timer_state_t;
 
-typedef eigrp_result_t (*eigrp_timer_state_cb)(
-	const eigrp_timer_state_t *state, void *arg);
-eigrp_result_t eigrp_timer_state_iterate(const eigrp_instance_context_t *context,
-				eigrp_timer_state_cb callback, void *arg);
+typedef eigrp_result_t (*eigrp_timer_state_cb)(const eigrp_timer_state_t *state,
+					       void *arg);
+eigrp_result_t
+eigrp_timer_state_iterate(const eigrp_instance_context_t *context,
+			  eigrp_timer_state_cb callback, void *arg);
 
 /* Event log. */
 #define EIGRP_EVENTLOG_DEFAULT_SIZE 500U
 typedef uintptr_t eventmsg_arg_t;
 
 typedef struct eigrp_eventlog_msg {
-	uint64_t timestamp; /* Unix epoch milliseconds for cross-router correlation. */
+	uint64_t timestamp; /* Unix epoch milliseconds for cross-router
+			       correlation. */
 	uint16_t opcode;
 	eigrp_prefix_t addr;
 	eventmsg_arg_t arg1;
@@ -181,15 +185,15 @@ typedef eigrp_result_t (*eigrp_eventlog_msg_cb)(
 	const char *format, void *arg);
 
 /* The context type is defined by eigrp_cli.h; use the tagged name here. */
-eigrp_result_t eigrp_eventlog_state_read(
-	const eigrp_instance_context_t *context,
-	eigrp_eventlog_state_t *state);
-eigrp_result_t eigrp_eventlog_msg_iterate(
-	const eigrp_instance_context_t *context,
-	eigrp_eventlog_msg_cb callback, void *arg);
+eigrp_result_t
+eigrp_eventlog_state_read(const eigrp_instance_context_t *context,
+			  eigrp_eventlog_state_t *state);
+eigrp_result_t
+eigrp_eventlog_msg_iterate(const eigrp_instance_context_t *context,
+			   eigrp_eventlog_msg_cb callback, void *arg);
 const char *eigrp_eventlog_format_read(unsigned long opcode);
-eigrp_result_t eigrp_eventlog_msg_format(
-	const eigrp_eventlog_msg_t *entry, char *buffer, size_t buffer_size);
+eigrp_result_t eigrp_eventlog_msg_format(const eigrp_eventlog_msg_t *entry,
+					 char *buffer, size_t buffer_size);
 
 /* Traffic/accounting state. */
 #define EIGRP_STATISTICS_TRAFFIC_ACK (1U << 0)
@@ -245,19 +249,18 @@ typedef struct eigrp_pfxlimits_summary {
 	eigrp_pfxlimits_af_state_t redist;
 } eigrp_pfxlimits_summary_t;
 
-eigrp_result_t eigrp_stat_pfxlimits_summary_read(
-	const eigrp_instance_context_t *context,
-	eigrp_pfxlimits_summary_t *state);
+eigrp_result_t
+eigrp_stat_pfxlimits_summary_read(const eigrp_instance_context_t *context,
+				  eigrp_pfxlimits_summary_t *state);
 
 typedef eigrp_result_t (*eigrp_stat_accounting_cb)(
 	const eigrp_stat_nbr_limit_t *state, void *arg);
-eigrp_result_t eigrp_stat_accounting_iterate(
-	const eigrp_instance_context_t *context,
-	uint32_t *total_prefix_count,
-	eigrp_stat_accounting_cb callback, void *arg);
-eigrp_result_t eigrp_stat_traffic_read(
-	const eigrp_instance_context_t *context,
-	eigrp_statistics_traffic_state_t *state);
+eigrp_result_t
+eigrp_stat_accounting_iterate(const eigrp_instance_context_t *context,
+			      uint32_t *total_prefix_count,
+			      eigrp_stat_accounting_cb callback, void *arg);
+eigrp_result_t eigrp_stat_traffic_read(const eigrp_instance_context_t *context,
+				       eigrp_statistics_traffic_state_t *state);
 
 /* Image capability snapshot used by technical-support presentation. */
 typedef struct eigrp_status_capability_state {
@@ -274,8 +277,8 @@ typedef struct eigrp_status_capability_state {
 	bool snmp;
 } eigrp_status_capability_state_t;
 
-eigrp_result_t eigrp_status_capability_state_read(
-	eigrp_status_capability_state_t *state);
+eigrp_result_t
+eigrp_status_capability_state_read(eigrp_status_capability_state_t *state);
 
 /* Protocol summary/tech-support snapshot. */
 typedef struct eigrp_status_protocol_state {
@@ -293,10 +296,10 @@ typedef struct eigrp_status_protocol_state {
 
 typedef eigrp_result_t (*eigrp_status_protocol_cb)(
 	const eigrp_status_protocol_state_t *state, void *arg);
-eigrp_result_t eigrp_status_protocol_iterate(
-	eigrp_status_protocol_cb callback, void *arg);
-eigrp_result_t eigrp_status_tech_support_iterate(
-	eigrp_status_protocol_cb callback, void *arg);
+eigrp_result_t eigrp_status_protocol_iterate(eigrp_status_protocol_cb callback,
+					     void *arg);
+eigrp_result_t
+eigrp_status_tech_support_iterate(eigrp_status_protocol_cb callback, void *arg);
 
 /* Debug state snapshots consumed by host presentation. */
 typedef struct eigrp_debug_af_state {
@@ -311,8 +314,7 @@ typedef struct eigrp_debug_af_state {
 } eigrp_debug_af_state_t;
 
 size_t eigrp_debug_af_state_count(void);
-bool eigrp_debug_af_state_read(
-	eigrp_debug_scope_t scope, size_t index,
-	eigrp_debug_af_state_t *state);
+bool eigrp_debug_af_state_read(eigrp_debug_scope_t scope, size_t index,
+			       eigrp_debug_af_state_t *state);
 
 #endif /* EIGRPD_EIGRP_MGNT_H_ */

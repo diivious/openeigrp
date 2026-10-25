@@ -25,9 +25,8 @@ eigrp_result_t eigrp_named_config_create(const char *name)
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_af_config_create(
-	const char *name, eigrp_afi_t afi, const char *vrf_name,
-	uint16_t asn)
+eigrp_result_t eigrp_af_config_create(const char *name, eigrp_afi_t afi,
+				      const char *vrf_name, uint16_t asn)
 {
 	assert(strcmp(name, "savage") == 0);
 	assert(afi == EIGRP_AFI_IPV4);
@@ -37,8 +36,8 @@ eigrp_result_t eigrp_af_config_create(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_af_config_t *eigrp_af_config_read(
-	const char *name, eigrp_afi_t afi, const char *vrf_name, uint16_t asn)
+eigrp_af_config_t *eigrp_af_config_read(const char *name, eigrp_afi_t afi,
+					const char *vrf_name, uint16_t asn)
 {
 	(void)name;
 	(void)afi;
@@ -47,9 +46,9 @@ eigrp_af_config_t *eigrp_af_config_read(
 	return (eigrp_af_config_t *)&fake_af;
 }
 
-eigrp_result_t eigrp_af_config_context_read(
-	const char *name, eigrp_afi_t afi, const char *vrf_name, uint16_t asn,
-	eigrp_instance_context_t *context)
+eigrp_result_t eigrp_af_config_context_read(const char *name, eigrp_afi_t afi,
+					    const char *vrf_name, uint16_t asn,
+					    eigrp_instance_context_t *context)
 {
 	(void)name;
 	(void)afi;
@@ -61,8 +60,10 @@ eigrp_result_t eigrp_af_config_context_read(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_instance_router_id_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context, uint32_t router_id)
+eigrp_result_t
+eigrp_instance_router_id_update(eigrp_operation_t operation,
+				eigrp_instance_context_t *context,
+				uint32_t router_id)
 {
 	assert(operation == EIGRP_SET);
 	assert(context->config == (eigrp_af_config_t *)&fake_af);
@@ -73,7 +74,7 @@ eigrp_result_t eigrp_instance_router_id_update(eigrp_operation_t operation,
 }
 
 eigrp_result_t eigrp_af_config_shutdown_update(eigrp_operation_t operation,
-	eigrp_af_config_t *af)
+					       eigrp_af_config_t *af)
 {
 	assert(af == (eigrp_af_config_t *)&fake_af);
 	shutdown_calls++;

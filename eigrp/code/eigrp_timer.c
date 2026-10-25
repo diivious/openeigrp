@@ -43,7 +43,8 @@ typedef struct eigrp_timer_message_args {
 	uint16_t seconds;
 } eigrp_timer_message_args_t;
 
-static eigrp_result_t eigrp_timer_message_process(eigrp_instance_t *eigrp, void *arg);
+static eigrp_result_t eigrp_timer_message_process(eigrp_instance_t *eigrp,
+						  void *arg);
 
 /*
  * Syntax:
@@ -57,21 +58,25 @@ static eigrp_result_t eigrp_timer_message_process(eigrp_instance_t *eigrp, void 
  * Sets or resets the ACTIVE/SIA timer configuration.
  * The retained value is consumed by portable DUAL ACTIVE/SIA timer enforcement.
  */
-eigrp_result_t eigrp_timer_active_time_update(eigrp_operation_t operation, eigrp_instance_context_t *context, uint16_t seconds)
+eigrp_result_t eigrp_timer_active_time_update(eigrp_operation_t operation,
+					      eigrp_instance_context_t *context,
+					      uint16_t seconds)
 {
-	eigrp_timer_message_args_t message = { operation, context, seconds };
+	eigrp_timer_message_args_t message = {operation, context, seconds};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_timer_message_process, &message);
+						   eigrp_timer_message_process,
+						   &message);
 	if (operation == EIGRP_RESET) {
-	if (!context || (!context->config && !context->runtime))
-		return EIGRP_RESULT_NOT_FOUND;
-	if (context->config && context->config->timer_config) {
-		context->config->timer_config->active_time_configured = false;
-		context->config->timer_config->active_time_seconds = 0;
-	}
-	return EIGRP_RESULT_SUCCESS;
+		if (!context || (!context->config && !context->runtime))
+			return EIGRP_RESULT_NOT_FOUND;
+		if (context->config && context->config->timer_config) {
+			context->config->timer_config->active_time_configured =
+				false;
+			context->config->timer_config->active_time_seconds = 0;
+		}
+		return EIGRP_RESULT_SUCCESS;
 	}
 
 	if (operation != EIGRP_SET)
@@ -81,8 +86,8 @@ eigrp_result_t eigrp_timer_active_time_update(eigrp_operation_t operation, eigrp
 		return EIGRP_RESULT_NOT_FOUND;
 	if (context->config) {
 		if (!context->config->timer_config) {
-			context->config->timer_config =
-				calloc(1, sizeof(*context->config->timer_config));
+			context->config->timer_config = calloc(
+				1, sizeof(*context->config->timer_config));
 			if (!context->config->timer_config)
 				return EIGRP_RESULT_INTERNAL_FAILURE;
 		}
@@ -106,13 +111,13 @@ eigrp_result_t eigrp_timer_active_time_update(eigrp_operation_t operation, eigrp
  */
 
 
-
-static eigrp_result_t eigrp_timer_message_process(eigrp_instance_t *eigrp, void *arg)
+static eigrp_result_t eigrp_timer_message_process(eigrp_instance_t *eigrp,
+						  void *arg)
 {
 	eigrp_timer_message_args_t *message = arg;
 	(void)eigrp;
-	return eigrp_timer_active_time_update(message->operation, message->context,
-		message->seconds);
+	return eigrp_timer_active_time_update(
+		message->operation, message->context, message->seconds);
 }
 
 uint16_t eigrp_timer_active_time_seconds(const eigrp_instance_t *runtime)
@@ -122,7 +127,8 @@ uint16_t eigrp_timer_active_time_seconds(const eigrp_instance_t *runtime)
 	if (!runtime)
 		return 180;
 	af = eigrp_af_config_runtime_read((eigrp_instance_t *)runtime);
-	if (!af || !af->timer_config || !af->timer_config->active_time_configured)
+	if (!af || !af->timer_config
+	    || !af->timer_config->active_time_configured)
 		return 180;
 	return af->timer_config->active_time_seconds;
 }
@@ -145,8 +151,9 @@ void eigrp_timer_config_delete_all(eigrp_af_config_t *af)
  * Exports active EIGRP timer state through portable callbacks.
  * FRR only formats the returned state.
  */
-eigrp_result_t eigrp_timer_state_iterate(const eigrp_instance_context_t *context,
-				eigrp_timer_state_cb callback, void *arg)
+eigrp_result_t
+eigrp_timer_state_iterate(const eigrp_instance_context_t *context,
+			  eigrp_timer_state_cb callback, void *arg)
 {
 	eigrp_intf_t *interface;
 	eigrp_nbr_t *neighbor;
@@ -162,13 +169,15 @@ eigrp_result_t eigrp_timer_state_iterate(const eigrp_instance_context_t *context
 		return EIGRP_RESULT_SUCCESS;
 
 	for (EIGRP_LIST_ITERATE_RO(context->runtime->eiflist, interface_node,
-				  interface)) {
+				   interface)) {
 		if (interface->t_hello) {
 			eigrp_timer_state_t state = {
 				.type = EIGRP_TIMER_STATE_HELLO,
-				.interface_name = eigrp_intf_name_string(interface),
+				.interface_name =
+					eigrp_intf_name_string(interface),
 				.expiration_seconds =
-					eigrp_timer_remaining_seconds(context->runtime,
+					eigrp_timer_remaining_seconds(
+						context->runtime,
 						interface->t_hello),
 			};
 
@@ -177,25 +186,32 @@ eigrp_result_t eigrp_timer_state_iterate(const eigrp_instance_context_t *context
 				return result;
 		}
 
-		for (EIGRP_LIST_ITERATE_RO(interface->nbrs, neighbor_node, neighbor)) {
+		for (EIGRP_LIST_ITERATE_RO(interface->nbrs, neighbor_node,
+					   neighbor)) {
 			eigrp_timer_state_t state = {0};
 			uint64_t now = eigrp_sys_monotime_msec();
 
-			state.interface_name = eigrp_intf_name_string(interface);
+			state.interface_name =
+				eigrp_intf_name_string(interface);
 			state.neighbor_present = true;
-			eigrp_timer_neighbor_address(neighbor, &state.neighbor_address);
+			eigrp_timer_neighbor_address(neighbor,
+						     &state.neighbor_address);
 			if (neighbor->t_limit_restart) {
 				state.type = EIGRP_TIMER_STATE_LIMIT_RESTART;
-				state.expiration_seconds = eigrp_nbr_limit_remaining(
-					neighbor->limit_restart_due_msec, now);
+				state.expiration_seconds =
+					eigrp_nbr_limit_remaining(
+						neighbor->limit_restart_due_msec,
+						now);
 				result = callback(&state, arg);
 				if (result != EIGRP_RESULT_SUCCESS)
 					return result;
 			}
 			if (neighbor->t_limit_reset) {
 				state.type = EIGRP_TIMER_STATE_LIMIT_RESET;
-				state.expiration_seconds = eigrp_nbr_limit_remaining(
-					neighbor->limit_reset_due_msec, now);
+				state.expiration_seconds =
+					eigrp_nbr_limit_remaining(
+						neighbor->limit_reset_due_msec,
+						now);
 				result = callback(&state, arg);
 				if (result != EIGRP_RESULT_SUCCESS)
 					return result;
@@ -204,12 +220,14 @@ eigrp_result_t eigrp_timer_state_iterate(const eigrp_instance_context_t *context
 			    || !neighbor->t_holddown)
 				continue;
 			state.type = EIGRP_TIMER_STATE_PEER_HOLD;
-			state.interface_name = eigrp_intf_name_string(interface);
+			state.interface_name =
+				eigrp_intf_name_string(interface);
 			state.neighbor_present = true;
-			eigrp_timer_neighbor_address(neighbor, &state.neighbor_address);
+			eigrp_timer_neighbor_address(neighbor,
+						     &state.neighbor_address);
 			state.expiration_seconds =
-				eigrp_timer_remaining_seconds(context->runtime,
-					neighbor->t_holddown);
+				eigrp_timer_remaining_seconds(
+					context->runtime, neighbor->t_holddown);
 			result = callback(&state, arg);
 			if (result != EIGRP_RESULT_SUCCESS)
 				return result;

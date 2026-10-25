@@ -33,7 +33,8 @@ static void test_deferred_multicast_precedes_later_unicast(void)
 	eigrp_nbr_t nbr = {0};
 	eigrp_packet_t older = {.sequence_number = 100};
 	eigrp_packet_t later = {.sequence_number = 102};
-	eigrp_packet_t multicast = {.sequence_number = 101, .multicast_epoch = 5};
+	eigrp_packet_t multicast = {.sequence_number = 101,
+				    .multicast_epoch = 5};
 
 	ei.multicast_pending = pending;
 	nbr.ei = &ei;
@@ -68,7 +69,7 @@ static void test_deferred_multicast_precedes_later_unicast(void)
 	/* But an eligible later multicast must still block a newer unicast. */
 	{
 		eigrp_packet_t fresh = {.sequence_number = 103,
-					      .multicast_epoch = 6};
+					.multicast_epoch = 6};
 		eigrp_packet_enqueue(&ei.multicast_pending, &fresh);
 		assert(eigrp_packet_unicast_behind_multicast(&nbr, 104));
 		assert(!eigrp_packet_unicast_behind_multicast(&nbr, 103));

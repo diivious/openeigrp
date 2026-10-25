@@ -393,3 +393,27 @@ Use **EIGRP** when referring to:
 
 This distinction applies to new documentation and comments. It avoids both
 under-branding the project and incorrectly renaming the protocol.
+
+## 19. Pre-commit style validation
+
+Run `make check` before committing. This runs the style checker over the
+Git index, working tree and untracked files, followed by the checker's own
+executable regression tests. It never changes source, the index, or history.
+
+Run `make check SOURCE=all` for a full-tree audit. **Run `make all` before
+opening a pull request for merge**: build, full-tree style check and checker
+tests, all portable UUTs, then quick scale. A failing stage must not be
+reported as success.
+
+CI uses the same changed-file checker with `STYLE_CHECK_BASE` selecting the
+committed comparison revision: `make check STYLE_CHECK_BASE=<git-revision>`.
+This handles multi-commit pushes and proposed merges.
+
+Enforced checks include trailing whitespace, missing final newlines, formatting
+against `.clang-format` for changed C/C++ lines, and unsafe C calls such as
+`sprintf()`, `vsprintf()`, `strcpy()`, `strcat()`, and `gets()`. The FRR adapter
+additionally rejects `snprintf()` in favor of `snprintfrr()`; portable EIGRP
+code uses the portable standard library and must not acquire an FRR dependency.
+`clang-format` is required, and a missing executable or configuration error
+fails the check, rather than skipping formatting. This automated subset does
+not replace review of protocol semantics or navigation-first naming rules.

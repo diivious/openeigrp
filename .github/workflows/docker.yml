@@ -13,6 +13,9 @@ on:
       - 'docker/**'
       - 'tools/docker*.sh'
       - 'tools/docker*.py'
+      - 'tools/frr-setup.sh'
+      - 'tools/test/test_frr_release_selection.py'
+      - 'frr/test/setup/**'
       - 'tools/frr.sh'
       - 'tools/frr-install.sh'
       - 'eigrp/code/**'
@@ -45,6 +48,11 @@ jobs:
     steps:
       - name: Checkout build tooling
         uses: actions/checkout@v4
+      - name: Test FRR release selection and checkout safety
+        run: |
+          python3 -m unittest -q \
+            tools/test/test_frr_release_selection.py \
+            frr/test/setup/test_frr_setup_tag.py
       - name: Configure Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Select immutable source refs

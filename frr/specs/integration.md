@@ -467,7 +467,7 @@ Zebra ZEBRA_INTERFACE_ADDRESS_ADD
   -> eigrp_zebra_interface_address_add()
        -> zebra_interface_address_read()
        -> struct connected / struct interface
-       -> eigrp_frr_interface_state_import()
+       -> eigrp_frr_intf_state_import()
             struct prefix -> eigrp_prefix_t
             ifindex / name / type / operative / bandwidth / mtu
             secondary flag
@@ -744,7 +744,7 @@ Family and prefix-length validity must be checked at this boundary.
 
 ```text
 FRR struct interface + struct prefix
-  -> eigrp_frr_interface_state_import()
+  -> eigrp_frr_intf_state_import()
   -> eigrp_intf_runtime_state_t
        interface_name
        ifindex

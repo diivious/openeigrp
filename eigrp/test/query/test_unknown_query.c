@@ -6,17 +6,39 @@
 #include "eigrp_query.c"
 
 bool eigrp_filter_prefix_update(eigrp_instance_t *e, eigrp_intf_t *ei,
-    int direction, const eigrp_prefix_t *dest)
-{ (void)e; (void)ei; (void)direction; (void)dest; return false; }
+				int direction, const eigrp_prefix_t *dest)
+{
+	(void)e;
+	(void)ei;
+	(void)direction;
+	(void)dest;
+	return false;
+}
 void eigrp_pfxlimits_prefix_exceeded(eigrp_instance_t *runtime,
-    const eigrp_prefix_limit_t *limit) { (void)runtime; (void)limit; }
+				     const eigrp_prefix_limit_t *limit)
+{
+	(void)runtime;
+	(void)limit;
+}
 eigrp_result_t eigrp_pfxlimits_state_clear(eigrp_instance_t *runtime)
-{ (void)runtime; return EIGRP_RESULT_SUCCESS; }
+{
+	(void)runtime;
+	return EIGRP_RESULT_SUCCESS;
+}
 unsigned long term_debug_eigrp = 0;
 void eigrp_timer_cancel(eigrp_instance_t *eigrp, eigrp_timer_event_t **owner)
-{ (void)eigrp; (void)owner; }
-uint64_t eigrp_sys_wallclock_msec(void) { return 1000; }
-uint64_t eigrp_sys_monotime_msec(void) { return 1000; }
+{
+	(void)eigrp;
+	(void)owner;
+}
+uint64_t eigrp_sys_wallclock_msec(void)
+{
+	return 1000;
+}
+uint64_t eigrp_sys_monotime_msec(void)
+{
+	return 1000;
+}
 
 /* Exercise the actual receive function while recording its observable RTP
  * reply/ACK actions.  The transport is replaced only at the output boundary. */
@@ -25,9 +47,13 @@ static unsigned acks;
 static eigrp_route_descriptor_t *incoming;
 
 static eigrp_route_descriptor_t *decode_one(eigrp_instance_t *eigrp,
-		 eigrp_nbr_t *nbr, eigrp_stream_t *pkt, uint16_t length)
+					    eigrp_nbr_t *nbr,
+					    eigrp_stream_t *pkt,
+					    uint16_t length)
 {
-	(void)eigrp; (void)nbr; (void)length;
+	(void)eigrp;
+	(void)nbr;
+	(void)length;
 	pkt->getp = pkt->endp;
 	eigrp_route_descriptor_t *route = incoming;
 	incoming = NULL;
@@ -35,35 +61,64 @@ static eigrp_route_descriptor_t *decode_one(eigrp_instance_t *eigrp,
 }
 
 void eigrp_reply_send_route(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-			   eigrp_prefix_descriptor_t *prefix,
-			   eigrp_route_descriptor_t *route, uint32_t flags)
+			    eigrp_prefix_descriptor_t *prefix,
+			    eigrp_route_descriptor_t *route, uint32_t flags)
 {
-	(void)eigrp; (void)nbr;
+	(void)eigrp;
+	(void)nbr;
 	assert(route && prefix);
 	assert(route->metric.delay == EIGRP_MAX_METRIC);
-	assert(flags == (EIGRP_PACKETIZER_WORK_F_OWN_PREFIX |
-			 EIGRP_PACKETIZER_WORK_F_OWN_ROUTE));
+	assert(flags
+	       == (EIGRP_PACKETIZER_WORK_F_OWN_PREFIX
+		   | EIGRP_PACKETIZER_WORK_F_OWN_ROUTE));
 	replies++;
 	eigrp_topology_route_free(route);
 	eigrp_topology_prefix_free(prefix);
 }
 
 eigrp_packetizer_work_t *eigrp_packetizer_work_create(uint8_t opcode)
-{ (void)opcode; assert(!"unknown QUERY must not originate QUERY work"); return NULL; }
-void eigrp_packetizer_enqueue(eigrp_instance_t *eigrp, eigrp_packetizer_work_t *work)
-{ (void)eigrp; (void)work; assert(!"unknown QUERY must not originate QUERY work"); }
+{
+	(void)opcode;
+	assert(!"unknown QUERY must not originate QUERY work");
+	return NULL;
+}
+void eigrp_packetizer_enqueue(eigrp_instance_t *eigrp,
+			      eigrp_packetizer_work_t *work)
+{
+	(void)eigrp;
+	(void)work;
+	assert(!"unknown QUERY must not originate QUERY work");
+}
 
 void eigrp_hello_send_ack(eigrp_nbr_t *nbr)
-{ (void)nbr; acks++; }
+{
+	(void)nbr;
+	acks++;
+}
 void eigrp_update_send_all(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
-{ (void)eigrp; (void)ei; }
+{
+	(void)eigrp;
+	(void)ei;
+}
 int eigrp_fsm_event(eigrp_fsm_action_message_t *msg)
-{ (void)msg; assert(!"unknown QUERY must not enter DUAL ACTIVE"); return 0; }
+{
+	(void)msg;
+	assert(!"unknown QUERY must not enter DUAL ACTIVE");
+	return 0;
+}
 
 bool eigrp_summary_query_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
-	const eigrp_prefix_t *dest, eigrp_prefix_descriptor_t *sp,
-	eigrp_route_descriptor_t *sr)
-{ (void)eigrp; (void)ei; (void)dest; (void)sp; (void)sr; return false; }
+				     const eigrp_prefix_t *dest,
+				     eigrp_prefix_descriptor_t *sp,
+				     eigrp_route_descriptor_t *sr)
+{
+	(void)eigrp;
+	(void)ei;
+	(void)dest;
+	(void)sp;
+	(void)sr;
+	return false;
+}
 
 static eigrp_prefix_t prefix_ipv4(uint8_t last)
 {
@@ -77,7 +132,7 @@ static eigrp_prefix_t prefix_ipv4(uint8_t last)
 }
 
 static void receive_one(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-	eigrp_intf_t *ei, eigrp_route_descriptor_t *route)
+			eigrp_intf_t *ei, eigrp_route_descriptor_t *route)
 {
 	eigrp_header_t header = {.sequence = htonl(1)};
 	eigrp_stream_t stream = {.getp = 0, .endp = 1, .size = 1};
@@ -87,13 +142,14 @@ static void receive_one(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 }
 
 static eigrp_route_descriptor_t *query_route(eigrp_intf_t *ei, uint8_t last,
-                                            bool poisoned)
+					     bool poisoned)
 {
 	eigrp_route_descriptor_t *route = eigrp_topology_route_create(ei);
 	assert(route);
 	route->dest = prefix_ipv4(last);
 	route->type = EIGRP_TLV_IPv4_INT;
-	route->metric.delay = poisoned ? EIGRP_MAX_METRIC : eigrp_delay_to_scaled(15);
+	route->metric.delay =
+		poisoned ? EIGRP_MAX_METRIC : eigrp_delay_to_scaled(15);
 	route->metric.bandwidth = eigrp_bandwidth_to_scaled(100000);
 	route->metric.reliability = 255;
 	route->metric.load = 1;
@@ -123,19 +179,25 @@ int main(void)
 	const eigrp_metrics_t advertised = finite->metric;
 	receive_one(&eigrp, &nbr, &ei, finite);
 	assert(replies == 1 && acks == 1);
-	prefix = eigrp_topology_table_lookup(eigrp.topology_table, &finite->dest);
+	prefix = eigrp_topology_table_lookup(eigrp.topology_table,
+					     &finite->dest);
 	assert(prefix);
 	assert(prefix->state == EIGRP_FSM_STATE_PASSIVE);
-	assert(prefix->fdistance == EIGRP_MAX_METRIC && prefix->distance == EIGRP_MAX_METRIC);
+	assert(prefix->fdistance == EIGRP_MAX_METRIC
+	       && prefix->distance == EIGRP_MAX_METRIC);
 	assert(prefix->reported_metric.delay == EIGRP_MAX_METRIC);
 	assert(prefix->req_action == 0 && !prefix->t_active);
 	assert(eigrp.topology_changes == NULL);
 	assert(eigrp_prefix_descriptor_lookup(prefix, &nbr) == finite);
-	assert(prefix->internal_routes->count == 1 && prefix->external_routes->count == 0);
+	assert(prefix->internal_routes->count == 1
+	       && prefix->external_routes->count == 0);
 	assert(finite->flags == 0);
 	assert(eigrp_metrics_match(finite->reported_metric, advertised));
-	assert(finite->reported_distance == eigrp_metric_calculate(&eigrp, advertised));
-	assert(finite->distance == (uint32_t)eigrp_metric_calculate(&eigrp, finite->total_metric));
+	assert(finite->reported_distance
+	       == eigrp_metric_calculate(&eigrp, advertised));
+	assert(finite->distance
+	       == (uint32_t)eigrp_metric_calculate(&eigrp,
+						   finite->total_metric));
 	assert(finite->distance < EIGRP_MAX_METRIC);
 	assert(eigrp_topology_route_select(prefix) == finite);
 
@@ -147,16 +209,20 @@ int main(void)
 		receive_one(&eigrp, &nbr, &ei, again);
 		assert(replies == 2 && acks == 2);
 		assert(eigrp_prefix_descriptor_lookup(prefix, &nbr) == finite);
-		assert(finite->reported_metric.delay == eigrp_delay_to_scaled(25));
+		assert(finite->reported_metric.delay
+		       == eigrp_delay_to_scaled(25));
 		assert(prefix->state == EIGRP_FSM_STATE_PASSIVE);
-		assert(prefix->distance == EIGRP_MAX_METRIC && prefix->fdistance == EIGRP_MAX_METRIC);
-		assert(finite->flags == 0 && prefix->internal_routes->count == 1);
+		assert(prefix->distance == EIGRP_MAX_METRIC
+		       && prefix->fdistance == EIGRP_MAX_METRIC);
+		assert(finite->flags == 0
+		       && prefix->internal_routes->count == 1);
 	}
 
 	poison = query_route(&ei, 2, true);
 	receive_one(&eigrp, &nbr, &ei, poison);
 	assert(replies == 3 && acks == 3);
-	assert(!eigrp_topology_table_lookup(eigrp.topology_table, &poison->dest));
+	assert(!eigrp_topology_table_lookup(eigrp.topology_table,
+					    &poison->dest));
 
 
 	/* A newly received UPDATE with the same finite vector must be able

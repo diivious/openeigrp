@@ -11,19 +11,21 @@
 #include "eigrp_metric.h"
 #include "eigrp.h"
 
-eigrp_result_t eigrp_redist_add(
-	eigrp_instance_context_t *context, const eigrp_redist_source_t *source,
-	const eigrp_metric_values_t *metric, const char *route_map);
-eigrp_result_t eigrp_redist_remove(
-	eigrp_instance_context_t *context, const eigrp_redist_source_t *source);
+eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
+				const eigrp_redist_source_t *source,
+				const eigrp_metric_values_t *metric,
+				const char *route_map);
+eigrp_result_t eigrp_redist_remove(eigrp_instance_context_t *context,
+				   const eigrp_redist_source_t *source);
 void eigrp_redist_config_delete_all(eigrp_af_config_t *af);
 void eigrp_redist_policy_update_all(void);
 
-eigrp_result_t eigrp_redist_max_prefix_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	const eigrp_prefix_limit_t *limit);
+eigrp_result_t
+eigrp_redist_max_prefix_update(eigrp_operation_t operation,
+			       eigrp_instance_context_t *context,
+			       const eigrp_prefix_limit_t *limit);
 bool eigrp_redist_prefix_admit(eigrp_instance_t *runtime,
-	const eigrp_rib_route_t *route);
+			       const eigrp_rib_route_t *route);
 void eigrp_redist_routes_withdraw(eigrp_instance_t *runtime);
 void eigrp_redist_routes_replay(eigrp_instance_t *runtime);
 void eigrp_redist_limit_restart_expired(void *runtime);

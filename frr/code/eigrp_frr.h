@@ -17,10 +17,11 @@ eigrp_result_t eigrp_frr_prefix_import(const struct prefix *host,
 				       eigrp_prefix_t *prefix);
 eigrp_result_t eigrp_frr_prefix_export(const eigrp_prefix_t *prefix,
 				       struct prefix *host);
-uint8_t eigrp_frr_interface_type(const struct interface *ifp);
-eigrp_result_t eigrp_frr_interface_state_import(
-	const struct interface *ifp, const struct prefix *address, bool secondary,
-	eigrp_intf_runtime_state_t *state);
+uint8_t eigrp_frr_intf_type(const struct interface *ifp);
+eigrp_result_t eigrp_frr_intf_state_import(const struct interface *ifp,
+					   const struct prefix *address,
+					   bool secondary,
+					   eigrp_intf_runtime_state_t *state);
 
 DECLARE_MGROUP(EIGRPD);
 

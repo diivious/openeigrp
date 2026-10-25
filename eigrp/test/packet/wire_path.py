@@ -19,7 +19,7 @@ def test_packet_consumer_uses_stream_bound_validator_before_header_access():
     end=packet.index('static void eigrp_instance_message_complete', start)
     body=packet[start:end]
     assert 'endp = eigrp_stream_get_endp(ibuf);' in body
-    assert 'eigrp_packet_input_bounds_validate(endp, meta.network_header_length,' in body
+    assert 'eigrp_packet_input_bounds_validate(endp,meta.network_header_length,' in ''.join(body.split())
     assert body.index('eigrp_packet_input_bounds_validate') < body.index('eigrph = (struct eigrp_header *)eigrp_stream_pnt(ibuf);')
 
 

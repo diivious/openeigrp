@@ -23,7 +23,7 @@
  * Use the same A/P/D eligibility as prefix-limit accounting: process-wide
  * suspension need not set the per-neighbor limit_state. */
 static inline bool eigrp_vty_neighbor_visible(const eigrp_nbr_t *nbr,
-						      bool detail)
+					      bool detail)
 {
 	return nbr && (detail || eigrp_nbr_limit_status(nbr) != 0);
 }

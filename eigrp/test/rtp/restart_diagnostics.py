@@ -18,6 +18,7 @@ def test_restart_diagnostic_ring(tmp_path):
         str(ROOT / "eigrp/test/rtp/restart_diagnostics.c"),
         str(ROOT / "eigrp/code/eigrp_eventlog.c"),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
+        str(ROOT / "unix/code/eigrp_unix_format.c"),
         "-o", str(executable),
     ]
     build = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)

@@ -145,6 +145,7 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
         str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
+        "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
         "-o", str(binary),
     ], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert result.returncode == 0, result.stderr
@@ -165,7 +166,7 @@ def test_traffic_share_refresh_skips_active_destinations_and_target_is_live():
     assert "eigrp_update_routing_table(eigrp, prefix);" in refresh
     assert "eigrp_topology_update_node_flags" not in refresh
 
-    target = metric[metric.index("eigrp_result_t eigrp_traffic_share_balanced_update"):
+    target = metric[metric.index("eigrp_traffic_share_balanced_update("):
                     metric.index("metric maximum-hops")]
     assert "context->runtime->traffic_share_balanced = enabled;" in target
     assert "eigrp_topology_traffic_share_update(context->runtime);" in target

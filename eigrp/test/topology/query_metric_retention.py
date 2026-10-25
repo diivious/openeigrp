@@ -18,6 +18,7 @@ def test_query_retained_routes_not_promoted_by_metric_update(tmp_path):
            '-I', str(ROOT / 'eigrp' / 'code'),
            str(Path(__file__).with_suffix('.c')),
            *(str(ROOT / 'eigrp' / 'code' / src) for src in sources),
+           str(ROOT / 'unix/code/eigrp_unix_format.c'),
            *(['-Wl,-dead_strip'] if sys.platform == 'darwin' else
              ['-Wl,--gc-sections']), '-o', str(binary)]
     build = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)

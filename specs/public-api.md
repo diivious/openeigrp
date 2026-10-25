@@ -1140,6 +1140,26 @@ typedef struct eigrp_filter_runtime_snapshot {
 This snapshot carries host policy object names only. The core retains its own
 copy/runtime policy state; host-native policy objects remain private.
 
+### 8.5 Host formatting services — C -> H
+
+```c
+int eigrp_snprintf(char *dst, size_t size, const char *fmt, ...);
+int eigrp_vsnprintf(char *dst, size_t size, const char *fmt, va_list args);
+```
+
+Every host integration implements these functions. They have standard
+`snprintf()`/`vsnprintf()` formatting, truncation, and return semantics: when
+`size` is positive the output is NUL-terminated, and the return value is the
+required byte count excluding the terminator, or `-1` on failure. Portable
+format strings must not require host-specific extensions. FRR delegates to
+`vsnprintfrr()`; Unix delegates to standard `vsnprintf()`.
+
+The portable `eigrp_string.h` also defines the inline helper
+`eigrp_strcpy(dst, size, src)`. It copies a complete NUL-terminated string
+and returns `dst` on success, like C `strcpy()`, but requires the destination
+capacity and returns `NULL` without modifying `dst` if the copy would not fit.
+Its arguments must satisfy ordinary C string validity and non-overlap rules.
+
 ### 8.5 Host-implemented lifecycle services — C -> H
 
 | API | Contract |
@@ -1527,6 +1547,8 @@ eigrp_rib_redistribute_remove
 From `eigrp_sys.h`:
 
 ```text
+eigrp_snprintf
+eigrp_vsnprintf
 eigrp_sys_runtime_init
 eigrp_sys_runtime_finish
 eigrp_sys_event_cancel
@@ -1840,6 +1862,8 @@ eigrp_result_t eigrp_rib_event_process( eigrp_instance_t *eigrp, const eigrp_rib
 ### A.5 `eigrp_sys.h`
 
 ```c
+int eigrp_snprintf(char *dst, size_t size, const char *fmt, ...);
+int eigrp_vsnprintf(char *dst, size_t size, const char *fmt, va_list args);
 typedef eigrp_work_queue_result_t (*eigrp_work_queue_func_t)(eigrp_work_queue_t *queue, void *data);
 typedef void (*eigrp_work_queue_delete_func_t)(eigrp_work_queue_t *queue, void *data);
 typedef void (*eigrp_event_callback_t)(void *arg);

@@ -47,8 +47,9 @@
 /* A compact snapshot at the actual INIT/EOT decision.  No pointers or
  * per-route records are retained by the bounded event ring. */
 static void eigrp_update_init_event(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-	uint16_t opcode, eventmsg_arg_t a, eventmsg_arg_t b,
-	eventmsg_arg_t c, eventmsg_arg_t d)
+				    uint16_t opcode, eventmsg_arg_t a,
+				    eventmsg_arg_t b, eventmsg_arg_t c,
+				    eventmsg_arg_t d)
 {
 	eigrp_prefix_t peer;
 
@@ -59,15 +60,17 @@ static void eigrp_update_init_event(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 }
 
 static void eigrp_update_nsf_eventlog(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-	uint32_t reason, uint32_t flags, uint32_t sequence)
+				      uint32_t reason, uint32_t flags,
+				      uint32_t sequence)
 {
 	eigrp_prefix_t peer;
 
 	if (!eigrp || !nbr)
 		return;
 	eigrp_eventlog_addr_from_legacy(&peer, &nbr->src);
-	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_NSF_EVENT, &peer,
-		reason, flags, sequence, nbr->ei ? nbr->ei->ifindex : 0);
+	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_NSF_EVENT,
+				     &peer, reason, flags, sequence,
+				     nbr->ei ? nbr->ei->ifindex : 0);
 }
 
 
@@ -128,7 +131,8 @@ static void eigrp_update_receive_GR_ask(eigrp_instance_t *eigrp,
 
 		eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 				      &prefix->destination);
-		eigrp_log(EIGRP_LOG_DEBUG, "GR receive: Neighbor not advertised %s", prefix_buf);
+		eigrp_log(EIGRP_LOG_DEBUG,
+			  "GR receive: Neighbor not advertised %s", prefix_buf);
 
 		fsm_msg.metrics = prefix->reported_metric;
 		/* set delay to MAX */
@@ -169,18 +173,24 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 	flags = ntohl(eigrph->flags);
 	if (flags == EIGRP_INIT_FLAG) {
-		eigrp_update_init_event(eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_RX,
+		eigrp_update_init_event(
+			eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_RX,
 			ntohl(eigrph->sequence), nbr->peer_init_sequence_number,
 			nbr->recv_sequence_number, nbr->state);
-		eigrp_update_init_event(eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_STATE,
+		eigrp_update_init_event(
+			eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_STATE,
 			nbr->init_sequence_number,
 			nbr->retrans_queue ? nbr->retrans_queue->count : 0,
 			nbr->t_holddown != NULL,
-			nbr->t_holddown ? eigrp_timer_remaining_seconds(eigrp, nbr->t_holddown) : 0);
+			nbr->t_holddown ? eigrp_timer_remaining_seconds(
+						  eigrp, nbr->t_holddown)
+					: 0);
 	} else if (flags == EIGRP_EOT_FLAG && nbr->peer_init_sequence_number)
-		eigrp_update_init_event(eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_EOT,
+		eigrp_update_init_event(
+			eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_EOT,
 			ntohl(eigrph->sequence), nbr->peer_init_sequence_number,
-			nbr->peer_init_retransmit_eligible, nbr->peer_init_resync_pending);
+			nbr->peer_init_retransmit_eligible,
+			nbr->peer_init_resync_pending);
 
 	/* RFC 7868 section 5.3.4: an INIT UPDATE can be retransmitted
 	 * after other RTP packets have been received (for example when its ACK
@@ -188,15 +198,14 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	 * that field tracks the most recently processed packet, not the INIT
 	 * for this adjacency.  An already accepted INIT must be ACKed, not
 	 * interpreted as a fresh peer restart or delivered to DUAL again. */
-	if (flags == EIGRP_INIT_FLAG
-	    && ntohl(eigrph->sequence) != 0
+	if (flags == EIGRP_INIT_FLAG && ntohl(eigrph->sequence) != 0
 	    && nbr->peer_init_retransmit_eligible
 	    && nbr->peer_init_sequence_number == ntohl(eigrph->sequence)) {
 		/* A retried INIT and a reboot that reuses its sequence are
 		 * indistinguishable until the peer advances to its EOT.  Never
-		 * force a DOWN transition here: a lost INIT ACK would repeatedly
-		 * tear down an otherwise healthy adjacency (RFC 7868 RTP).
-		 * Record a single reconciliation window instead. */
+		 * force a DOWN transition here: a lost INIT ACK would
+		 * repeatedly tear down an otherwise healthy adjacency (RFC 7868
+		 * RTP). Record a single reconciliation window instead. */
 		if (nbr->state == EIGRP_NEIGHBOR_UP
 		    && !nbr->peer_init_resync_pending) {
 			nbr->peer_init_resync_prefixes =
@@ -204,21 +213,26 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			/* Prefix reconciliation must remain O(n) at scale, not
 			 * O(n^2) for 100K-route peers. */
 			if (nbr->peer_init_resync_prefixes)
-				(void)eigrp_list_index_enable(nbr->peer_init_resync_prefixes);
+				(void)eigrp_list_index_enable(
+					nbr->peer_init_resync_prefixes);
 			nbr->peer_init_resync_pending = true;
-			eigrp_update_init_event(eigrp, nbr,
+			eigrp_update_init_event(
+				eigrp, nbr,
 				EIGRP_EVENTLOG_OPCODE_RTP_INIT_RESYNC,
 				EIGRP_EVENTLOG_INIT_RESYNC_START,
 				nbr->peer_init_resync_prefixes
-					? nbr->peer_init_resync_prefixes->count : 0,
+					? nbr->peer_init_resync_prefixes->count
+					: 0,
 				0, nbr->sync_active);
 		}
-		eigrp_update_init_event(eigrp, nbr,
-			EIGRP_EVENTLOG_OPCODE_RTP_INIT_DECISION,
+		eigrp_update_init_event(
+			eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_DECISION,
 			ntohl(eigrph->sequence),
-			nbr->peer_init_resync_pending ? EIGRP_EVENTLOG_INIT_REPLAY_ACK
+			nbr->peer_init_resync_pending
+				? EIGRP_EVENTLOG_INIT_REPLAY_ACK
 				: EIGRP_EVENTLOG_INIT_DUPLICATE_ACK,
-			nbr->peer_init_retransmit_eligible, nbr->peer_init_resync_pending);
+			nbr->peer_init_retransmit_eligible,
+			nbr->peer_init_resync_pending);
 		eigrp_hello_send_ack_sequence(nbr, ntohl(eigrph->sequence));
 		return;
 	}
@@ -227,18 +241,21 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		nbr->peer_init_sequence_number = ntohl(eigrph->sequence);
 		nbr->peer_init_retransmit_eligible =
 			ntohl(eigrph->sequence) != 0;
-		eigrp_update_init_event(eigrp, nbr,
-			EIGRP_EVENTLOG_OPCODE_RTP_INIT_DECISION,
+		eigrp_update_init_event(
+			eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_DECISION,
 			ntohl(eigrph->sequence), EIGRP_EVENTLOG_INIT_NEW,
-			nbr->peer_init_retransmit_eligible, nbr->peer_init_resync_pending);
+			nbr->peer_init_retransmit_eligible,
+			nbr->peer_init_resync_pending);
 	} else if (flags == EIGRP_EOT_FLAG && peer_init_previously_seen
 		   && eigrp_packet_sequence_before(
-			   nbr->peer_init_sequence_number, ntohl(eigrph->sequence))) {
+			   nbr->peer_init_sequence_number,
+			   ntohl(eigrph->sequence))) {
 		/* An UPDATE is not proof that the peer received our INIT ACK:
-		 * another adjacency can drive multicast UPDATEs while this peer's
-		 * INIT is still being retransmitted.  Only its later EOT proves it
-		 * advanced past the INIT handshake.  RTP sequence ordering also
-		 * excludes an EOT queued before this neighbor's initial INIT. */
+		 * another adjacency can drive multicast UPDATEs while this
+		 * peer's INIT is still being retransmitted.  Only its later EOT
+		 * proves it advanced past the INIT handshake.  RTP sequence
+		 * ordering also excludes an EOT queued before this neighbor's
+		 * initial INIT. */
 		nbr->peer_init_retransmit_eligible = false;
 		peer_init_resync_complete = nbr->peer_init_resync_pending;
 	}
@@ -252,15 +269,19 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	nbr->recv_sequence_number = ntohl(eigrph->sequence);
 
 
-	if ((flags == (EIGRP_INIT_FLAG + EIGRP_RS_FLAG + EIGRP_EOT_FLAG)) && (!same)) {
+	if ((flags == (EIGRP_INIT_FLAG + EIGRP_RS_FLAG + EIGRP_EOT_FLAG))
+	    && (!same)) {
 		/* Graceful restart Update received with all routes */
-		eigrp_debug_nsf_event(eigrp, nbr, flags,
-				      "peer graceful restart complete in one UPDATE");
-		eigrp_update_nsf_eventlog(eigrp, nbr, 3, flags, ntohl(eigrph->sequence));
+		eigrp_debug_nsf_event(
+			eigrp, nbr, flags,
+			"peer graceful restart complete in one UPDATE");
+		eigrp_update_nsf_eventlog(eigrp, nbr, 3, flags,
+					  ntohl(eigrph->sequence));
 		if (eigrp->log_neighbor_changes)
-			eigrp_log(EIGRP_LOG_INFO, "Neighbor %s (%s) is resync: peer graceful-restart",
-				  eigrp_print_addr(&nbr->src),
-				  nbr->ei->name);
+			eigrp_log(
+				EIGRP_LOG_INFO,
+				"Neighbor %s (%s) is resync: peer graceful-restart",
+				eigrp_print_addr(&nbr->src), nbr->ei->name);
 
 		/* get all prefixes from neighbor from topology table */
 		nbr_prefixes = eigrp_nbr_prefixes_lookup(eigrp, nbr);
@@ -272,11 +293,13 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		 */
 		eigrp_debug_nsf_event(eigrp, nbr, flags,
 				      "peer graceful restart started");
-		eigrp_update_nsf_eventlog(eigrp, nbr, 1, flags, ntohl(eigrph->sequence));
+		eigrp_update_nsf_eventlog(eigrp, nbr, 1, flags,
+					  ntohl(eigrph->sequence));
 		if (eigrp->log_neighbor_changes)
-			eigrp_log(EIGRP_LOG_INFO, "Neighbor %s (%s) is resync: peer graceful-restart",
-				  eigrp_print_addr(&nbr->src),
-				  nbr->ei->name);
+			eigrp_log(
+				EIGRP_LOG_INFO,
+				"Neighbor %s (%s) is resync: peer graceful-restart",
+				eigrp_print_addr(&nbr->src), nbr->ei->name);
 
 		/* get all prefixes from neighbor from topology table */
 		nbr_prefixes = eigrp_nbr_prefixes_lookup(eigrp, nbr);
@@ -291,9 +314,11 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		 *  consider this as GR EOT */
 		if (nbr->nbr_gr_prefixes != NULL) {
 			/* this is final packet of GR */
-			eigrp_debug_nsf_event(eigrp, nbr, flags,
-					      "peer graceful restart EOT received");
-			eigrp_update_nsf_eventlog(eigrp, nbr, 2, flags, ntohl(eigrph->sequence));
+			eigrp_debug_nsf_event(
+				eigrp, nbr, flags,
+				"peer graceful restart EOT received");
+			eigrp_update_nsf_eventlog(eigrp, nbr, 2, flags,
+						  ntohl(eigrph->sequence));
 			nbr_prefixes = nbr->nbr_gr_prefixes;
 			nbr->nbr_gr_prefixes = NULL;
 
@@ -306,8 +331,9 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		 *  consider this as GR not final packet */
 		if (nbr->nbr_gr_prefixes != NULL) {
 			/* this is GR not final route packet */
-			eigrp_debug_nsf_event(eigrp, nbr, flags,
-					      "peer graceful restart continuation");
+			eigrp_debug_nsf_event(
+				eigrp, nbr, flags,
+				"peer graceful restart continuation");
 			nbr_prefixes = nbr->nbr_gr_prefixes;
 
 			graceful_restart = 1;
@@ -323,42 +349,58 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		    && (nbr->init_sequence_number == 0))
 			eigrp_update_send_init(eigrp, nbr);
 
-		/* Our own INIT can be ACKed before the peer's first INIT reaches
-		 * the AF.  That first INIT is not evidence of a peer restart. */
-		if (nbr->state == EIGRP_NEIGHBOR_UP && peer_init_previously_seen) {
-			eigrp_update_init_event(eigrp, nbr,
+		/* Our own INIT can be ACKed before the peer's first INIT
+		 * reaches the AF.  That first INIT is not evidence of a peer
+		 * restart. */
+		if (nbr->state == EIGRP_NEIGHBOR_UP
+		    && peer_init_previously_seen) {
+			eigrp_update_init_event(
+				eigrp, nbr,
 				EIGRP_EVENTLOG_OPCODE_RTP_INIT_DECISION,
-				ntohl(eigrph->sequence), EIGRP_EVENTLOG_INIT_RESTART,
-				nbr->peer_init_retransmit_eligible, nbr->peer_init_resync_pending);
-			eigrp_debug_nsf_event(eigrp, nbr, flags, "peer restarted");
+				ntohl(eigrph->sequence),
+				EIGRP_EVENTLOG_INIT_RESTART,
+				nbr->peer_init_retransmit_eligible,
+				nbr->peer_init_resync_pending);
+			eigrp_debug_nsf_event(eigrp, nbr, flags,
+					      "peer restarted");
 			eigrp_update_nsf_eventlog(eigrp, nbr, 4, flags,
-				ntohl(eigrph->sequence));
-			eigrp_nbr_state_update_reason(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
+						  ntohl(eigrph->sequence));
+			eigrp_nbr_state_update_reason(
+				EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
 				EIGRP_EVENTLOG_NBR_PEER_RESTART);
 			eigrp_topology_neighbor_down(nbr->ei->eigrp, nbr);
-			nbr->peer_init_sequence_number = ntohl(eigrph->sequence);
+			nbr->peer_init_sequence_number =
+				ntohl(eigrph->sequence);
 			nbr->peer_init_retransmit_eligible =
 				ntohl(eigrph->sequence) != 0;
 			nbr->recv_sequence_number = ntohl(eigrph->sequence);
 			if (eigrp->log_neighbor_changes)
-				eigrp_log(EIGRP_LOG_INFO, "Neighbor %s (%s) is down: peer restarted",
-					  eigrp_print_addr(&nbr->src),
-					  nbr->ei->name);
-			eigrp_nbr_state_update(EIGRP_SET, nbr, EIGRP_NEIGHBOR_PENDING);
-			/* DOWN canceled the hold timer.  Ingress refreshed it before
-			 * the restart transition, so rearm it for this new PENDING peer. */
+				eigrp_log(
+					EIGRP_LOG_INFO,
+					"Neighbor %s (%s) is down: peer restarted",
+					eigrp_print_addr(&nbr->src),
+					nbr->ei->name);
+			eigrp_nbr_state_update(EIGRP_SET, nbr,
+					       EIGRP_NEIGHBOR_PENDING);
+			/* DOWN canceled the hold timer.  Ingress refreshed it
+			 * before the restart transition, so rearm it for this
+			 * new PENDING peer. */
 			eigrp_nbr_holddown_update(nbr);
-			eigrp_update_init_event(eigrp, nbr,
-				EIGRP_EVENTLOG_OPCODE_RTP_INIT_HOLD,
+			eigrp_update_init_event(
+				eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_HOLD,
 				nbr->t_holddown != NULL,
-				eigrp_timer_remaining_seconds(eigrp, nbr->t_holddown),
+				eigrp_timer_remaining_seconds(eigrp,
+							      nbr->t_holddown),
 				nbr->state, 0);
 			eigrp_update_send_init(eigrp, nbr);
 		} else if (flags == EIGRP_INIT_FLAG) {
-			eigrp_update_init_event(eigrp, nbr,
+			eigrp_update_init_event(
+				eigrp, nbr,
 				EIGRP_EVENTLOG_OPCODE_RTP_INIT_DECISION,
-				ntohl(eigrph->sequence), EIGRP_EVENTLOG_INIT_PENDING,
-				nbr->peer_init_retransmit_eligible, nbr->peer_init_resync_pending);
+				ntohl(eigrph->sequence),
+				EIGRP_EVENTLOG_INIT_PENDING,
+				nbr->peer_init_retransmit_eligible,
+				nbr->peer_init_resync_pending);
 		}
 	}
 
@@ -368,8 +410,9 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 		route = (nbr->decoder)(eigrp, nbr, pkt, length);
 		if (!route) {
-			/* A decoder failure must consume input or terminate the walk.
-			 * Otherwise a malformed TLV can spin this receive callback. */
+			/* A decoder failure must consume input or terminate the
+			 * walk. Otherwise a malformed TLV can spin this receive
+			 * callback. */
 			if (pkt->getp == tlv_start)
 				return;
 			continue;
@@ -377,59 +420,85 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 		// should have got route off the packet, but one never knows
 		if (route) {
-			prefix = eigrp_topology_table_lookup(eigrp->topology_table, &route->dest);
+			prefix = eigrp_topology_table_lookup(
+				eigrp->topology_table, &route->dest);
 			/*if exists it comes to DUAL*/
 			if (prefix != NULL) {
 				/* remove received prefix from neighbor prefix
 				 * list if in GR */
 				if (graceful_restart)
-					remove_received_prefix_gr(nbr_prefixes, prefix);
-				if (nbr->peer_init_resync_pending && nbr->peer_init_resync_prefixes)
-					eigrp_list_delete_data(nbr->peer_init_resync_prefixes, prefix);
+					remove_received_prefix_gr(nbr_prefixes,
+								  prefix);
+				if (nbr->peer_init_resync_pending
+				    && nbr->peer_init_resync_prefixes)
+					eigrp_list_delete_data(
+						nbr->peer_init_resync_prefixes,
+						prefix);
 
 				struct eigrp_fsm_action_message msg = {0};
-				eigrp_route_descriptor_t *received_route = route;
+				eigrp_route_descriptor_t *received_route =
+					route;
 				eigrp_route_descriptor_t *topology_route =
-					eigrp_prefix_descriptor_lookup(prefix, nbr);
+					eigrp_prefix_descriptor_lookup(prefix,
+								       nbr);
 				bool free_received_route = false;
-				eigrp_metrics_t ingress_metric = received_route->metric;
-				/* A denied UPDATE cannot consume neighbor/process capacity,
-				 * but an already retained path must receive its withdrawal. */
-				if (eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_IN,
-							    &received_route->dest))
+				eigrp_metrics_t ingress_metric =
+					received_route->metric;
+				/* A denied UPDATE cannot consume
+				 * neighbor/process capacity, but an already
+				 * retained path must receive its withdrawal. */
+				if (eigrp_filter_prefix_update(
+					    eigrp, ei, EIGRP_FILTER_IN,
+					    &received_route->dest))
 					ingress_metric.delay = EIGRP_MAX_METRIC;
 				else
-					eigrp_offset_metric_update(eigrp, ei, EIGRP_FILTER_IN,
-							   &received_route->dest, &ingress_metric);
-				bool unreachable = eigrp_metric_calculate(eigrp,
-					ingress_metric) == EIGRP_MAX_METRIC;
+					eigrp_offset_metric_update(
+						eigrp, ei, EIGRP_FILTER_IN,
+						&received_route->dest,
+						&ingress_metric);
+				bool unreachable =
+					eigrp_metric_calculate(eigrp,
+							       ingress_metric)
+					== EIGRP_MAX_METRIC;
 
-				/* A new unreachable path is a withdrawal without a route
-				 * to withdraw. Do not admit a poisoned descriptor. */
+				/* A new unreachable path is a withdrawal
+				 * without a route to withdraw. Do not admit a
+				 * poisoned descriptor. */
 				if (!topology_route && unreachable) {
-					eigrp_topology_route_free(received_route);
+					eigrp_topology_route_free(
+						received_route);
 					continue;
 				}
-				/* A finite refresh of an accepted, reachable neighbor path
-				 * consumes no new peer slot.  An RDB retained from a QUERY, or
-				 * a previously poisoned path, must pass admission before its
-				 * finite UPDATE can become usable.  An existing accepted prefix
-				 * may have a valid alternate without successor flags.
-				 * Withdrawals must always reach DUAL. */
+				/* A finite refresh of an accepted, reachable
+				 * neighbor path consumes no new peer slot.  An
+				 * RDB retained from a QUERY, or a previously
+				 * poisoned path, must pass admission before its
+				 * finite UPDATE can become usable.  An existing
+				 * accepted prefix may have a valid alternate
+				 * without successor flags. Withdrawals must
+				 * always reach DUAL. */
 				if (!unreachable
 				    && (!topology_route
-					? !eigrp_nbr_route_admit(eigrp, nbr,
-						&received_route->dest, &ingress_metric)
-					: !eigrp_topology_prefix_admit(eigrp,
-						&received_route->dest))) {
-					eigrp_topology_route_free(received_route);
+						? !eigrp_nbr_route_admit(
+							  eigrp, nbr,
+							  &received_route->dest,
+							  &ingress_metric)
+						: !eigrp_topology_prefix_admit(
+							  eigrp,
+							  &received_route
+								   ->dest))) {
+					eigrp_topology_route_free(
+						received_route);
 					continue;
 				}
 
 				if (topology_route) {
-					topology_route->type = received_route->type;
-					topology_route->nexthop = received_route->nexthop;
-					topology_route->extdata = received_route->extdata;
+					topology_route->type =
+						received_route->type;
+					topology_route->nexthop =
+						received_route->nexthop;
+					topology_route->extdata =
+						received_route->extdata;
 					route = topology_route;
 					free_received_route = true;
 				} else {
@@ -439,44 +508,60 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 				msg.packet_type = EIGRP_OPC_UPDATE;
 				msg.eigrp = eigrp;
-				msg.data_type = (received_route->type == eigrp->af_vectors.classic_external_tlv_type
-						 || received_route->type == EIGRP_TLV_MP_EXT)
-							? EIGRP_EXT
-							: EIGRP_INT;
+				msg.data_type =
+					(received_route->type
+						 == eigrp->af_vectors
+							    .classic_external_tlv_type
+					 || received_route->type
+						    == EIGRP_TLV_MP_EXT)
+						? EIGRP_EXT
+						: EIGRP_INT;
 				msg.adv_router = nbr;
 				msg.metrics = ingress_metric;
 				msg.route = route;
 				msg.prefix = prefix;
-				/* Rejected new paths do not enter DUAL. An already owned
-				 * path still processes an inbound-filter withdrawal. */
-				msg.transient_route = !topology_route &&
-					eigrp_metric_calculate(eigrp, msg.metrics)
-						== EIGRP_MAX_METRIC;
+				/* Rejected new paths do not enter DUAL. An
+				 * already owned path still processes an
+				 * inbound-filter withdrawal. */
+				msg.transient_route =
+					!topology_route
+					&& eigrp_metric_calculate(eigrp,
+								  msg.metrics)
+						   == EIGRP_MAX_METRIC;
 				eigrp_fsm_event(&msg);
 
 				if (free_received_route || msg.transient_route)
-					eigrp_topology_route_free(received_route);
+					eigrp_topology_route_free(
+						received_route);
 
 			} else {
-				/* An unreachable UPDATE withdraws a previously advertised
-				 * destination.  When it is already absent, there is nothing to
-				 * withdraw.  Do not recreate a topology descriptor from infinity:
-				 * re-advertising that descriptor can reflect withdrawals between
-				 * neighbors indefinitely after convergence. */
-				if (eigrp_metric_calculate(eigrp, route->metric) == EIGRP_MAX_METRIC) {
+				/* An unreachable UPDATE withdraws a previously
+				 * advertised destination.  When it is already
+				 * absent, there is nothing to withdraw.  Do not
+				 * recreate a topology descriptor from infinity:
+				 * re-advertising that descriptor can reflect
+				 * withdrawals between neighbors indefinitely
+				 * after convergence. */
+				if (eigrp_metric_calculate(eigrp, route->metric)
+				    == EIGRP_MAX_METRIC) {
 					eigrp_topology_route_free(route);
 					continue;
 				}
-				/* Only an inbound-permitted reachable UPDATE can create a
-				 * destination and consume neighbor or topology capacity. */
+				/* Only an inbound-permitted reachable UPDATE
+				 * can create a destination and consume neighbor
+				 * or topology capacity. */
 				eigrp_metrics_t ingress_metric = route->metric;
-				if (eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_IN,
-							    &route->dest))
+				if (eigrp_filter_prefix_update(eigrp, ei,
+							       EIGRP_FILTER_IN,
+							       &route->dest))
 					ingress_metric.delay = EIGRP_MAX_METRIC;
 				else
-					eigrp_offset_metric_update(eigrp, ei, EIGRP_FILTER_IN,
-							   &route->dest, &ingress_metric);
-				if (!eigrp_nbr_route_admit(eigrp, nbr, &route->dest, &ingress_metric)) {
+					eigrp_offset_metric_update(
+						eigrp, ei, EIGRP_FILTER_IN,
+						&route->dest, &ingress_metric);
+				if (!eigrp_nbr_route_admit(eigrp, nbr,
+							   &route->dest,
+							   &ingress_metric)) {
 					eigrp_topology_route_free(route);
 					continue;
 				}
@@ -485,28 +570,39 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				prefix->destination = route->dest;
 				eigrp_prefix_normalize(&prefix->destination);
 				prefix->state = EIGRP_FSM_STATE_PASSIVE;
-				prefix->nt = (route->type == eigrp->af_vectors.classic_external_tlv_type
-					      || route->type == EIGRP_TLV_MP_EXT)
-						     ? EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
-						     : EIGRP_TOPOLOGY_TYPE_REMOTE;
+				prefix->nt =
+					(route->type
+						 == eigrp->af_vectors
+							    .classic_external_tlv_type
+					 || route->type == EIGRP_TLV_MP_EXT)
+						? EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
+						: EIGRP_TOPOLOGY_TYPE_REMOTE;
 
 				route->adv_router = nbr;
 				/*
-				 * Seed the neighbor route descriptor from the metric decoded
-				 * from the UPDATE TLV. The prefix object was just created
-				 * and its reported metric is local topology state, not the
-				 * neighbor's advertised RD.
+				 * Seed the neighbor route descriptor from the
+				 * metric decoded from the UPDATE TLV. The
+				 * prefix object was just created and its
+				 * reported metric is local topology state, not
+				 * the neighbor's advertised RD.
 				 */
 				route->reported_metric = ingress_metric;
-				route->reported_distance = eigrp_metric_calculate(eigrp, route->reported_metric);
+				route->reported_distance =
+					eigrp_metric_calculate(
+						eigrp, route->reported_metric);
 
-				route->distance = eigrp_metric_total_calculate(eigrp, route);
-				prefix->fdistance = prefix->distance = prefix->rdistance = route->distance;
+				route->distance = eigrp_metric_total_calculate(
+					eigrp, route);
+				prefix->fdistance = prefix->distance =
+					prefix->rdistance = route->distance;
 				route->prefix = prefix;
-				route->flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
+				route->flags =
+					EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 
-				eigrp_prefix_descriptor_add(eigrp->topology_table, prefix);
-				eigrp_route_descriptor_add(eigrp, prefix, route);
+				eigrp_prefix_descriptor_add(
+					eigrp->topology_table, prefix);
+				eigrp_route_descriptor_add(eigrp, prefix,
+							   route);
 
 				prefix->distance = route->distance;
 				prefix->fdistance = route->distance;
@@ -528,32 +624,35 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	}
 
 	if (peer_init_resync_complete) {
-		unsigned long remaining = nbr->peer_init_resync_prefixes
-			? nbr->peer_init_resync_prefixes->count : 0;
+		unsigned long remaining =
+			nbr->peer_init_resync_prefixes
+				? nbr->peer_init_resync_prefixes->count
+				: 0;
 
 		/* EOT completes the ambiguous INIT epoch.  Withdraw routes not
 		 * readvertised by the peer, then refresh our own topology for a
 		 * possible rebooted peer.  For a mere lost-ACK retry this is a
 		 * bounded extra synchronization, not an adjacency flap. */
 		if (nbr->peer_init_resync_prefixes) {
-			eigrp_update_receive_GR_ask(eigrp, nbr,
-				nbr->peer_init_resync_prefixes);
+			eigrp_update_receive_GR_ask(
+				eigrp, nbr, nbr->peer_init_resync_prefixes);
 			eigrp_list_delete(&nbr->peer_init_resync_prefixes);
 		}
 		nbr->peer_init_resync_pending = false;
 		eigrp_update_nsf_eventlog(eigrp, nbr,
-			EIGRP_UPDATE_NSF_INIT_REPLAY_RESYNC, flags,
-			ntohl(eigrph->sequence));
+					  EIGRP_UPDATE_NSF_INIT_REPLAY_RESYNC,
+					  flags, ntohl(eigrph->sequence));
 		eigrp_update_send_EOT(nbr);
 		eigrp_update_init_event(eigrp, nbr,
-			EIGRP_EVENTLOG_OPCODE_RTP_INIT_RESYNC,
-			EIGRP_EVENTLOG_INIT_RESYNC_COMPLETE, 0, remaining,
-			nbr->sync_active);
+					EIGRP_EVENTLOG_OPCODE_RTP_INIT_RESYNC,
+					EIGRP_EVENTLOG_INIT_RESYNC_COMPLETE, 0,
+					remaining, nbr->sync_active);
 	}
 
 	/* Every reliable UPDATE, including the adjacency INIT UPDATE, must be
-	 * acknowledged.  Waiting for EOT to acknowledge INIT deadlocks two peers
-	 * that both enter Pending and wait for their own INIT sequence to be ACKed. */
+	 * acknowledged.  Waiting for EOT to acknowledge INIT deadlocks two
+	 * peers that both enter Pending and wait for their own INIT sequence to
+	 * be ACKed. */
 	if (ntohl(eigrph->sequence) != 0)
 		eigrp_hello_send_ack(nbr);
 
@@ -566,7 +665,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 /* Build one adjacency-specific UPDATE wire image. */
 static eigrp_packet_t *eigrp_update_neighbor_packet_create(eigrp_nbr_t *nbr,
-                                                        uint32_t flags)
+							   uint32_t flags)
 {
 	eigrp_instance_t *eigrp;
 	eigrp_intf_t *ei;
@@ -579,7 +678,8 @@ static eigrp_packet_t *eigrp_update_neighbor_packet_create(eigrp_nbr_t *nbr,
 	ei = nbr->ei;
 	eigrp = ei->eigrp;
 	sequence = eigrp_packet_sequence_reserve(eigrp);
-	packet = eigrp_packet_create(eigrp_packet_payload_limit(ei->curr_mtu), nbr);
+	packet = eigrp_packet_create(eigrp_packet_payload_limit(ei->curr_mtu),
+				     nbr);
 	if (!packet)
 		return NULL;
 
@@ -598,7 +698,7 @@ static eigrp_packet_t *eigrp_update_neighbor_packet_create(eigrp_nbr_t *nbr,
 }
 
 static void eigrp_update_neighbor_packet_queue(eigrp_nbr_t *nbr,
-                                                eigrp_packet_t *packet)
+					       eigrp_packet_t *packet)
 {
 	eigrp_intf_t *ei;
 	eigrp_instance_t *eigrp;
@@ -640,9 +740,11 @@ void eigrp_update_send_init(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
 
 	nbr->init_sequence_number = packet->sequence_number;
 	eigrp_update_neighbor_packet_queue(nbr, packet);
-	eigrp_update_init_event(eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_SYNC,
+	eigrp_update_init_event(
+		eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_SYNC,
 		EIGRP_EVENTLOG_INIT_SYNC_LOCAL_INIT, nbr->init_sequence_number,
-		nbr->retrans_queue ? nbr->retrans_queue->count : 0, nbr->sync_active);
+		nbr->retrans_queue ? nbr->retrans_queue->count : 0,
+		nbr->sync_active);
 }
 
 /* A full topology may contain far more advertisements than can be held in
@@ -683,9 +785,10 @@ void eigrp_update_send_EOT(eigrp_nbr_t *nbr)
 	/* Allocation failure is recoverable, not an invitation to declare
 	 * synchronization complete or omit the final EOT. */
 	nbr->sync_active = true;
-	eigrp_update_init_event(nbr->ei->eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_SYNC,
-		EIGRP_EVENTLOG_INIT_SYNC_TABLE_START, 0,
-		nbr->retrans_queue->count, nbr->sync_active);
+	eigrp_update_init_event(nbr->ei->eigrp, nbr,
+				EIGRP_EVENTLOG_OPCODE_RTP_INIT_SYNC,
+				EIGRP_EVENTLOG_INIT_SYNC_TABLE_START, 0,
+				nbr->retrans_queue->count, nbr->sync_active);
 	nbr->sync_packet = eigrp_update_neighbor_packet_create(nbr, 0);
 	eigrp_update_sync_continue(nbr);
 }
@@ -714,7 +817,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 	ei = nbr->ei;
 	eigrp = ei->eigrp;
 	packet_limit = eigrp_packet_payload_limit(ei->curr_mtu);
-	/* The existing packet and summary de-duplication set survive ACK stalls. */
+	/* The existing packet and summary de-duplication set survive ACK
+	 * stalls. */
 	packet = nbr->sync_packet;
 	route_count = nbr->sync_route_count;
 	summary_seen = nbr->sync_summary_seen;
@@ -726,7 +830,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 		packet = eigrp_update_neighbor_packet_create(nbr, 0);
 		if (!packet) {
 			eigrp_timer_add(eigrp, &nbr->t_sync,
-				eigrp_update_sync_timer, nbr, EIGRP_UPDATE_SYNC_ALLOC_RETRY_MSEC);
+					eigrp_update_sync_timer, nbr,
+					EIGRP_UPDATE_SYNC_ALLOC_RETRY_MSEC);
 			return;
 		}
 		nbr->sync_packet = packet;
@@ -734,147 +839,257 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 	nbr->sync_resume_count++;
 
 	for (rn = nbr->sync_cursor ? eigrp_table_next(nbr->sync_cursor)
-				     : eigrp_table_first(eigrp->topology_table);
+				   : eigrp_table_first(eigrp->topology_table);
 	     rn; rn = eigrp_table_next(rn)) {
 		summary_before = summary_seen_count;
 		if (rn->info) {
 
-		prefix = rn->info;
-		for (unsigned int q = 0; q < 2; q++) {
-			eigrp_list_t *routes = eigrp_topology_route_queue(prefix, q);
-			for (EIGRP_LIST_ITERATE(routes, node, nnode, route)) {
-			int encoded;
+			prefix = rn->info;
+			for (unsigned int q = 0; q < 2; q++) {
+				eigrp_list_t *routes =
+					eigrp_topology_route_queue(prefix, q);
+				for (EIGRP_LIST_ITERATE(routes, node, nnode,
+							route)) {
+					int encoded;
 
-			/* An UPDATE advertises the destination's selected distance, not
-			 * every RDB learned for that destination. Sending alternates in
-			 * the initial/EOT walk can overwrite the same neighbor descriptor
-			 * at the receiver and makes adjacency recovery order-dependent. */
-			if (route != eigrp_topology_route_read(prefix))
-				continue;
-			eigrp_prefix_descriptor_t summary_prefix;
-			eigrp_route_descriptor_t summary_route;
-			eigrp_prefix_descriptor_t *wire_prefix = prefix;
-			eigrp_route_descriptor_t *selected_route = route;
-			bool summarized = false;
-			bool leak_specific = false;
-			size_t i;
-
-			if (eigrp_summary_route_build(eigrp, ei, prefix, route,
-					      &summary_prefix, &summary_route)) {
-				summarized = true;
-				leak_specific = eigrp_summary_specific_leak(
-					eigrp, ei, &prefix->destination);
-				wire_prefix = &summary_prefix;
-				selected_route = &summary_route;
-				for (i = 0; i < summary_seen_count; i++)
-					if (summary_seen[i].prefix_length == summary_prefix.destination.prefix_length
-					    && summary_seen[i].address.afi == summary_prefix.destination.address.afi
-					    && memcmp(summary_seen[i].address.bytes, summary_prefix.destination.address.bytes,
-						      sizeof(summary_seen[i].address.bytes)) == 0)
-						break;
-				if (i != summary_seen_count) {
-					if (!leak_specific)
+					/* An UPDATE advertises the
+					 * destination's selected distance, not
+					 * every RDB learned for that
+					 * destination. Sending alternates in
+					 * the initial/EOT walk can overwrite
+					 * the same neighbor descriptor at the
+					 * receiver and makes adjacency recovery
+					 * order-dependent. */
+					if (route
+					    != eigrp_topology_route_read(
+						    prefix))
 						continue;
-					summarized = false;
-					wire_prefix = prefix;
-					selected_route = route;
-				}
-				if (summary_seen_count == summary_seen_capacity) {
-					size_t capacity = summary_seen_capacity ? summary_seen_capacity * 2 : 4;
-					eigrp_prefix_t *grown = realloc(summary_seen, capacity * sizeof(*grown));
-					if (!grown)
-						goto blocked_alloc;
-					summary_seen = grown;
-					summary_seen_capacity = capacity;
-				}
-				if (summarized)
-					summary_seen[summary_seen_count++] = summary_prefix.destination;
-			}
+					eigrp_prefix_descriptor_t
+						summary_prefix;
+					eigrp_route_descriptor_t summary_route;
+					eigrp_prefix_descriptor_t *wire_prefix =
+						prefix;
+					eigrp_route_descriptor_t
+						*selected_route = route;
+					bool summarized = false;
+					bool leak_specific = false;
+					size_t i;
 
-			if (eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_OUT,
-						       &wire_prefix->destination))
-				continue;
+					if (eigrp_summary_route_build(
+						    eigrp, ei, prefix, route,
+						    &summary_prefix,
+						    &summary_route)) {
+						summarized = true;
+						leak_specific =
+							eigrp_summary_specific_leak(
+								eigrp, ei,
+								&prefix->destination);
+						wire_prefix = &summary_prefix;
+						selected_route = &summary_route;
+						for (i = 0;
+						     i < summary_seen_count;
+						     i++)
+							if (summary_seen[i].prefix_length
+								    == summary_prefix
+									       .destination
+									       .prefix_length
+							    && summary_seen[i].address
+									       .afi
+								       == summary_prefix
+										  .destination
+										  .address
+										  .afi
+							    && memcmp(summary_seen[i]
+									      .address
+									      .bytes,
+								      summary_prefix
+									      .destination
+									      .address
+									      .bytes,
+								      sizeof(summary_seen[i]
+										     .address
+										     .bytes))
+								       == 0)
+								break;
+						if (i != summary_seen_count) {
+							if (!leak_specific)
+								continue;
+							summarized = false;
+							wire_prefix = prefix;
+							selected_route = route;
+						}
+						if (summary_seen_count
+						    == summary_seen_capacity) {
+							size_t capacity =
+								summary_seen_capacity
+									? summary_seen_capacity
+										  * 2
+									: 4;
+							eigrp_prefix_t *grown = realloc(
+								summary_seen,
+								capacity
+									* sizeof(
+										*grown));
+							if (!grown)
+								goto blocked_alloc;
+							summary_seen = grown;
+							summary_seen_capacity =
+								capacity;
+						}
+						if (summarized)
+							summary_seen[summary_seen_count++] =
+								summary_prefix
+									.destination;
+					}
 
-			eigrp_route_descriptor_t wire_route = *selected_route;
-			if (!summarized)
-				wire_route.metric = selected_route->total_metric;
-			if (eigrp_nbr_split_horizon(selected_route, ei)) {
-				wire_route.metric.delay = EIGRP_MAX_METRIC;
-				wire_route.metric.flags = 0;
-			}
-			eigrp_offset_metric_update(eigrp, ei, EIGRP_FILTER_OUT,
-					  &wire_prefix->destination, &wire_route.metric);
-			encoded = eigrp_packet_route_encode_append(
-				eigrp, ei, nbr, nbr->encoder, packet->s, &wire_route,
-				packet_limit);
-			if (encoded < 0 && route_count) {
-				eigrp_packet_t *next_packet =
-					eigrp_update_neighbor_packet_create(nbr, 0);
-				if (!next_packet)
-					goto blocked_alloc;
-				eigrp_update_neighbor_packet_queue(nbr, packet);
-				packet = next_packet;
-				route_count = 0;
-				wire_route = *selected_route;
-				if (!summarized)
-					wire_route.metric = selected_route->total_metric;
-				if (eigrp_nbr_split_horizon(selected_route, ei)) {
-					wire_route.metric.delay = EIGRP_MAX_METRIC;
-					wire_route.metric.flags = 0;
-				}
-				eigrp_offset_metric_update(eigrp, ei, EIGRP_FILTER_OUT,
-						  &wire_prefix->destination, &wire_route.metric);
-				encoded = eigrp_packet_route_encode_append(
-					eigrp, ei, nbr, nbr->encoder, packet->s, &wire_route,
-					packet_limit);
-			}
-			if (encoded > 0)
-				route_count++;
-			else if (encoded < 0) {
-				(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
-					&wire_prefix->destination, EIGRP_OPC_UPDATE, ei->ifindex, packet_limit, 0);
-				eigrp_log(EIGRP_LOG_WARNING, "interface %s: EIGRP route TLV exceeds packet limit %u",
-					  ei->name, packet_limit);
-			}
+					if (eigrp_filter_prefix_update(
+						    eigrp, ei, EIGRP_FILTER_OUT,
+						    &wire_prefix->destination))
+						continue;
 
-			if (summarized && leak_specific
-			    && !eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_OUT,
-						   &prefix->destination)) {
-				eigrp_route_descriptor_t leak_route = *route;
-				leak_route.metric = route->total_metric;
-				if (eigrp_nbr_split_horizon(route, ei)) {
-					leak_route.metric.delay = EIGRP_MAX_METRIC;
-					leak_route.metric.flags = 0;
-				}
-				eigrp_offset_metric_update(eigrp, ei, EIGRP_FILTER_OUT,
-						  &prefix->destination, &leak_route.metric);
-				encoded = eigrp_packet_route_encode_append(
-					eigrp, ei, nbr, nbr->encoder, packet->s, &leak_route,
-					packet_limit);
-				if (encoded < 0 && route_count) {
-					eigrp_packet_t *next_packet =
-						eigrp_update_neighbor_packet_create(nbr, 0);
-					if (!next_packet)
-						goto blocked_alloc;
-					eigrp_update_neighbor_packet_queue(nbr, packet);
-					packet = next_packet;
-					route_count = 0;
-					encoded = eigrp_packet_route_encode_append(
-						eigrp, ei, nbr, nbr->encoder, packet->s, &leak_route,
-						packet_limit);
-				}
-				if (encoded > 0)
-					route_count++;
-				else if (encoded < 0) {
-					(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
-						&prefix->destination, EIGRP_OPC_UPDATE, ei->ifindex, packet_limit, 0);
-					eigrp_log(EIGRP_LOG_WARNING,
-						  "interface %s: EIGRP route TLV exceeds packet limit %u",
-						  ei->name, packet_limit);
+					eigrp_route_descriptor_t wire_route =
+						*selected_route;
+					if (!summarized)
+						wire_route.metric =
+							selected_route
+								->total_metric;
+					if (eigrp_nbr_split_horizon(
+						    selected_route, ei)) {
+						wire_route.metric.delay =
+							EIGRP_MAX_METRIC;
+						wire_route.metric.flags = 0;
+					}
+					eigrp_offset_metric_update(
+						eigrp, ei, EIGRP_FILTER_OUT,
+						&wire_prefix->destination,
+						&wire_route.metric);
+					encoded =
+						eigrp_packet_route_encode_append(
+							eigrp, ei, nbr,
+							nbr->encoder, packet->s,
+							&wire_route,
+							packet_limit);
+					if (encoded < 0 && route_count) {
+						eigrp_packet_t *next_packet =
+							eigrp_update_neighbor_packet_create(
+								nbr, 0);
+						if (!next_packet)
+							goto blocked_alloc;
+						eigrp_update_neighbor_packet_queue(
+							nbr, packet);
+						packet = next_packet;
+						route_count = 0;
+						wire_route = *selected_route;
+						if (!summarized)
+							wire_route.metric =
+								selected_route
+									->total_metric;
+						if (eigrp_nbr_split_horizon(
+							    selected_route,
+							    ei)) {
+							wire_route.metric
+								.delay =
+								EIGRP_MAX_METRIC;
+							wire_route.metric
+								.flags = 0;
+						}
+						eigrp_offset_metric_update(
+							eigrp, ei,
+							EIGRP_FILTER_OUT,
+							&wire_prefix
+								 ->destination,
+							&wire_route.metric);
+						encoded =
+							eigrp_packet_route_encode_append(
+								eigrp, ei, nbr,
+								nbr->encoder,
+								packet->s,
+								&wire_route,
+								packet_limit);
+					}
+					if (encoded > 0)
+						route_count++;
+					else if (encoded < 0) {
+						(void)eigrp_eventlog_msg_add(
+							eigrp,
+							EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
+							&wire_prefix
+								 ->destination,
+							EIGRP_OPC_UPDATE,
+							ei->ifindex,
+							packet_limit, 0);
+						eigrp_log(
+							EIGRP_LOG_WARNING,
+							"interface %s: EIGRP route TLV exceeds packet limit %u",
+							ei->name, packet_limit);
+					}
+
+					if (summarized && leak_specific
+					    && !eigrp_filter_prefix_update(
+						    eigrp, ei, EIGRP_FILTER_OUT,
+						    &prefix->destination)) {
+						eigrp_route_descriptor_t
+							leak_route = *route;
+						leak_route.metric =
+							route->total_metric;
+						if (eigrp_nbr_split_horizon(
+							    route, ei)) {
+							leak_route.metric
+								.delay =
+								EIGRP_MAX_METRIC;
+							leak_route.metric
+								.flags = 0;
+						}
+						eigrp_offset_metric_update(
+							eigrp, ei,
+							EIGRP_FILTER_OUT,
+							&prefix->destination,
+							&leak_route.metric);
+						encoded =
+							eigrp_packet_route_encode_append(
+								eigrp, ei, nbr,
+								nbr->encoder,
+								packet->s,
+								&leak_route,
+								packet_limit);
+						if (encoded < 0
+						    && route_count) {
+							eigrp_packet_t *next_packet =
+								eigrp_update_neighbor_packet_create(
+									nbr, 0);
+							if (!next_packet)
+								goto blocked_alloc;
+							eigrp_update_neighbor_packet_queue(
+								nbr, packet);
+							packet = next_packet;
+							route_count = 0;
+							encoded = eigrp_packet_route_encode_append(
+								eigrp, ei, nbr,
+								nbr->encoder,
+								packet->s,
+								&leak_route,
+								packet_limit);
+						}
+						if (encoded > 0)
+							route_count++;
+						else if (encoded < 0) {
+							(void)eigrp_eventlog_msg_add(
+								eigrp,
+								EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
+								&prefix->destination,
+								EIGRP_OPC_UPDATE,
+								ei->ifindex,
+								packet_limit,
+								0);
+							eigrp_log(
+								EIGRP_LOG_WARNING,
+								"interface %s: EIGRP route TLV exceeds packet limit %u",
+								ei->name,
+								packet_limit);
+						}
+					}
 				}
 			}
-			}
-		}
 		}
 		/* Never pause between the two advertisements of a summarized
 		 * destination (summary and leaked component). */
@@ -887,13 +1102,16 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 			nbr->sync_summary_seen = summary_seen;
 			nbr->sync_summary_count = summary_seen_count;
 			nbr->sync_summary_capacity = summary_seen_capacity;
-			if (nbr->retrans_queue->count >= EIGRP_UPDATE_SYNC_RELIABLE_MAX)
+			if (nbr->retrans_queue->count
+			    >= EIGRP_UPDATE_SYNC_RELIABLE_MAX)
 				nbr->sync_backpressure_count++;
 			else
-				/* Yield to input, DUAL, and TX without a time-based pause.
-				 * ACK progress is the only resume when RTP is full. */
+				/* Yield to input, DUAL, and TX without a
+				 * time-based pause. ACK progress is the only
+				 * resume when RTP is full. */
 				eigrp_timer_add(eigrp, &nbr->t_sync,
-					eigrp_update_sync_timer, nbr, 0);
+						eigrp_update_sync_timer, nbr,
+						0);
 			return;
 		}
 	}
@@ -913,8 +1131,9 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 	eot_sequence = packet->sequence_number;
 	eigrp_update_neighbor_packet_queue(nbr, packet);
 	eigrp_update_init_event(eigrp, nbr, EIGRP_EVENTLOG_OPCODE_RTP_INIT_SYNC,
-		EIGRP_EVENTLOG_INIT_SYNC_EOT_QUEUED, eot_sequence,
-		nbr->retrans_queue->count, nbr->sync_active);
+				EIGRP_EVENTLOG_INIT_SYNC_EOT_QUEUED,
+				eot_sequence, nbr->retrans_queue->count,
+				nbr->sync_active);
 	return;
 
 blocked_alloc:
@@ -927,7 +1146,7 @@ blocked_alloc:
 	nbr->sync_summary_count = summary_before;
 	nbr->sync_summary_capacity = summary_seen_capacity;
 	eigrp_timer_add(eigrp, &nbr->t_sync, eigrp_update_sync_timer, nbr,
-		EIGRP_UPDATE_SYNC_ALLOC_RETRY_MSEC);
+			EIGRP_UPDATE_SYNC_ALLOC_RETRY_MSEC);
 }
 
 void eigrp_update_send_all(eigrp_instance_t *eigrp, eigrp_intf_t *exception)
@@ -989,13 +1208,15 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 		int encoded = 0;
 
 		if (eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_OUT,
-					      &prefix->destination)) {
+					       &prefix->destination)) {
 			eigrp_list_delete_data(prefixes, prefix);
 			continue;
 		}
 
 		successors = eigrp_topology_successors_read(prefix);
-		route = successors ? eigrp_list_item_data(eigrp_list_first(successors)) : NULL;
+		route = successors ? eigrp_list_item_data(
+					     eigrp_list_first(successors))
+				   : NULL;
 		if (!route) {
 			if (successors)
 				eigrp_list_delete(&successors);
@@ -1009,29 +1230,36 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 			wire_route.metric.flags = 0;
 		}
 		eigrp_offset_metric_update(eigrp, ei, EIGRP_FILTER_OUT,
-				  &prefix->destination, &wire_route.metric);
+					   &prefix->destination,
+					   &wire_route.metric);
 		encoded = eigrp_packet_route_encode_append(
-			eigrp, ei, nbr, nbr->encoder, packet->s, &wire_route, packet_limit);
+			eigrp, ei, nbr, nbr->encoder, packet->s, &wire_route,
+			packet_limit);
 		if (successors)
 			eigrp_list_delete(&successors);
 
 		if (encoded < 0 && route_count)
 			break;
 		if (encoded < 0) {
-			(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
-				&prefix->destination, EIGRP_OPC_UPDATE, ei->ifindex, packet_limit, 0);
-			eigrp_log(EIGRP_LOG_WARNING, "interface %s: EIGRP route TLV exceeds packet limit %u",
-				  ei->name, packet_limit);
+			(void)eigrp_eventlog_msg_add(
+				eigrp,
+				EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
+				&prefix->destination, EIGRP_OPC_UPDATE,
+				ei->ifindex, packet_limit, 0);
+			eigrp_log(
+				EIGRP_LOG_WARNING,
+				"interface %s: EIGRP route TLV exceeds packet limit %u",
+				ei->name, packet_limit);
 			eigrp_list_delete_data(prefixes, prefix);
 			continue;
 		}
 		if (encoded > 0)
 			route_count++;
 
-		/* Preserve the existing filter-change behavior while the prefix is
-		 * still valid, then consume this resync work item. */
+		/* Preserve the existing filter-change behavior while the prefix
+		 * is still valid, then consume this resync work item. */
 		if (eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_IN,
-					      &prefix->destination)) {
+					       &prefix->destination)) {
 			eigrp_fsm_action_message_t fsm_msg = {0};
 			eigrp_route_descriptor_t *fsm_route =
 				eigrp_prefix_descriptor_lookup(prefix, nbr);
@@ -1057,7 +1285,8 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 	} else {
 		nbr->nbr_gr_packet_type = EIGRP_PACKET_PART_NA;
 	}
-	((struct eigrp_header *)eigrp_stream_data(packet->s))->flags = htonl(flags);
+	((struct eigrp_header *)eigrp_stream_data(packet->s))->flags =
+		htonl(flags);
 	eigrp_update_neighbor_packet_queue(nbr, packet);
 }
 
@@ -1083,7 +1312,7 @@ void eigrp_update_send_GR_event(void *arg)
 	 * schedule this event again with small delay */
 	if (nbr->retrans_queue->count > 0) {
 		eigrp_timer_add(nbr->ei->eigrp, &nbr->t_nbr_send_gr,
-				       eigrp_update_send_GR_event, nbr, 10);
+				eigrp_update_send_GR_event, nbr, 10);
 		return;
 	}
 
@@ -1093,7 +1322,7 @@ void eigrp_update_send_GR_event(void *arg)
 	/* if it wasn't last chunk, schedule this event again */
 	if (nbr->nbr_gr_packet_type != EIGRP_PACKET_PART_LAST)
 		eigrp_timer_add(nbr->ei->eigrp, &nbr->t_nbr_send_gr,
-				       eigrp_update_send_GR_event, nbr, 0);
+				eigrp_update_send_GR_event, nbr, 0);
 
 	return;
 }
@@ -1124,24 +1353,25 @@ void eigrp_update_send_GR(eigrp_nbr_t *nbr, enum GR_type gr_type)
 	if (gr_type == EIGRP_GR_FILTER) {
 		/* function was called after applying filtration */
 		if (eigrp->log_neighbor_changes)
-			eigrp_log(EIGRP_LOG_INFO,
+			eigrp_log(
+				EIGRP_LOG_INFO,
 				"Neighbor %s (%s) is resync: route configuration changed",
-				eigrp_print_addr(&nbr->src),
-				ei->name);
+				eigrp_print_addr(&nbr->src), ei->name);
 	} else if (gr_type == EIGRP_GR_MANUAL) {
 		/* Graceful restart was called manually */
 		if (eigrp->log_neighbor_changes)
-			eigrp_log(EIGRP_LOG_INFO, "Neighbor %s (%s) is resync: manually cleared",
-				  eigrp_print_addr(&nbr->src),
-				  ei->name);
-
+			eigrp_log(
+				EIGRP_LOG_INFO,
+				"Neighbor %s (%s) is resync: manually cleared",
+				eigrp_print_addr(&nbr->src), ei->name);
 	}
 
 	prefixes = eigrp_list_create();
 	if (nbr->nbr_gr_prefixes_send)
 		eigrp_list_delete(&nbr->nbr_gr_prefixes_send);
 	/* add all prefixes from topology table to list */
-	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = eigrp_table_next(rn)) {
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
 		if (!rn->info)
 			continue;
 
@@ -1157,7 +1387,7 @@ void eigrp_update_send_GR(eigrp_nbr_t *nbr, enum GR_type gr_type)
 
 	/* Start packet sending through the host event abstraction. */
 	eigrp_timer_add(nbr->ei->eigrp, &nbr->t_nbr_send_gr,
-			       eigrp_update_send_GR_event, nbr, 0);
+			eigrp_update_send_GR_event, nbr, 0);
 }
 
 /**

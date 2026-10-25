@@ -51,9 +51,9 @@ static bool eigrp_network_prefix_match(const eigrp_prefix_t *a,
 	       && eigrp_network_address_match(&a->address, &b->address);
 }
 
-static eigrp_result_t eigrp_network_config_create(
-	eigrp_af_config_t *af, const eigrp_prefix_t *prefix,
-	bool *changed)
+static eigrp_result_t eigrp_network_config_create(eigrp_af_config_t *af,
+						  const eigrp_prefix_t *prefix,
+						  bool *changed)
 {
 	eigrp_network_config_t *network;
 
@@ -79,9 +79,9 @@ static eigrp_result_t eigrp_network_config_create(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_network_config_delete(
-	eigrp_af_config_t *af, const eigrp_prefix_t *prefix,
-	bool *changed)
+static eigrp_result_t eigrp_network_config_delete(eigrp_af_config_t *af,
+						  const eigrp_prefix_t *prefix,
+						  bool *changed)
 {
 	eigrp_network_config_t **cursor;
 	eigrp_network_config_t *network;
@@ -118,8 +118,8 @@ void eigrp_network_config_delete_all(eigrp_af_config_t *af)
 	af->networks = NULL;
 }
 
-static bool eigrp_network_runtime_matches(
-	const eigrp_instance_t *eigrp, const eigrp_prefix_t *connected)
+static bool eigrp_network_runtime_matches(const eigrp_instance_t *eigrp,
+					  const eigrp_prefix_t *connected)
 {
 	const struct eigrp_network_runtime *network;
 
@@ -146,8 +146,9 @@ static bool eigrp_network_runtime_matches(
 	return false;
 }
 
-eigrp_result_t eigrp_network_runtime_exists(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *prefix, bool *exists)
+eigrp_result_t eigrp_network_runtime_exists(eigrp_instance_t *eigrp,
+					    const eigrp_prefix_t *prefix,
+					    bool *exists)
 {
 	struct eigrp_network_runtime *network;
 
@@ -166,8 +167,9 @@ eigrp_result_t eigrp_network_runtime_exists(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_network_runtime_create(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *prefix, bool *changed)
+static eigrp_result_t eigrp_network_runtime_create(eigrp_instance_t *eigrp,
+						   const eigrp_prefix_t *prefix,
+						   bool *changed)
 {
 	struct eigrp_network_runtime *network;
 	bool exists;
@@ -199,8 +201,9 @@ static eigrp_result_t eigrp_network_runtime_create(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_network_runtime_delete(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *prefix, bool *changed)
+static eigrp_result_t eigrp_network_runtime_delete(eigrp_instance_t *eigrp,
+						   const eigrp_prefix_t *prefix,
+						   bool *changed)
 {
 	struct eigrp_network_runtime **cursor;
 	struct eigrp_network_runtime *network;
@@ -230,7 +233,8 @@ static eigrp_result_t eigrp_network_runtime_delete(
 
 	for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, next, ei)) {
 		if (!eigrp_network_runtime_matches(eigrp, &ei->address))
-			eigrp_intf_free(eigrp, ei, EIGRP_INTERFACE_REMOVE_CONFIG);
+			eigrp_intf_free(eigrp, ei,
+					EIGRP_INTERFACE_REMOVE_CONFIG);
 	}
 
 	if (changed)
@@ -257,35 +261,39 @@ void eigrp_network_runtime_delete_all(eigrp_instance_t *eigrp)
  * connected prefix without ever becoming a neighbor-facing interface.
  * This is particularly useful for loopback/host-only connected networks.
  */
-static bool eigrp_network_ipv6_passive_connected(
-    eigrp_instance_t *eigrp, const eigrp_intf_runtime_state_t *state)
+static bool
+eigrp_network_ipv6_passive_connected(eigrp_instance_t *eigrp,
+				     const eigrp_intf_runtime_state_t *state)
 {
-    eigrp_af_config_t *af;
-    eigrp_intf_config_t *config;
-    struct in6_addr address;
+	eigrp_af_config_t *af;
+	eigrp_intf_config_t *config;
+	struct in6_addr address;
 
-    if (!eigrp || !state || !state->interface_name
-        || eigrp->af_vectors.afi != EIGRP_AFI_IPV6
-        || state->address.address.afi != EIGRP_AFI_IPV6)
-        return false;
-    memcpy(&address, state->address.address.bytes, sizeof(address));
-    if (IN6_IS_ADDR_LINKLOCAL(&address) || IN6_IS_ADDR_MULTICAST(&address)
-        || IN6_IS_ADDR_UNSPECIFIED(&address) || IN6_IS_ADDR_LOOPBACK(&address))
-        return false;
-    af = eigrp_af_config_runtime_read(eigrp);
-    config = af ? eigrp_intf_config_read(af, state->interface_name) : NULL;
-    return config && config->passive_configured && config->passive;
+	if (!eigrp || !state || !state->interface_name
+	    || eigrp->af_vectors.afi != EIGRP_AFI_IPV6
+	    || state->address.address.afi != EIGRP_AFI_IPV6)
+		return false;
+	memcpy(&address, state->address.address.bytes, sizeof(address));
+	if (IN6_IS_ADDR_LINKLOCAL(&address) || IN6_IS_ADDR_MULTICAST(&address)
+	    || IN6_IS_ADDR_UNSPECIFIED(&address)
+	    || IN6_IS_ADDR_LOOPBACK(&address))
+		return false;
+	af = eigrp_af_config_runtime_read(eigrp);
+	config = af ? eigrp_intf_config_read(af, state->interface_name) : NULL;
+	return config && config->passive_configured && config->passive;
 }
 
-static bool eigrp_network_interface_enabled(
-    eigrp_instance_t *eigrp, const eigrp_intf_runtime_state_t *state)
+static bool
+eigrp_network_interface_enabled(eigrp_instance_t *eigrp,
+				const eigrp_intf_runtime_state_t *state)
 {
-    return eigrp_network_runtime_matches(eigrp, &state->address)
-           || eigrp_network_ipv6_passive_connected(eigrp, state);
+	return eigrp_network_runtime_matches(eigrp, &state->address)
+	       || eigrp_network_ipv6_passive_connected(eigrp, state);
 }
 
-static void eigrp_network_intf_walk_update(
-	const eigrp_intf_runtime_state_t *state, void *arg)
+static void
+eigrp_network_intf_walk_update(const eigrp_intf_runtime_state_t *state,
+			       void *arg)
 {
 	eigrp_instance_t *eigrp = arg;
 
@@ -298,15 +306,14 @@ static void eigrp_network_intf_walk_update(
 
 void eigrp_network_intfs_update(eigrp_instance_t *eigrp)
 {
-	if (!eigrp
-	    || eigrp->router_id.s_addr == INADDR_ANY)
+	if (!eigrp || eigrp->router_id.s_addr == INADDR_ANY)
 		return;
-	(void)eigrp_sys_interface_walk(
-		eigrp, eigrp_network_intf_walk_update, eigrp);
+	(void)eigrp_sys_interface_walk(eigrp, eigrp_network_intf_walk_update,
+				       eigrp);
 }
 
-void eigrp_network_intf_update(
-	eigrp_instance_t *eigrp, const eigrp_intf_runtime_state_t *state)
+void eigrp_network_intf_update(eigrp_instance_t *eigrp,
+			       const eigrp_intf_runtime_state_t *state)
 {
 	if (!eigrp || !state || state->secondary
 	    || !eigrp_prefix_valid(&state->address))
@@ -320,8 +327,8 @@ void eigrp_network_intf_update(
 	(void)eigrp_intf_runtime_update(EIGRP_SET, eigrp, state, NULL);
 }
 
-void eigrp_sys_intf_update(
-	eigrp_vrf_id_t vrf_id, const eigrp_intf_runtime_state_t *state)
+void eigrp_sys_intf_update(eigrp_vrf_id_t vrf_id,
+			   const eigrp_intf_runtime_state_t *state)
 {
 	eigrp_virt_router_t *virt_router;
 	eigrp_instance_t *eigrp;
@@ -332,11 +339,14 @@ void eigrp_sys_intf_update(
 		return;
 
 	pthread_mutex_lock(&eigrp_process.hierarchy_lock);
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)) {
-		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, eigrp)) {
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router)) {
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
+					   eigrp)) {
 			if (eigrp->vrf_id != vrf_id || eigrp->shutdown)
 				continue;
-			(void)eigrp_instance_intf_update_event_enqueue(eigrp, state);
+			(void)eigrp_instance_intf_update_event_enqueue(eigrp,
+								       state);
 		}
 	}
 	pthread_mutex_unlock(&eigrp_process.hierarchy_lock);
@@ -348,7 +358,7 @@ static eigrp_result_t eigrp_network_process(eigrp_instance_context_t *context,
 					    bool *runtime_changed);
 
 static eigrp_result_t eigrp_network_validate(eigrp_instance_context_t *context,
-					      const eigrp_prefix_t *prefix)
+					     const eigrp_prefix_t *prefix)
 {
 	eigrp_afi_t afi;
 
@@ -362,8 +372,8 @@ static eigrp_result_t eigrp_network_validate(eigrp_instance_context_t *context,
 	if (afi != prefix->address.afi || !eigrp_prefix_valid(prefix))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	/* `network` is an IPv4 configuration feature.  Prefix matching itself is
-	 * generic and lives in eigrp_prefix.c rather than in the AF vectors.
+	/* `network` is an IPv4 configuration feature.  Prefix matching itself
+	 * is generic and lives in eigrp_prefix.c rather than in the AF vectors.
 	 */
 	if (afi != EIGRP_AFI_IPV4)
 		return EIGRP_RESULT_UNSUPPORTED;
@@ -389,15 +399,15 @@ static eigrp_result_t eigrp_network_process(eigrp_instance_context_t *context,
 
 	if (operation == EIGRP_NETWORK_OPERATION_CREATE) {
 		if (context->config) {
-			result = eigrp_network_config_create(context->config, prefix,
-							     &config_changed);
+			result = eigrp_network_config_create(
+				context->config, prefix, &config_changed);
 			if (result != EIGRP_RESULT_SUCCESS)
 				return result;
 		}
 
 		if (context->runtime) {
-			result = eigrp_network_runtime_create(
-				context->runtime, prefix, &changed);
+			result = eigrp_network_runtime_create(context->runtime,
+							      prefix, &changed);
 			if (result != EIGRP_RESULT_SUCCESS) {
 				if (config_changed)
 					(void)eigrp_network_config_delete(
@@ -429,8 +439,9 @@ static eigrp_result_t eigrp_network_process(eigrp_instance_context_t *context,
 			}
 		}
 
-		/* Delete is idempotent across the retained-config and runtime views.
-		 * If either side owned the network, the operation succeeded.
+		/* Delete is idempotent across the retained-config and runtime
+		 * views. If either side owned the network, the operation
+		 * succeeded.
 		 */
 		if (config_result == EIGRP_RESULT_NOT_FOUND
 		    && runtime_result == EIGRP_RESULT_NOT_FOUND)
@@ -449,12 +460,15 @@ typedef struct eigrp_network_message_args {
 	const eigrp_prefix_t *prefix;
 } eigrp_network_message_args_t;
 
-static eigrp_result_t eigrp_network_message_process(eigrp_instance_t *eigrp, void *arg)
+static eigrp_result_t eigrp_network_message_process(eigrp_instance_t *eigrp,
+						    void *arg)
 {
 	eigrp_network_message_args_t *m = arg;
 	(void)eigrp;
 	return eigrp_network_process(m->context, m->prefix,
-		m->create ? EIGRP_NETWORK_OPERATION_CREATE : EIGRP_NETWORK_OPERATION_DELETE, NULL);
+				     m->create ? EIGRP_NETWORK_OPERATION_CREATE
+					       : EIGRP_NETWORK_OPERATION_DELETE,
+				     NULL);
 }
 
 /*
@@ -466,17 +480,19 @@ static eigrp_result_t eigrp_network_message_process(eigrp_instance_t *eigrp, voi
  *   Classic: router mode
  *   Named: IPv4 address-family mode
  * Description:
- * Enables or disables EIGRP on local IPv4 interfaces whose addresses match the network/wildcard.
- * The target owns matching and interface activation behavior used by named mode rather than recreating the classic logic in FRR.
+ * Enables or disables EIGRP on local IPv4 interfaces whose addresses match the
+ * network/wildcard. The target owns matching and interface activation behavior
+ * used by named mode rather than recreating the classic logic in FRR.
  */
 eigrp_result_t eigrp_network_create(eigrp_instance_context_t *context,
 				    const eigrp_prefix_t *prefix)
 {
-	eigrp_network_message_args_t message = { true, context, prefix };
+	eigrp_network_message_args_t message = {true, context, prefix};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_network_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_network_message_process,
+			&message);
 	return eigrp_network_process(context, prefix,
 				     EIGRP_NETWORK_OPERATION_CREATE, NULL);
 }
@@ -490,17 +506,19 @@ eigrp_result_t eigrp_network_create(eigrp_instance_context_t *context,
  *   Classic: router mode
  *   Named: IPv4 address-family mode
  * Description:
- * Enables or disables EIGRP on local IPv4 interfaces whose addresses match the network/wildcard.
- * The target owns matching and interface activation behavior used by named mode rather than recreating the classic logic in FRR.
+ * Enables or disables EIGRP on local IPv4 interfaces whose addresses match the
+ * network/wildcard. The target owns matching and interface activation behavior
+ * used by named mode rather than recreating the classic logic in FRR.
  */
 eigrp_result_t eigrp_network_delete(eigrp_instance_context_t *context,
 				    const eigrp_prefix_t *prefix)
 {
-	eigrp_network_message_args_t message = { false, context, prefix };
+	eigrp_network_message_args_t message = {false, context, prefix};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_network_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_network_message_process,
+			&message);
 	return eigrp_network_process(context, prefix,
 				     EIGRP_NETWORK_OPERATION_DELETE, NULL);
 }

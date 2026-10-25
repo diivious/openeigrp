@@ -15,7 +15,7 @@
 /* Add a keychain. An identical registration is idempotent; an attempt to
  * change an existing entry is rejected until it is explicitly reset. */
 eigrp_result_t eigrp_unix_keychain_add(const char *name, uint32_t key_id,
-                                       const char *secret);
+				       const char *secret);
 
 /* Release all Unix keychains and scrub their stored secrets. */
 void eigrp_unix_keychain_reset(void);

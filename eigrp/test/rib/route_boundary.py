@@ -31,7 +31,7 @@ def test_selected_routes_cross_only_the_public_rib_snapshot_boundary():
     update = function_body(topology, "eigrp_update_routing_table")
     assert "eigrp_rib_route_t rib_route" in update
     assert "eigrp_rib_route_add(eigrp, &rib_route)" in update
-    assert "eigrp_rib_route_del(eigrp, &prefix->destination)" in update
+    assert "eigrp_rib_route_del(eigrp,&prefix->destination)" in "".join(update.split())
     assert "eigrp_route_descriptor_t *" not in header
     assert "eigrp_prefix_descriptor_t *" not in header
 

@@ -24,11 +24,11 @@
 #include "eigrp_types.h"
 
 struct eigrp_addr {
-    uint8_t afi;		// ipv4 or ipv6
-    union {
-	struct in_addr  v4;
-	struct in6_addr v6;
-    } ip;
+	uint8_t afi; // ipv4 or ipv6
+	union {
+		struct in_addr v4;
+		struct in6_addr v6;
+	} ip;
 };
 
 /*
@@ -44,9 +44,11 @@ struct eigrp_packet_input {
 	eigrp_addr_t destination;
 	eigrp_packet_rx_meta_t meta;
 	eigrp_stream_t *stream;
-	/* Set only by process ingress after complete authentication and framing. */
+	/* Set only by process ingress after complete authentication and
+	 * framing. */
 	bool ingress_authenticated;
-	bool ingress_discovery; /* New/non-UP peer, counted in AF input queue. */
+	bool ingress_discovery; /* New/non-UP peer, counted in AF input queue.
+				 */
 	uint64_t ingress_neighbor_generation;
 };
 
@@ -79,13 +81,14 @@ struct eigrp_instance {
 	eigrp_virt_router_t *virt_router;
 	eigrp_vrf_id_t vrf_id;
 	eigrp_af_vectors_t af_vectors;
-	uint16_t AS;	     /* Autonomous system number */
+	uint16_t AS; /* Autonomous system number */
 	bool shutdown;
 
 	/* Process packet thread -> AF packet handoff.  The AF owns the consumer
 	 * thread and packet queue for its entire published runtime lifetime. */
 	pthread_mutex_t work_lock;
-	pthread_mutex_t peer_lock; /* Protects interface/neighbor publication and ingress auth. */
+	pthread_mutex_t peer_lock; /* Protects interface/neighbor publication
+				      and ingress auth. */
 	uint64_t next_neighbor_generation; /* Protected by peer_lock. */
 	pthread_cond_t work_cond;
 	pthread_t thread;
@@ -108,13 +111,14 @@ struct eigrp_instance {
 	size_t packet_discovery_count; /* Protected by work_lock. */
 	uint64_t packet_drop_count;
 
-	uint8_t k_values[6]; /*Array for K values configuration*/
-	uint8_t variance;    /*Metric variance multiplier*/
-	bool traffic_share_balanced; /* Proportional forwarding hint for selected paths. */
-	uint8_t max_paths;   /*Maximum allowed paths for 1 prefix*/
-	uint8_t max_hops;    /*Maximum accepted path hop count*/
-	uint8_t distance_internal; /* Host RIB administrative distance. */
-	uint8_t distance_external; /* Host RIB administrative distance. */
+	uint8_t k_values[6];	     /*Array for K values configuration*/
+	uint8_t variance;	     /*Metric variance multiplier*/
+	bool traffic_share_balanced; /* Proportional forwarding hint for
+					selected paths. */
+	uint8_t max_paths;	     /*Maximum allowed paths for 1 prefix*/
+	uint8_t max_hops;	     /*Maximum accepted path hop count*/
+	uint8_t distance_internal;   /* Host RIB administrative distance. */
+	uint8_t distance_external;   /* Host RIB administrative distance. */
 	uint8_t metric_version; /* Highest locally enabled route TLV version. */
 	bool log_neighbor_changes;
 	bool log_neighbor_warnings;
@@ -123,9 +127,10 @@ struct eigrp_instance {
 
 
 	/* EIGRP Router ID. */
-	struct in_addr router_id;	 /* Configured automatically. */
-	struct in_addr router_id_static; /* Configured manually. */
-	bool router_id_missing_event_logged; /* Missing-ID event de-duplication. */
+	struct in_addr router_id;	     /* Configured automatically. */
+	struct in_addr router_id_static;     /* Configured manually. */
+	bool router_id_missing_event_logged; /* Missing-ID event de-duplication.
+					      */
 
 	eigrp_list_t *eiflist;		   /* eigrp interfaces */
 	uint8_t passive_interface_default; /* passive-interface default */
@@ -140,7 +145,8 @@ struct eigrp_instance {
 	eigrp_event_t *t_write;
 	eigrp_event_t *t_read;
 	eigrp_timer_event_t *t_distribute; /* timer for distribute list */
-	eigrp_timer_event_t *t_pacing; /* earliest pending interface TX budget */
+	eigrp_timer_event_t
+		*t_pacing; /* earliest pending interface TX budget */
 
 	struct eigrp_network_runtime *networks; /* EIGRP runtime networks. */
 
@@ -156,7 +162,8 @@ struct eigrp_instance {
 	uint64_t eigrp_pfxlimits_af_reset_due_msec;
 	eigrp_timer_event_t *t_pfxlimits_af_restart;
 	eigrp_timer_event_t *t_pfxlimits_af_reset;
-	uint32_t redist_prefix_count; /* Distinct retained self-owned external destinations. */
+	uint32_t redist_prefix_count; /* Distinct retained self-owned external
+					 destinations. */
 	/* AF-wide redistribution prefix-limit penalty; never neighbor-owned. */
 	uint8_t redist_limit_state; /* 0 normal, 1 suspended, 2 locked. */
 	uint16_t redist_limit_restart_cnt;
@@ -180,7 +187,8 @@ struct eigrp_instance {
 	/* Compact three-word-per-entry diagnostic event ring. */
 	eigrp_eventlog_t *eventlog;
 
-	/* Local TLV codecs used for neighbor/interface bind and mixed encode. */
+	/* Local TLV codecs used for neighbor/interface bind and mixed encode.
+	 */
 	eigrp_tlv_codec_t tlv1_codec;
 	eigrp_tlv_codec_t tlv2_codec;
 
@@ -190,7 +198,6 @@ struct eigrp_instance {
 
 	/* Host-independent runtime policy references. */
 	eigrp_filter_runtime_state_t filter;
-
 };
 
 static inline bool eigrp_instance_thread_is_self(const eigrp_instance_t *eigrp)
@@ -199,15 +206,16 @@ static inline bool eigrp_instance_thread_is_self(const eigrp_instance_t *eigrp)
 	       && pthread_equal(pthread_self(), eigrp->thread);
 }
 
-static inline bool eigrp_instance_thread_dispatch_needed(
-	const eigrp_instance_t *eigrp)
+static inline bool
+eigrp_instance_thread_dispatch_needed(const eigrp_instance_t *eigrp)
 {
 	return eigrp && eigrp->thread_started
 	       && !pthread_equal(pthread_self(), eigrp->thread);
 }
 
-static inline eigrp_result_t eigrp_instance_message_call(
-	eigrp_instance_t *eigrp, eigrp_message_handler_t handler, void *arg)
+static inline eigrp_result_t
+eigrp_instance_message_call(eigrp_instance_t *eigrp,
+			    eigrp_message_handler_t handler, void *arg)
 {
 	eigrp_message_request_t message = {
 		.handler = handler,
@@ -224,7 +232,8 @@ static inline eigrp_result_t eigrp_instance_message_call(
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 
 	pthread_mutex_lock(&eigrp->work_lock);
-	if (eigrp->shutdown || !eigrp->thread_running || !eigrp->thread_started) {
+	if (eigrp->shutdown || !eigrp->thread_running
+	    || !eigrp->thread_started) {
 		pthread_mutex_unlock(&eigrp->work_lock);
 		pthread_cond_destroy(&message.complete_cond);
 		return EIGRP_RESULT_CONFLICT;
@@ -263,20 +272,22 @@ typedef struct eigrp_intf_params {
 	uint8_t load;
 
 	char *auth_keychain; /* Associated keychain with interface*/
-	char *auth_password; /* Runtime-owned direct HMAC-SHA-256 key material */
+	char *auth_password; /* Runtime-owned direct HMAC-SHA-256 key material
+			      */
 	int auth_type;	     /* EIGRP authentication type */
 } eigrp_intf_params_t;
 
-enum { MEMBER_ALLROUTERS = 0,
-       MEMBER_MAX,
+enum {
+	MEMBER_ALLROUTERS = 0,
+	MEMBER_MAX,
 };
 
 typedef struct eigrp_intf_stats {
 	struct {
 		uint64_t ack;
-		uint64_t hello;  /* Hello message input count. */
-		uint64_t query;  /* Query message input count. */
-		uint64_t reply;  /* Reply message input count. */
+		uint64_t hello;	 /* Hello message input count. */
+		uint64_t query;	 /* Query message input count. */
+		uint64_t reply;	 /* Reply message input count. */
 		uint64_t update; /* Update message input count. */
 		uint64_t siaQuery;
 		uint64_t siaReply;
@@ -284,9 +295,9 @@ typedef struct eigrp_intf_stats {
 
 	struct {
 		uint64_t ack;
-		uint64_t hello;  /* Hello message output count. */
-		uint64_t query;  /* Query message output count. */
-		uint64_t reply;  /* Reply message output count. */
+		uint64_t hello;	 /* Hello message output count. */
+		uint64_t query;	 /* Query message output count. */
+		uint64_t reply;	 /* Reply message output count. */
 		uint64_t update; /* Update message output count. */
 		uint64_t siaQuery;
 		uint64_t siaReply;
@@ -311,15 +322,15 @@ typedef struct eigrp_interface {
 	/* Host-independent runtime interface identity/state. */
 	char *name;
 	eigrp_ifindex_t ifindex;
-	uint8_t type;		/* P2P, LOOP, BCAST */
+	uint8_t type; /* P2P, LOOP, BCAST */
 	eigrp_prefix_t address;
 	bool operative;
 	uint32_t curr_bandwidth;
 	uint32_t curr_mtu;
 
 	/* Multicat Properties */
-	bool    member_allrouters;	// multicast group refcnts
-	uint8_t multicast_memberships;	//  multicast groups we belong
+	bool member_allrouters;	       // multicast group refcnts
+	uint8_t multicast_memberships; //  multicast groups we belong
 
 	/* EIGRP Interface Properties */
 	eigrp_intf_params_t params;
@@ -329,26 +340,30 @@ typedef struct eigrp_interface {
 	bool split_horizon;
 	bool next_hop_self;
 	uint32_t bandwidth_percent;
-	/* Per-interface transmit bandwidth budget (packet bytes * 800 units). */
+	/* Per-interface transmit bandwidth budget (packet bytes * 800 units).
+	 */
 	uint64_t pacing_last_msec;
 	uint64_t pacing_rate;
 	uint64_t pacing_credit;
 	bool pacing_initialized;
-	uint64_t pacing_tx_bytes; /* successful EIGRP wire payload bytes */
+	uint64_t pacing_tx_bytes;    /* successful EIGRP wire payload bytes */
 	uint64_t pacing_defer_count; /* scheduler budget deferrals */
-	uint64_t pacing_defer_msec; /* requested delay, not wall-clock benchmark */
+	uint64_t pacing_defer_msec; /* requested delay, not wall-clock benchmark
+				     */
 
 	/* Neighbor information. */
 	eigrp_list_t *nbrs; /* EIGRP Neighbor List */
 
 	/* Events. */
-	eigrp_timer_event_t *t_hello;	     /* timer */
+	eigrp_timer_event_t *t_hello;	   /* timer */
 	eigrp_timer_event_t *t_distribute; /* timer for distribute list */
-	eigrp_timer_event_t *t_multicast_retry; /* deferred TX allocation retry */
+	eigrp_timer_event_t
+		*t_multicast_retry; /* deferred TX allocation retry */
 
 	/* Packet send buffer. */
 	eigrp_packet_queue_t *obuf; /* Output queue */
-	/* Encoded reliable multicasts owned by TRANSMIT, pending RTP admission. */
+	/* Encoded reliable multicasts owned by TRANSMIT, pending RTP admission.
+	 */
 	eigrp_packet_queue_t multicast_pending;
 	uint64_t multicast_epoch; /* next UP-adjacency admission generation */
 	bool multicast_backoff;
@@ -394,7 +409,8 @@ typedef struct eigrp_packet {
 	eigrp_nbr_t *nbr;
 	uint32_t sequence_number;
 	bool retransmission;
-	bool retry_queued; /* original reliable head has one pending paced retry */
+	bool retry_queued; /* original reliable head has one pending paced retry
+			    */
 	bool multicast_exception;
 	uint64_t multicast_epoch; /* UP-adjacency cutoff captured at handoff */
 	uint64_t sent_msec; /* first successful wire send; RTT sampling only */
@@ -546,7 +562,8 @@ typedef struct eigrp_reply_status {
 } eigrp_reply_status_t;
 
 typedef struct eigrp_prefix_descriptor {
-	/* Direct table ownership for O(1) detachment of retired destinations. */
+	/* Direct table ownership for O(1) detachment of retired destinations.
+	 */
 	eigrp_table_node_t *table_node;
 	bool retirement_queued; /* Once per packetizer work batch. */
 	eigrp_list_t *internal_routes, *external_routes, *rij;
@@ -566,7 +583,7 @@ typedef struct eigrp_prefix_descriptor {
 
 	// If network type is REMOTE_EXTERNAL, pointer will have reference to
 	// its external TLV
-//	uint8_t af;	    // address family
+	//	uint8_t af;	    // address family
 	struct TLV_IPv4_External_type *extTLV;
 
 	uint64_t serno; /*Serial number for this entry. Increased with each
@@ -576,18 +593,19 @@ typedef struct eigrp_prefix_descriptor {
 /* EIGRP Topology table record structure */
 typedef struct eigrp_route_descriptor {
 	uint16_t type;
-	eigrp_topology_id_t topology_id; /* Multiprotocol topology identifier. */
-	eigrp_prefix_t dest;			// destination address
-	eigrp_addr_t nexthop;			// address of advertised by peer
+	eigrp_topology_id_t
+		topology_id;  /* Multiprotocol topology identifier. */
+	eigrp_prefix_t dest;  // destination address
+	eigrp_addr_t nexthop; // address of advertised by peer
 
-	eigrp_prefix_descriptor_t *prefix;	// prefix this route is part of
-	eigrp_nbr_t *adv_router;		// peer who sent me the route
+	eigrp_prefix_descriptor_t *prefix; // prefix this route is part of
+	eigrp_nbr_t *adv_router;	   // peer who sent me the route
 
-	eigrp_metrics_t reported_metric;	// neighbors vector metrics
-	uint32_t reported_distance;		// neighbors distance (RD)
+	eigrp_metrics_t reported_metric; // neighbors vector metrics
+	uint32_t reported_distance;	 // neighbors distance (RD)
 
-	eigrp_metrics_t total_metric;		// calculated vector metrics
-	uint32_t distance;		// calculatd distance (RD + link cost)
+	eigrp_metrics_t total_metric; // calculated vector metrics
+	uint32_t distance;	      // calculatd distance (RD + link cost)
 
 	eigrp_metrics_t metric;
 	eigrp_extdata_t extdata;

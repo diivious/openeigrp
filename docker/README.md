@@ -69,8 +69,8 @@ show eigrp tech-support
 ```
 
 Use network and router ID values appropriate to your deployment. `write memory`
-saves the unified FRR configuration in the volume. Keep `daemons` with
-`eigrpd=yes` when supplying a custom `/etc/frr`. The image has no default SSH
+saves the unified FRR configuration in the volume. The bundled `daemons`
+file enables OpenEIGRP (`eigrpd=yes`) by default. The image has no default SSH
 server or password; administrative access uses Docker, for example
 `docker exec -it -u root openeigrp sh`.
 
@@ -91,74 +91,94 @@ If binding your own directory to `/etc/frr`, provide both `frr.conf` and
 gets the defaults from the image. The foreground `watchfrr` supervisor makes
 container process failures visible through Docker logs.
 
+### Externally managed daemon configuration (netlab / containerlab)
+
+Orchestrators such as netlab can replace `/etc/frr/daemons` before container
+startup. The image **defaults to `eigrpd=yes`**, but will start FRR normally
+when an external configuration specifies `eigrpd=no`. In that case, the
+entrypoint logs a warning that OpenEIGRP routing is unavailable; it does not
+silently enable EIGRP or overwrite the supplied file. Core FRR daemons
+(`mgmtd`, `zebra`, `staticd`) remain required by this image.
+
+To use EIGRP with netlab's FRR device, explicitly enable the daemon, for example:
+
+```yaml
+nodes:
+  r1:
+    device: frr
+    frr.daemons: [eigrpd]
+```
+
+If the orchestrator leaves `eigrpd` disabled, the container remains usable for
+its enabled FRR services, but EIGRP configuration, adjacencies, and route
+exchange will not work until `eigrpd` is enabled and the daemon is started.
+The Docker integration test checks both configurations before boot.
+
 ## Development
 
-**Requirements:** Docker Engine / Docker Desktop with Buildx, Git, and `rsync`.
-The same Dockerfile and `tools/frr.sh` patch/install/configure/build pipeline
-are used by both source modes. Neither build command publishes an image.
+**Before opening a merge pull request, run `make all`** from the repository
+root. This sequentially executes build, `check SOURCE=all`, all portable UUTs,
+and the quick scale gate. Heavy scale cases and Docker image tests remain
+separate qualifications.
 
-### Build with local repos
+**Requirements:** Docker Engine/Desktop with Buildx, Git and `rsync`.
+All commands below build a local image only; none pushes to GHCR.
 
-From the OpenEIGRP repository root, with an independent FRR checkout at
-`../frr`:
+### Simple Makefile interface
 
 ```sh
-./tools/docker.sh --local --platform linux/arm64 --image openeigrp:docker-test
-./tools/docker.sh --test openeigrp:docker-test
-./tools/docker.sh --verify openeigrp:docker-test
-./tools/docker.sh --deploy openeigrp:docker-test \
-  --name openeigrp-test --volume openeigrp-test-vol
-
-docker exec -it openeigrp-test vtysh
+make docker                   # Both local checkouts, including working edits
+make docker FRR=../frr        # Explicit FRR checkout (local mode only)
+make docker GITHUB=latest     # Highest numeric rel-X.Y.Z OpenEIGRP tag
+make docker GITHUB=1.2.3     # Exact OpenEIGRP rel-1.2.3 release
 ```
 
-On an AMD64 system, choose `--platform linux/amd64` or omit `--platform` for
-auto-detection. Alternatively specify sources and build parallelism:
+Local builds use the OpenEIGRP checkout containing this Makefile and the
+FRR checkout at `../frr` by default (or `FRR=/path/to/frr`). The resulting
+image is `openeigrp:${USER}-test`. Local branches and uncommitted changes
+from both repositories are included. `GITHUB` and `FRR` cannot be combined.
+
+GitHub builds use the selected OpenEIGRP `rel-X.Y.Z` commit, **including that
+revision's Dockerfile, patches, and `docker/docker.cfg`**. The config pins
+`FRR_REPO`, `FRR_TAG` and `FRR_SHA`; FRR is fetched and checked against the
+specified immutable commit. Releases predating `docker.cfg` use the FRR
+pin recorded in **their own tagged `tools/docker.sh`** (never the developer's
+current pin). The Alpine minor-version default also comes from the selected
+release's Dockerfile. The image tag is
+`ghcr.io/diivious/openeigrp-frr:X.Y.Z` (built locally, not pushed). The
+`GITHUB=latest` selector chooses the highest numeric release tag, not the
+latest development branch or a floating FRR tag. GitHub Actions always builds
+its triggering exact release tag to avoid races.
+
+### Advanced native script
+
+The native script retains platform, image tag, job count, and source overrides:
 
 ```sh
-./tools/docker.sh --local --eigrp-root "$HOME/Projects/eigrp" \
-  --frr-root "$HOME/Projects/frr" --platform linux/arm64 --jobs 8 \
-  --image openeigrp:docker-test
-```
-
-`--local` uses your local tracked changes and nonignored new files from both
-repositories; no GitHub source fetch occurs. Image revision labels report the
-respective checkout `HEAD` SHAs, which do not describe uncommitted changes.
-For an exact local release build using `--local 0.1.0`, OpenEIGRP `HEAD` must
-carry `rel-0.1.0`, FRR `HEAD` must equal the pinned SHA in `tools/docker.sh`,
-and both source trees must be clean.
-
-### Build with GitHub repos
-
-For a development image built from the pushed `docker` branch rather than local
-working trees:
-
-```sh
-./tools/docker.sh --build dev-docker \
-  --eigrp-ref refs/heads/docker \
-  --platform linux/arm64 --image openeigrp:docker-test
-./tools/docker.sh --verify openeigrp:docker-test
-```
-
-For a tagged source release, after `rel-0.1.0` exists in `diivious/eigrp`:
-
-```sh
-./tools/docker.sh --build 0.1.0 --platform linux/arm64 \
+./tools/docker.sh --local my-test --frr-root ../frr \
+  --platform linux/arm64 --image openeigrp:my-test --jobs 8
+./tools/docker.sh --build 1.2.3 --platform linux/arm64 \
   --image openeigrp:release-test
-./tools/docker.sh --verify openeigrp:release-test
+./tools/docker.sh --build dev-branch --eigrp-ref refs/heads/docker-update \
+  --image openeigrp:dev-branch
+./tools/docker.sh --test openeigrp:my-test
+./tools/docker.sh --verify openeigrp:my-test
+./tools/docker.sh --deploy openeigrp:my-test \
+  --name openeigrp-test --volume openeigrp-test-vol
 ```
 
-`--build` downloads the selected OpenEIGRP revision from
-`github.com/diivious/eigrp` and the **pinned FRR commit** from
-`github.com/diivious/frr`. Development builds require `--eigrp-ref`, a Git
-SHA or branch/PR ref; `--frr-ref` can override the default for development
-only. Tagged release builds require an OpenEIGRP `rel-X.Y.Z` tag and select
-the FRR SHA pinned in that tagged commit's `tools/docker.sh`. They do **not**
-require a matching FRR tag. The wrapper verifies the exact fetched SHAs
-before handing sources to Docker Buildx.
+The optional `--frr-ref` applies only to a nonrelease GitHub development
+build. An exact release build never accepts a different FRR ref.
 
-Both modes execute the managed FRR patch/install/configure/build pipeline.
-Patch drift stops the build rather than applying fuzz or forcing a mismatch.
+Numeric local `--local X.Y.Z` is a special reproducibility check: it requires
+both clean working trees, the matching `rel-X.Y.Z` OpenEIGRP tag at HEAD,
+and FRR HEAD equal to the `FRR_SHA` pinned in the current `docker/docker.cfg`.
+Normal `make docker` intentionally uses a nonrelease `${USER}-test` tag and
+does not impose those restrictions.
+
+All modes use the same managed FRR patch/install/configure/build pipeline.
+Patch drift stops the build. Labels retain EIGRP/FRR commit identities;
+locally uncommitted changes are not represented by those SHAs.
 
 ### Alpine image caching
 
@@ -197,9 +217,9 @@ docker image inspect openeigrp:docker-test --format '{{json .Config.Labels}}'
 - Commit, review, and verify sources **before** tagging. Tag the intended
   OpenEIGRP commit (including the Docker workflow). Tags may point to `docker`
   or `master`; a merge to `master` is not a prerequisite for tag publishing.
-- Record the compatible FRR Git SHA in `tools/docker.sh` **before** tagging.
-  Both platforms must build from the same exact OpenEIGRP and FRR commits;
-  there is no requirement to tag the separate FRR repository.
+- Record the compatible FRR repository, tag and commit in `docker/docker.cfg`
+  **before** tagging, and commit that file. Both platforms build from the
+  OpenEIGRP release commit and its configured FRR tag/verified SHA.
 - Treat publication tags as immutable. Protect `rel-*` with GitHub rulesets;
   do not move or reuse a published tag. The publisher refuses to overwrite an
   existing multi-platform version tag. Do not automatically update a `latest`
@@ -216,35 +236,20 @@ docker image inspect openeigrp:docker-test --format '{{json .Config.Labels}}'
 
 ### Quick command reference
 
-Run these commands from the OpenEIGRP repository root. The two build modes
-are alternatives; both produce a **local**, unpublished image. `--verify`
-already includes `--test`, so running both explicitly is optional.
+Build locally from source or from an exact published source tag:
 
 ```sh
-# Local checkout build (both repositories on disk).
-./tools/docker.sh --local --image openeigrp:docker-test
+make docker
+make docker FRR=/path/to/frr
+make docker GITHUB=latest
+make docker GITHUB=1.2.3
 
-# OR build GitHub's pushed docker branch with pinned FRR source.
-./tools/docker.sh --build dev-docker --eigrp-ref refs/heads/docker \
-  --image openeigrp:docker-test
-
-# Temporary container / restart / configuration-persistence tests.
+# For custom image names/platforms and post-build integration:
+./tools/docker.sh --local my-test --image openeigrp:docker-test
 ./tools/docker.sh --test openeigrp:docker-test
-
-# Full test, including bidirectional protocol-88 adjacency / route exchange.
 ./tools/docker.sh --verify openeigrp:docker-test
-
-# Persistent deployment (does not erase the image or test results).
 ./tools/docker.sh --deploy openeigrp:docker-test \
   --name openeigrp-test --volume openeigrp-test-vol
-
-# After reviewing and testing a committed source revision, create release tag.
-git tag -a rel-0.1.0 -m 'OpenEIGRP Docker release 0.1.0'
-git push origin refs/tags/rel-0.1.0
-
-# Inspect the published multi-platform image after GitHub Actions succeeds.
-docker buildx imagetools inspect ghcr.io/diivious/openeigrp-frr:0.1.0
-docker pull ghcr.io/diivious/openeigrp-frr:0.1.0
 ```
 
 ### Validation before publication
@@ -262,7 +267,14 @@ name if another instance is already running.
 
 ### 1. Run the automated Docker integration test
 
-Start with the existing integration test, using the image you just built:
+First run the Docker startup UUT (no Docker daemon required; uses Python
+and PyYAML):
+
+```sh
+./tools/python docker/test/test_docker_start.py
+```
+
+Then run the image integration test, using the image you just built:
 
 ```sh
 ./tools/docker.sh --test "$IMAGE"
@@ -281,11 +293,13 @@ The test performs these checks:
 | Save | `write memory` saves configuration |
 | Restart | Container restarts and reloads saved configuration |
 | Stability | Required processes remain running after restart |
+| External daemon config | With `eigrpd=no` before boot, core FRR starts, EIGRP stays stopped, and a warning is logged |
+| Re-enable | Changing back to `eigrpd=yes` and restarting restores OpenEIGRP |
 
 A successful test reports a message similar to:
 
 ```text
-PASS: openeigrp:docker-test — FRR, OpenEIGRP, AS 4453, version docker-test, save and restart
+PASS: openeigrp:docker-test — FRR, OpenEIGRP, AS 4453, version docker-test, save/restart, optional eigrpd
 ```
 
 The integration test uses a temporary container and Docker volume, removing

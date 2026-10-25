@@ -17,8 +17,8 @@
  * module rather than being left in a miscellaneous operational bucket.
  */
 eigrp_result_t eigrp_status_protocol_iterate(eigrp_status_protocol_cb callback,
-					  void *arg);
-eigrp_result_t eigrp_status_tech_support_iterate(eigrp_status_protocol_cb callback,
-					      void *arg);
+					     void *arg);
+eigrp_result_t
+eigrp_status_tech_support_iterate(eigrp_status_protocol_cb callback, void *arg);
 
 #endif /* EIGRPD_EIGRP_STATUS_H_ */

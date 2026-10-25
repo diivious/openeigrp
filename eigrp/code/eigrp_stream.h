@@ -52,7 +52,8 @@ static inline uint8_t *eigrp_stream_data(eigrp_stream_t *stream)
 	return stream ? stream->data : NULL;
 }
 
-static inline const uint8_t *eigrp_stream_const_data(const eigrp_stream_t *stream)
+static inline const uint8_t *
+eigrp_stream_const_data(const eigrp_stream_t *stream)
 {
 	return stream ? stream->data : NULL;
 }

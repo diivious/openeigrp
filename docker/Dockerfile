@@ -81,12 +81,13 @@ COPY docker/vtysh.conf /usr/share/frr/docker-vtysh.conf
 ARG EIGRP_VERSION
 ARG EIGRP_SHA
 ARG FRR_SHA
+ARG FRR_RELEASE
 LABEL org.opencontainers.image.title="OpenEIGRP with FRRouting" \
-      org.opencontainers.image.source="https://github.com/diivious/eigrp" \
+      org.opencontainers.image.source="https://github.com/diivious/openeigrp" \
       org.opencontainers.image.version="${EIGRP_VERSION}" \
       org.opencontainers.image.revision="${EIGRP_SHA}" \
       org.openeigrp.frr.revision="${FRR_SHA}" \
-      org.openeigrp.frr.release="${EIGRP_VERSION}"
+      org.openeigrp.frr.release="${FRR_RELEASE}"
 
 RUN install -d -o frr -g frr -m 0775 /run/frr /var/log/frr \
     && chown -R frr:frrvty /etc/frr \

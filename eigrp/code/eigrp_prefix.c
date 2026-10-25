@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "eigrp_prefix.h"
+#include "eigrp_sys.h"
 
 static size_t eigrp_prefix_address_bytes(eigrp_afi_t afi)
 {
@@ -102,14 +103,15 @@ int eigrp_prefix_snprintf(char *buf, size_t len, const eigrp_prefix_t *prefix)
 	if (!buf || !len || !eigrp_prefix_valid(prefix))
 		return -1;
 
-	family = prefix->address.afi == EIGRP_AFI_IPV4 ? AF_INET
-								     : AF_INET6;
-	if (!inet_ntop(family, prefix->address.bytes, address, sizeof(address))) {
+	family = prefix->address.afi == EIGRP_AFI_IPV4 ? AF_INET : AF_INET6;
+	if (!inet_ntop(family, prefix->address.bytes, address,
+		       sizeof(address))) {
 		buf[0] = '\0';
 		return -1;
 	}
 
-	written = snprintf(buf, len, "%s/%u", address, prefix->prefix_length);
+	written = eigrp_snprintf(buf, len, "%s/%u", address,
+				 prefix->prefix_length);
 	if (written < 0 || (size_t)written >= len) {
 		buf[0] = '\0';
 		return -1;

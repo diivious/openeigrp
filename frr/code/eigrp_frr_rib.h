@@ -27,16 +27,18 @@ extern void eigrp_zebra_init(void);
 extern void eigrp_zebra_stop(void);
 extern void eigrp_zebra_instance_delete(eigrp_instance_t *eigrp);
 
-eigrp_result_t eigrp_zebra_route_add(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *route);
+eigrp_result_t eigrp_zebra_route_add(eigrp_instance_t *eigrp,
+				     const eigrp_rib_route_t *route);
 eigrp_result_t eigrp_zebra_route_del(eigrp_instance_t *eigrp,
-				       const eigrp_prefix_t *prefix);
+				     const eigrp_prefix_t *prefix);
 extern int eigrp_redistribute_update(eigrp_operation_t, eigrp_instance_t *, int,
 				     struct eigrp_metrics);
 
-eigrp_result_t eigrp_zebra_redistribute_update(
-	eigrp_instance_t *eigrp, const eigrp_redist_source_t *source);
-eigrp_result_t eigrp_zebra_redistribute_delete(
-	eigrp_instance_t *eigrp, const eigrp_redist_source_t *source);
+eigrp_result_t
+eigrp_zebra_redistribute_update(eigrp_instance_t *eigrp,
+				const eigrp_redist_source_t *source);
+eigrp_result_t
+eigrp_zebra_redistribute_delete(eigrp_instance_t *eigrp,
+				const eigrp_redist_source_t *source);
 
 #endif /* _ZEBRA_EIGRP_ZEBRA_H_ */

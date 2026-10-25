@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Donnie V. Savage
 """Source boundary regressions; RTP/CR behavior is exercised by the UUT."""
 from pathlib import Path
+import re
 
 CODE = Path(__file__).resolve().parents[2] / "code"
 
@@ -21,12 +22,17 @@ def test_multicast_handoff_retains_packet_without_eager_peer_fanout():
 
 def test_multicast_rtp_admission_is_transactional_and_bounded():
     packet = source("eigrp_packet.c")
-    admit = packet[packet.index("static bool eigrp_packet_multicast_admit(eigrp_intf_t *ei)\n{"):]
+    definition = re.search(
+        r"static\s+bool\s+eigrp_packet_multicast_admit\s*\(\s*eigrp_intf_t\s*\*\s*ei\s*\)\s*\{",
+        packet,
+    )
+    assert definition is not None
+    admit = "".join(packet[definition.end():].split())
     assert "EIGRP_MULTICAST_RELIABLE_MAX 4U" in packet
     assert "eigrp_hello_sequence_fits(ei," in admit
-    assert "eigrp_packet_dup(packet, nbr)" in admit
-    assert admit.index("copies[i] = eigrp_packet_dup") < admit.index("eigrp_packet_reliable_ordered_enqueue(receivers[i]->retrans_queue")
-    assert admit.index("eigrp_hello_send_sequence(ei, packet->sequence_number,") < admit.index("eigrp_packet_output_enqueue(eigrp, ei, packet)")
+    assert "eigrp_packet_dup(packet,nbr)" in admit
+    assert admit.index("copies[i]=eigrp_packet_dup") < admit.index("eigrp_packet_reliable_ordered_enqueue(receivers[i]->retrans_queue")
+    assert admit.index("eigrp_hello_send_sequence(ei,packet->sequence_number,") < admit.index("eigrp_packet_output_enqueue(eigrp,ei,packet)")
     assert admit.rindex("(void)eigrp_packet_dequeue(&ei->multicast_pending);") > admit.index("eigrp_packet_reliable_ordered_enqueue(receivers[i]->retrans_queue")
 
 
@@ -63,9 +69,9 @@ def test_snapshot_adjacency_epoch_and_ordered_rtp_handoff():
     hello = source("eigrp_hello.c")
     assert "packet->multicast_epoch = ei->multicast_epoch" in packet
     assert "nbr->multicast_epoch = nbr->ei->multicast_epoch" in nbr
-    assert "eigrp_packet_multicast_peer_eligible(nbr," in packet
-    assert "eigrp_packet_reliable_ordered_enqueue(receivers[i]->retrans_queue," in packet
-    assert "eigrp_packet_unicast_behind_multicast(nbr," in packet
+    assert "eigrp_packet_multicast_peer_eligible(nbr," in "".join(packet.split())
+    assert "eigrp_packet_reliable_ordered_enqueue(receivers[i]->retrans_queue," in "".join(packet.split())
+    assert "eigrp_packet_unicast_behind_multicast(nbr," in "".join(packet.split())
     assert "eigrp_packet_reliable_prior_count(nbr, sequence)" in hello
 
 

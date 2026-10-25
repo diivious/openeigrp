@@ -39,10 +39,10 @@
 static int eigrp_route_descriptor_cmp(eigrp_route_descriptor_t *,
 				      eigrp_route_descriptor_t *);
 static bool eigrp_topology_prefix_detach(eigrp_instance_t *,
-					  eigrp_prefix_descriptor_t *);
+					 eigrp_prefix_descriptor_t *);
 
 static bool eigrp_topology_table_key(const eigrp_prefix_t *source,
-                                     eigrp_prefix_t *destination)
+				     eigrp_prefix_t *destination)
 {
 	if (!source || !destination || !eigrp_prefix_valid(source))
 		return false;
@@ -53,8 +53,8 @@ static bool eigrp_topology_table_key(const eigrp_prefix_t *source,
 }
 
 /* RFC 7868 section 6.2 external-protocol assignments. */
-static uint8_t eigrp_topology_redistributed_protocol(
-	const eigrp_redist_source_t *source)
+static uint8_t
+eigrp_topology_redistributed_protocol(const eigrp_redist_source_t *source)
 {
 	if (!source)
 		return 0;
@@ -80,8 +80,9 @@ static uint8_t eigrp_topology_redistributed_protocol(
 	}
 }
 
-static uint32_t eigrp_topology_redistributed_external_as(
-	const eigrp_instance_t *eigrp, const eigrp_redist_source_t *source)
+static uint32_t
+eigrp_topology_redistributed_external_as(const eigrp_instance_t *eigrp,
+					 const eigrp_redist_source_t *source)
 {
 	if (!eigrp || !source)
 		return 0;
@@ -106,10 +107,10 @@ static void eigrp_topology_redistributed_extdata_build(
 		eigrp, &source_route->redist.source);
 	extdata->tag = source_route->tag;
 	extdata->metric = source_route->metric > UINT32_MAX
-			  ? UINT32_MAX
-			  : (uint32_t)source_route->metric;
-	extdata->protocol =
-		eigrp_topology_redistributed_protocol(&source_route->redist.source);
+				  ? UINT32_MAX
+				  : (uint32_t)source_route->metric;
+	extdata->protocol = eigrp_topology_redistributed_protocol(
+		&source_route->redist.source);
 	/* reserved and flags are zero unless a later policy explicitly sets an
 	 * RFC-defined external-route flag (for example candidate-default).
 	 */
@@ -147,8 +148,9 @@ static void eigrp_topology_redistributed_nexthop_update(
 	}
 }
 
-static eigrp_metric_t eigrp_topology_redistributed_distance(
-	eigrp_instance_t *eigrp, const eigrp_metrics_t *metric)
+static eigrp_metric_t
+eigrp_topology_redistributed_distance(eigrp_instance_t *eigrp,
+				      const eigrp_metrics_t *metric)
 {
 	eigrp_metrics_t calculation;
 	eigrp_metric_t distance;
@@ -168,9 +170,10 @@ static eigrp_metric_t eigrp_topology_redistributed_distance(
 	return distance > EIGRP_MAX_METRIC ? EIGRP_MAX_METRIC : distance;
 }
 
-static eigrp_route_descriptor_t *eigrp_topology_redistributed_route_lookup(
-	eigrp_instance_t *eigrp, eigrp_prefix_descriptor_t *prefix,
-	const eigrp_rib_route_t *source_route)
+static eigrp_route_descriptor_t *
+eigrp_topology_redistributed_route_lookup(eigrp_instance_t *eigrp,
+					  eigrp_prefix_descriptor_t *prefix,
+					  const eigrp_rib_route_t *source_route)
 {
 	eigrp_extdata_t identity;
 	eigrp_route_descriptor_t *route;
@@ -179,12 +182,14 @@ static eigrp_route_descriptor_t *eigrp_topology_redistributed_route_lookup(
 	if (!eigrp || !prefix || !source_route)
 		return NULL;
 
-	eigrp_topology_redistributed_extdata_build(eigrp, source_route, &identity);
+	eigrp_topology_redistributed_extdata_build(eigrp, source_route,
+						   &identity);
 	for (EIGRP_LIST_ITERATE_RO(prefix->external_routes, node, route)) {
 		if (route->adv_router != eigrp->neighbor_self)
 			continue;
 		if (route->type != EIGRP_EXT
-		    && route->type != eigrp->af_vectors.classic_external_tlv_type
+		    && route->type
+			       != eigrp->af_vectors.classic_external_tlv_type
 		    && route->type != EIGRP_TLV_MP_EXT)
 			continue;
 		if (route->extdata.protocol == identity.protocol
@@ -194,8 +199,9 @@ static eigrp_route_descriptor_t *eigrp_topology_redistributed_route_lookup(
 	return NULL;
 }
 
-static bool eigrp_topology_southbound_nexthop(
-	const eigrp_route_descriptor_t *route, eigrp_rib_nexthop_t *nexthop)
+static bool
+eigrp_topology_southbound_nexthop(const eigrp_route_descriptor_t *route,
+				  eigrp_rib_nexthop_t *nexthop)
 {
 	if (!route || !route->ei || !nexthop)
 		return false;
@@ -209,8 +215,7 @@ static bool eigrp_topology_southbound_nexthop(
 		nexthop->gateway.afi = EIGRP_AFI_IPV4;
 		memcpy(nexthop->gateway.bytes, &route->adv_router->src.ip.v4,
 		       sizeof(route->adv_router->src.ip.v4));
-	} else if (route->adv_router
-		   && route->adv_router->src.afi == AF_INET6
+	} else if (route->adv_router && route->adv_router->src.afi == AF_INET6
 		   && !IN6_IS_ADDR_UNSPECIFIED(&route->adv_router->src.ip.v6)) {
 		nexthop->gateway_present = true;
 		nexthop->gateway.afi = EIGRP_AFI_IPV6;
@@ -221,9 +226,10 @@ static bool eigrp_topology_southbound_nexthop(
 	return true;
 }
 
-static size_t eigrp_topology_southbound_nexthops(
-	const eigrp_instance_t *eigrp, const eigrp_list_t *routes,
-	eigrp_rib_nexthop_t *nexthops, size_t capacity)
+static size_t eigrp_topology_southbound_nexthops(const eigrp_instance_t *eigrp,
+						 const eigrp_list_t *routes,
+						 eigrp_rib_nexthop_t *nexthops,
+						 size_t capacity)
 {
 	eigrp_route_descriptor_t *route;
 	eigrp_list_item_t *node;
@@ -248,7 +254,8 @@ static size_t eigrp_topology_southbound_nexthops(
 			continue;
 		if (eigrp->traffic_share_balanced && largest_metric
 		    && route->distance && route->distance != EIGRP_MAX_METRIC) {
-			nexthops[count].weight = largest_metric / route->distance;
+			nexthops[count].weight =
+				largest_metric / route->distance;
 			if (!nexthops[count].weight)
 				nexthops[count].weight = 1;
 		}
@@ -266,44 +273,50 @@ static bool eigrp_topology_route_external(const eigrp_route_descriptor_t *route)
 {
 	if (!route)
 		return false;
-	return route->type == EIGRP_EXT
-	       || route->type == EIGRP_TLV_IPv4_EXT
+	return route->type == EIGRP_EXT || route->type == EIGRP_TLV_IPv4_EXT
 	       || route->type == EIGRP_TLV_IPv6_EXT
 	       || route->type == EIGRP_TLV_MP_EXT;
 }
 
-static eigrp_list_t *eigrp_topology_route_class_queue(
-	eigrp_prefix_descriptor_t *prefix, const eigrp_route_descriptor_t *route)
+static eigrp_list_t *
+eigrp_topology_route_class_queue(eigrp_prefix_descriptor_t *prefix,
+				 const eigrp_route_descriptor_t *route)
 {
 	return eigrp_topology_route_external(route) ? prefix->external_routes
-						     : prefix->internal_routes;
+						    : prefix->internal_routes;
 }
 
-eigrp_route_descriptor_t *eigrp_topology_route_iterator_first(
-	eigrp_prefix_descriptor_t *prefix, eigrp_topology_route_iterator_t *iterator)
+eigrp_route_descriptor_t *
+eigrp_topology_route_iterator_first(eigrp_prefix_descriptor_t *prefix,
+				    eigrp_topology_route_iterator_t *iterator)
 {
 	if (!prefix || !iterator)
 		return NULL;
 	iterator->prefix = prefix;
 	iterator->queue = 0;
-	iterator->node = prefix->internal_routes ? prefix->internal_routes->head : NULL;
+	iterator->node =
+		prefix->internal_routes ? prefix->internal_routes->head : NULL;
 	if (!iterator->node) {
 		iterator->queue = 1;
-		iterator->node = prefix->external_routes ? prefix->external_routes->head : NULL;
+		iterator->node = prefix->external_routes
+					 ? prefix->external_routes->head
+					 : NULL;
 	}
 	return iterator->node ? iterator->node->data : NULL;
 }
 
-eigrp_route_descriptor_t *eigrp_topology_route_iterator_next(
-	eigrp_topology_route_iterator_t *iterator)
+eigrp_route_descriptor_t *
+eigrp_topology_route_iterator_next(eigrp_topology_route_iterator_t *iterator)
 {
 	if (!iterator || !iterator->prefix || !iterator->node)
 		return NULL;
 	iterator->node = iterator->node->next;
 	if (!iterator->node && iterator->queue == 0) {
 		iterator->queue = 1;
-		iterator->node = iterator->prefix->external_routes
-			? iterator->prefix->external_routes->head : NULL;
+		iterator->node =
+			iterator->prefix->external_routes
+				? iterator->prefix->external_routes->head
+				: NULL;
 	}
 	return iterator->node ? iterator->node->data : NULL;
 }
@@ -342,8 +355,9 @@ eigrp_topology_route_select(eigrp_prefix_descriptor_t *prefix)
 
 	/* Internal routes are considered before external routes.  Each queue is
 	 * CD sorted, so the first route satisfying FC is the best route in that
-	 * class.  Inbound policy rejection is represented in the current topology
-	 * state as an unreachable metric and therefore cannot satisfy this test.
+	 * class.  Inbound policy rejection is represented in the current
+	 * topology state as an unreachable metric and therefore cannot satisfy
+	 * this test.
 	 */
 	for (q = 0; q < 2; q++) {
 		eigrp_list_t *routes = eigrp_topology_route_queue(prefix, q);
@@ -376,27 +390,30 @@ eigrp_route_descriptor_t *eigrp_topology_route_create(eigrp_intf_t *intf)
 /* Count redistribution, not connected self-paths or peer-learned externals.
  * A destination with several redistributed sources consumes only one slot. */
 bool eigrp_topology_redist_present(const eigrp_instance_t *eigrp,
-    const eigrp_prefix_descriptor_t *prefix)
+				   const eigrp_prefix_descriptor_t *prefix)
 {
-    eigrp_route_descriptor_t *route;
-    eigrp_list_item_t *item;
+	eigrp_route_descriptor_t *route;
+	eigrp_list_item_t *item;
 
-    if (!eigrp || !prefix || !prefix->external_routes || !eigrp->neighbor_self)
-        return false;
-    for (EIGRP_LIST_ITERATE_RO(prefix->external_routes, item, route)) {
-        if (route->adv_router == eigrp->neighbor_self && !route->ei)
-            return true;
-    }
-    return false;
+	if (!eigrp || !prefix || !prefix->external_routes
+	    || !eigrp->neighbor_self)
+		return false;
+	for (EIGRP_LIST_ITERATE_RO(prefix->external_routes, item, route)) {
+		if (route->adv_router == eigrp->neighbor_self && !route->ei)
+			return true;
+	}
+	return false;
 }
 
 /* Insert once and account only after storage succeeds.  A route moved between
  * metric/class queues is not a newly owned neighbor destination. */
 bool eigrp_topology_route_insert(eigrp_instance_t *eigrp,
-	eigrp_prefix_descriptor_t *prefix, eigrp_route_descriptor_t *route,
-	bool first_peer_path)
+				 eigrp_prefix_descriptor_t *prefix,
+				 eigrp_route_descriptor_t *route,
+				 bool first_peer_path)
 {
-	if (!eigrp_list_insert(eigrp_topology_route_class_queue(prefix, route), route))
+	if (!eigrp_list_insert(eigrp_topology_route_class_queue(prefix, route),
+			       route))
 		return false;
 	if (first_peer_path && route->adv_router
 	    && route->adv_router != eigrp->neighbor_self
@@ -418,12 +435,14 @@ void eigrp_route_descriptor_add(eigrp_instance_t *eigrp,
 
 	if (eigrp_list_lookup(routes, route) == NULL) {
 		bool first_peer_path = route->adv_router
-			&& !eigrp_prefix_descriptor_lookup(node, route->adv_router);
-		bool first_redist = eigrp && route->adv_router == eigrp->neighbor_self
+				       && !eigrp_prefix_descriptor_lookup(
+					       node, route->adv_router);
+		bool first_redist =
+			eigrp && route->adv_router == eigrp->neighbor_self
 			&& !route->ei && eigrp_topology_route_external(route)
 			&& !eigrp_topology_redist_present(eigrp, node);
 		if (!eigrp_topology_route_insert(eigrp, node, route,
-						first_peer_path))
+						 first_peer_path))
 			return;
 		route->prefix = node;
 		if (first_redist && eigrp->redist_prefix_count < UINT32_MAX)
@@ -441,19 +460,24 @@ void eigrp_route_descriptor_add(eigrp_instance_t *eigrp,
 						? eigrp->distance_external
 						: eigrp->distance_internal,
 				.tag = route->extdata.tag,
-				.install.type = eigrp_topology_route_external(route)
-					? EIGRP_RIB_ROUTE_EXTERNAL
-					: EIGRP_RIB_ROUTE_INTERNAL,
+				.install.type =
+					eigrp_topology_route_external(route)
+						? EIGRP_RIB_ROUTE_EXTERNAL
+						: EIGRP_RIB_ROUTE_INTERNAL,
 			};
 
 			{
-				eigrp_result_t rib_result = eigrp_rib_route_add(eigrp, &rib_route);
+				eigrp_result_t rib_result =
+					eigrp_rib_route_add(eigrp, &rib_route);
 
-				(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_RIB_INSTALL,
-					&node->destination, node->distance, 1, rib_route.install.type,
-					rib_result);
+				(void)eigrp_eventlog_msg_add(
+					eigrp,
+					EIGRP_EVENTLOG_OPCODE_RIB_INSTALL,
+					&node->destination, node->distance, 1,
+					rib_route.install.type, rib_result);
 				if (rib_result == EIGRP_RESULT_SUCCESS)
-					route->flags |= EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG;
+					route->flags |=
+						EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG;
 			}
 		}
 	}
@@ -525,8 +549,10 @@ eigrp_prefix_descriptor_t *eigrp_topology_prefix_create(void)
 	new->external_routes = eigrp_list_create();
 	new->rij = eigrp_list_create();
 	new->rij->del = free;
-	new->internal_routes->cmp = (int (*)(void *, void *))eigrp_route_descriptor_cmp;
-	new->external_routes->cmp = (int (*)(void *, void *))eigrp_route_descriptor_cmp;
+	new->internal_routes->cmp =
+		(int (*)(void *, void *))eigrp_route_descriptor_cmp;
+	new->external_routes->cmp =
+		(int (*)(void *, void *))eigrp_route_descriptor_cmp;
 	new->distance = new->fdistance = new->rdistance = EIGRP_MAX_METRIC;
 
 	return new;
@@ -551,8 +577,10 @@ void eigrp_prefix_descriptor_add(eigrp_table_t *topology,
 		if (IS_DEBUG_EIGRP_EVENT) {
 			eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 					      &pe->destination);
-			eigrp_log(EIGRP_LOG_DEBUG, "%s: %s Should we have found this prefix in the topo table?",
-				   __func__, prefix_buf);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"%s: %s Should we have found this prefix in the topo table?",
+				__func__, prefix_buf);
 		}
 		eigrp_table_node_release(rn);
 	}
@@ -562,19 +590,23 @@ void eigrp_prefix_descriptor_add(eigrp_table_t *topology,
 	if (IS_DEBUG_EIGRP_EVENT) {
 		eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 				      &pe->destination);
-		eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event: topology prefix add %s", prefix_buf);
+		eigrp_log(EIGRP_LOG_DEBUG,
+			  "EIGRP event: topology prefix add %s", prefix_buf);
 		if (IS_DEBUG_EIGRP(0, DETAIL))
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event detail: prefix state %u distance %u fd %u rd %u",
-				   pe->state, pe->distance, pe->fdistance,
-				   pe->rdistance);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"EIGRP event detail: prefix state %u distance %u fd %u rd %u",
+				pe->state, pe->distance, pe->fdistance,
+				pe->rdistance);
 	}
 }
 
 /*
  * Find topology node in topology table
  */
-eigrp_route_descriptor_t *eigrp_prefix_descriptor_lookup(
-	eigrp_prefix_descriptor_t *prefix, eigrp_nbr_t *nbr)
+eigrp_route_descriptor_t *
+eigrp_prefix_descriptor_lookup(eigrp_prefix_descriptor_t *prefix,
+			       eigrp_nbr_t *nbr)
 {
 	eigrp_route_descriptor_t *data;
 	eigrp_list_item_t *node;
@@ -608,18 +640,22 @@ void eigrp_prefix_descriptor_delete(eigrp_instance_t *eigrp,
 	    || !eigrp_topology_table_key(&pe->destination, &key))
 		return;
 
-	rn = pe->table_node ? pe->table_node : eigrp_table_node_lookup(table, &key);
+	rn = pe->table_node ? pe->table_node
+			    : eigrp_table_node_lookup(table, &key);
 	if (!rn || rn->info != pe)
 		return;
 
 	if (IS_DEBUG_EIGRP_EVENT) {
 		eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 				      &pe->destination);
-		eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event: topology prefix delete %s", prefix_buf);
+		eigrp_log(EIGRP_LOG_DEBUG,
+			  "EIGRP event: topology prefix delete %s", prefix_buf);
 		if (IS_DEBUG_EIGRP(0, DETAIL))
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event detail: AS %u prefix state %u distance %u fd %u rd %u",
-				   eigrp->AS, pe->state, pe->distance,
-				   pe->fdistance, pe->rdistance);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"EIGRP event detail: AS %u prefix state %u distance %u fd %u rd %u",
+				eigrp->AS, pe->state, pe->distance,
+				pe->fdistance, pe->rdistance);
 	}
 
 	eigrp_list_delete_data(eigrp->topology_changes, pe);
@@ -635,9 +671,11 @@ void eigrp_prefix_descriptor_delete(eigrp_instance_t *eigrp,
 	pe->active_eigrp = NULL;
 	eigrp_list_delete(&pe->rij);
 	{
-		eigrp_result_t rib_result = eigrp_rib_route_del(eigrp, &pe->destination);
+		eigrp_result_t rib_result =
+			eigrp_rib_route_del(eigrp, &pe->destination);
 
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
 			&pe->destination, rib_result, 0, 0, 0);
 	}
 
@@ -657,14 +695,18 @@ void eigrp_route_descriptor_delete(eigrp_instance_t *eigrp,
 	eigrp_list_t *routes = eigrp_topology_route_class_queue(node, route);
 
 	if (eigrp_list_lookup(routes, route) != NULL) {
-		bool installed = (route->flags & EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG) != 0;
+		bool installed =
+			(route->flags & EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG)
+			!= 0;
 
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_TOPOLOGY_ROUTE_DELETE,
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_TOPOLOGY_ROUTE_DELETE,
 			&node->destination, route->ei ? route->ei->ifindex : 0,
 			route->reported_distance, route->distance, installed);
 		eigrp_nbr_t *owner = route->adv_router;
 		bool was_redist = eigrp && owner == eigrp->neighbor_self
-			&& !route->ei && eigrp_topology_route_external(route);
+				  && !route->ei
+				  && eigrp_topology_route_external(route);
 		eigrp_list_delete_data(routes, route);
 		if (was_redist && !eigrp_topology_redist_present(eigrp, node)
 		    && eigrp->redist_prefix_count)
@@ -674,9 +716,11 @@ void eigrp_route_descriptor_delete(eigrp_instance_t *eigrp,
 		    && !eigrp_prefix_descriptor_lookup(node, owner))
 			owner->limit_prefix_count--;
 		if (installed) {
-			eigrp_result_t rib_result = eigrp_rib_route_del(eigrp, &node->destination);
+			eigrp_result_t rib_result =
+				eigrp_rib_route_del(eigrp, &node->destination);
 
-			(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
+			(void)eigrp_eventlog_msg_add(
+				eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
 				&node->destination, rib_result, 0, 0, 0);
 		}
 		free(route);
@@ -697,8 +741,7 @@ eigrp_table_t *eigrp_topology_table_create(void)
 /*
  * Deleting all nodes from topology table
  */
-void eigrp_topology_delete_all(eigrp_instance_t *eigrp,
-			       eigrp_table_t *topology)
+void eigrp_topology_delete_all(eigrp_instance_t *eigrp, eigrp_table_t *topology)
 {
 	eigrp_table_node_t *rn, *next;
 	eigrp_prefix_descriptor_t *pe;
@@ -717,8 +760,7 @@ void eigrp_topology_delete_all(eigrp_instance_t *eigrp,
 /*
  * Freeing topology table list
  */
-void eigrp_topology_table_delete(eigrp_instance_t *eigrp,
-				 eigrp_table_t *table)
+void eigrp_topology_table_delete(eigrp_instance_t *eigrp, eigrp_table_t *table)
 {
 	if (!table)
 		return;
@@ -727,8 +769,7 @@ void eigrp_topology_table_delete(eigrp_instance_t *eigrp,
 }
 
 eigrp_prefix_descriptor_t *
-eigrp_topology_table_lookup(eigrp_table_t *table,
-			    const eigrp_prefix_t *address)
+eigrp_topology_table_lookup(eigrp_table_t *table, const eigrp_prefix_t *address)
 {
 	eigrp_prefix_descriptor_t *pe;
 	eigrp_prefix_t key;
@@ -746,8 +787,9 @@ eigrp_topology_table_lookup(eigrp_table_t *table,
 	return pe;
 }
 
-static void eigrp_topology_redistributed_update_mark(
-	eigrp_instance_t *eigrp, eigrp_prefix_descriptor_t *prefix)
+static void
+eigrp_topology_redistributed_update_mark(eigrp_instance_t *eigrp,
+					 eigrp_prefix_descriptor_t *prefix)
 {
 	if (!eigrp || !prefix || prefix->state != EIGRP_FSM_STATE_PASSIVE)
 		return;
@@ -764,20 +806,22 @@ static void eigrp_topology_redistributed_update_mark(
  * changes. The source event only needs to schedule its own new actions:
  * earlier actions have already scheduled their packetizer beads. Scanning
  * all pending changes once per injected route is quadratic at 100K. */
-static void eigrp_topology_changes_send(eigrp_instance_t *eigrp,
-                                        const eigrp_prefix_descriptor_t *changed)
+static void
+eigrp_topology_changes_send(eigrp_instance_t *eigrp,
+			    const eigrp_prefix_descriptor_t *changed)
 {
-    if (!eigrp || !changed)
-        return;
-    if (changed->req_action & EIGRP_FSM_NEED_QUERY)
-        eigrp_query_send_all(eigrp);
-    if (changed->req_action & EIGRP_FSM_NEED_UPDATE)
-        eigrp_update_send_all(eigrp, NULL);
+	if (!eigrp || !changed)
+		return;
+	if (changed->req_action & EIGRP_FSM_NEED_QUERY)
+		eigrp_query_send_all(eigrp);
+	if (changed->req_action & EIGRP_FSM_NEED_UPDATE)
+		eigrp_update_send_all(eigrp, NULL);
 }
 
-eigrp_result_t eigrp_topology_redistributed_route_update(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *source_route,
-	const eigrp_metrics_t *metric)
+eigrp_result_t
+eigrp_topology_redistributed_route_update(eigrp_instance_t *eigrp,
+					  const eigrp_rib_route_t *source_route,
+					  const eigrp_metrics_t *metric)
 {
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_route_descriptor_t *route;
@@ -791,10 +835,12 @@ eigrp_result_t eigrp_topology_redistributed_route_update(
 	if (!eigrp || !source_route || !metric || !eigrp->topology_table
 	    || !eigrp->neighbor_self
 	    || !eigrp_topology_table_key(&source_route->prefix, &destination)
-	    || !eigrp_topology_redistributed_protocol(&source_route->redist.source))
+	    || !eigrp_topology_redistributed_protocol(
+		    &source_route->redist.source))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	prefix = eigrp_topology_table_lookup(eigrp->topology_table, &destination);
+	prefix = eigrp_topology_table_lookup(eigrp->topology_table,
+					     &destination);
 	if (!prefix) {
 		prefix = eigrp_topology_prefix_create();
 		route = eigrp_topology_route_create(NULL);
@@ -809,19 +855,22 @@ eigrp_result_t eigrp_topology_redistributed_route_update(
 		prefix->destination = destination;
 		prefix->nt = EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL;
 		prefix->state = EIGRP_FSM_STATE_PASSIVE;
-		prefix->fdistance = prefix->distance = prefix->rdistance = distance;
+		prefix->fdistance = prefix->distance = prefix->rdistance =
+			distance;
 		prefix->reported_metric = *metric;
 
 		route->type = eigrp->af_vectors.classic_external_tlv_type;
 		route->dest = destination;
 		route->adv_router = eigrp->neighbor_self;
-		route->metric = route->reported_metric = route->total_metric = *metric;
+		route->metric = route->reported_metric = route->total_metric =
+			*metric;
 		route->reported_distance = 0;
 		route->distance = distance;
 		route->flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 		eigrp_topology_redistributed_extdata_build(eigrp, source_route,
-						   &route->extdata);
-		eigrp_topology_redistributed_nexthop_update(EIGRP_SET, route, source_route);
+							   &route->extdata);
+		eigrp_topology_redistributed_nexthop_update(EIGRP_SET, route,
+							    source_route);
 
 		eigrp_prefix_descriptor_add(eigrp->topology_table, prefix);
 		eigrp_route_descriptor_add(eigrp, prefix, route);
@@ -831,7 +880,7 @@ eigrp_result_t eigrp_topology_redistributed_route_update(
 	}
 
 	route = eigrp_topology_redistributed_route_lookup(eigrp, prefix,
-							 source_route);
+							  source_route);
 	existing_route = route != NULL;
 	if (!route) {
 		route = eigrp_topology_route_create(NULL);
@@ -852,12 +901,14 @@ eigrp_result_t eigrp_topology_redistributed_route_update(
 	route->ei = NULL;
 	eigrp_topology_redistributed_extdata_build(eigrp, source_route,
 						   &route->extdata);
-	eigrp_topology_redistributed_nexthop_update(EIGRP_SET, route, source_route);
-	metadata_changed = !existing_route
-			   || memcmp(&old_extdata, &route->extdata,
-				     sizeof(old_extdata)) != 0
-			   || memcmp(&old_nexthop, &route->nexthop,
-				     sizeof(old_nexthop)) != 0;
+	eigrp_topology_redistributed_nexthop_update(EIGRP_SET, route,
+						    source_route);
+	metadata_changed =
+		!existing_route
+		|| memcmp(&old_extdata, &route->extdata, sizeof(old_extdata))
+			   != 0
+		|| memcmp(&old_nexthop, &route->nexthop, sizeof(old_nexthop))
+			   != 0;
 
 	{
 		eigrp_fsm_action_message_t msg = {
@@ -872,11 +923,12 @@ eigrp_result_t eigrp_topology_redistributed_route_update(
 		eigrp_fsm_event(&msg);
 	}
 
-	/* Metric-only changes are queued by DUAL.  Tag/external-metadata/next-hop
-	 * changes carry no metric delta, so explicitly advertise them once the
-	 * destination is Passive.  While Active, path state is updated but the
-	 * frozen destination-level state and advertisement decision are left to
-	 * the DUAL transition back to Passive.
+	/* Metric-only changes are queued by DUAL.
+	 * Tag/external-metadata/next-hop changes carry no metric delta, so
+	 * explicitly advertise them once the destination is Passive.  While
+	 * Active, path state is updated but the frozen destination-level state
+	 * and advertisement decision are left to the DUAL transition back to
+	 * Passive.
 	 */
 	if (metadata_changed)
 		eigrp_topology_redistributed_update_mark(eigrp, prefix);
@@ -885,8 +937,9 @@ eigrp_result_t eigrp_topology_redistributed_route_update(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_topology_redistributed_route_remove(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *source_route)
+eigrp_result_t
+eigrp_topology_redistributed_route_remove(eigrp_instance_t *eigrp,
+					  const eigrp_rib_route_t *source_route)
 {
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_route_descriptor_t *route;
@@ -895,14 +948,16 @@ eigrp_result_t eigrp_topology_redistributed_route_remove(
 
 	if (!eigrp || !source_route || !eigrp->topology_table
 	    || !eigrp_topology_table_key(&source_route->prefix, &destination)
-	    || !eigrp_topology_redistributed_protocol(&source_route->redist.source))
+	    || !eigrp_topology_redistributed_protocol(
+		    &source_route->redist.source))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	prefix = eigrp_topology_table_lookup(eigrp->topology_table, &destination);
+	prefix = eigrp_topology_table_lookup(eigrp->topology_table,
+					     &destination);
 	if (!prefix)
 		return EIGRP_RESULT_NOT_FOUND;
 	route = eigrp_topology_redistributed_route_lookup(eigrp, prefix,
-							 source_route);
+							  source_route);
 	if (!route)
 		return EIGRP_RESULT_NOT_FOUND;
 
@@ -924,13 +979,15 @@ eigrp_result_t eigrp_topology_redistributed_route_remove(
 	eigrp_topology_changes_send(eigrp, prefix);
 
 	/* Passive unreachable state remains topology-owned until packetizer has
-	 * advertised it.  Active state remains owned by DUAL until convergence. */
+	 * advertised it.  Active state remains owned by DUAL until convergence.
+	 */
 
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_topology_redistributed_source_remove(
-	eigrp_instance_t *eigrp, const eigrp_redist_source_t *source)
+eigrp_result_t
+eigrp_topology_redistributed_source_remove(eigrp_instance_t *eigrp,
+					   const eigrp_redist_source_t *source)
 {
 	eigrp_rib_route_t source_route;
 	eigrp_prefix_descriptor_t *prefix;
@@ -955,14 +1012,16 @@ eigrp_result_t eigrp_topology_redistributed_source_remove(
 		prefix = rn->info;
 		if (!prefix || !prefix->external_routes)
 			continue;
-		for (EIGRP_LIST_ITERATE_RO(prefix->external_routes, node, route)) {
+		for (EIGRP_LIST_ITERATE_RO(prefix->external_routes, node,
+					   route)) {
 			if (!route || route->adv_router != eigrp->neighbor_self
 			    || route->extdata.protocol != protocol
 			    || route->extdata.as != external_as)
 				continue;
 			source_route.prefix = prefix->destination;
 			if (eigrp_topology_redistributed_route_remove(
-				    eigrp, &source_route) == EIGRP_RESULT_SUCCESS)
+				    eigrp, &source_route)
+			    == EIGRP_RESULT_SUCCESS)
 				found = true;
 			break;
 		}
@@ -978,14 +1037,15 @@ eigrp_result_t eigrp_topology_redistributed_source_remove(
  * That way we can clean up all the list_new and list_delete's
  * that we are doing.  DBS
  */
-eigrp_list_t *eigrp_topology_successors_read(eigrp_prefix_descriptor_t *table_node)
+eigrp_list_t *
+eigrp_topology_successors_read(eigrp_prefix_descriptor_t *table_node)
 {
 	eigrp_list_t *successors = eigrp_list_create();
 	eigrp_route_descriptor_t *data;
 	eigrp_topology_route_iterator_t iterator;
 
-	for (data = eigrp_topology_route_iterator_first(table_node, &iterator); data;
-	     data = eigrp_topology_route_iterator_next(&iterator)) {
+	for (data = eigrp_topology_route_iterator_first(table_node, &iterator);
+	     data; data = eigrp_topology_route_iterator_next(&iterator)) {
 		if (data->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG) {
 			eigrp_list_add(successors, data);
 		}
@@ -1004,7 +1064,7 @@ eigrp_list_t *eigrp_topology_successors_read(eigrp_prefix_descriptor_t *table_no
 
 eigrp_list_t *
 eigrp_topology_successors_max_read(eigrp_prefix_descriptor_t *table_node,
-				 unsigned int maxpaths)
+				   unsigned int maxpaths)
 {
 	eigrp_list_t *successors = eigrp_topology_successors_read(table_node);
 
@@ -1022,7 +1082,7 @@ eigrp_topology_successors_max_read(eigrp_prefix_descriptor_t *table_node,
 
 /* Lookup all prefixes from specified neighbor */
 eigrp_list_t *eigrp_nbr_prefixes_lookup(eigrp_instance_t *eigrp,
-					    eigrp_nbr_t *nbr)
+					eigrp_nbr_t *nbr)
 {
 	eigrp_prefix_descriptor_t *pe;
 	eigrp_table_node_t *rn;
@@ -1031,7 +1091,8 @@ eigrp_list_t *eigrp_nbr_prefixes_lookup(eigrp_instance_t *eigrp,
 	eigrp_list_t *prefixes = eigrp_list_create();
 
 	/* iterate over all prefixes in topology table */
-	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = eigrp_table_next(rn)) {
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
 		if (!rn->info)
 			continue;
 		pe = rn->info;
@@ -1067,8 +1128,9 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 		route->ei = msg->adv_router->ei;
 
 	stored = eigrp_list_lookup(prefix->internal_routes, route) != NULL
-		|| eigrp_list_lookup(prefix->external_routes, route) != NULL;
-	first_peer_path = !stored && route->adv_router
+		 || eigrp_list_lookup(prefix->external_routes, route) != NULL;
+	first_peer_path =
+		!stored && route->adv_router
 		&& route->adv_router != eigrp->neighbor_self
 		&& !eigrp_prefix_descriptor_lookup(prefix, route->adv_router);
 	class_changed =
@@ -1084,7 +1146,8 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 		break;
 	case EIGRP_INT:
 		if (stored && !class_changed
-		    && eigrp_metrics_match(msg->metrics, route->reported_metric))
+		    && eigrp_metrics_match(msg->metrics,
+					   route->reported_metric))
 			return change; // No change
 
 		new_reported_distance =
@@ -1102,24 +1165,27 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 		break;
 	case EIGRP_EXT:
 		if (stored && !class_changed
-		    && eigrp_metrics_match(msg->metrics, route->reported_metric))
+		    && eigrp_metrics_match(msg->metrics,
+					   route->reported_metric))
 			return change;
 
 		if (route->adv_router == eigrp->neighbor_self && !route->ei) {
 			eigrp_metric_t old_distance = route->distance;
 			eigrp_metric_t new_distance =
-				eigrp_topology_redistributed_distance(eigrp, &msg->metrics);
+				eigrp_topology_redistributed_distance(
+					eigrp, &msg->metrics);
 
 			if (old_distance < new_distance)
 				change = METRIC_INCREASE;
 			else if (old_distance > new_distance)
 				change = METRIC_DECREASE;
 
-			/* A locally originated external route has no advertising
-			 * EIGRP neighbor, so its DUAL reported distance is zero just
-			 * like another locally originated route.  The selected seed
-			 * vector is the complete local distance and the metric carried
-			 * in the external route advertisement.
+			/* A locally originated external route has no
+			 * advertising EIGRP neighbor, so its DUAL reported
+			 * distance is zero just like another locally originated
+			 * route.  The selected seed vector is the complete
+			 * local distance and the metric carried in the external
+			 * route advertisement.
 			 */
 			route->metric = msg->metrics;
 			route->reported_metric = msg->metrics;
@@ -1132,18 +1198,20 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 
 			if (route->reported_distance < new_reported_distance)
 				change = METRIC_INCREASE;
-			else if (route->reported_distance > new_reported_distance)
+			else if (route->reported_distance
+				 > new_reported_distance)
 				change = METRIC_DECREASE;
 
 			route->metric = msg->metrics;
 			route->reported_metric = msg->metrics;
 			route->reported_distance = new_reported_distance;
-			route->distance = eigrp_metric_total_calculate(eigrp, route);
+			route->distance =
+				eigrp_metric_total_calculate(eigrp, route);
 		}
 		break;
 	default:
-		eigrp_log(EIGRP_LOG_ERROR,  "%s: Please implement handler",
-			 __func__);
+		eigrp_log(EIGRP_LOG_ERROR, "%s: Please implement handler",
+			  __func__);
 		break;
 	}
 
@@ -1155,7 +1223,7 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 	if (eigrp_list_lookup(prefix->external_routes, route))
 		eigrp_list_delete_data(prefix->external_routes, route);
 	if (!eigrp_topology_route_insert(eigrp, prefix, route,
-						  first_peer_path)) {
+					 first_peer_path)) {
 		msg->transient_route = !stored;
 		return METRIC_SAME;
 	}
@@ -1171,7 +1239,8 @@ void eigrp_topology_update_all_node_flags(eigrp_instance_t *eigrp)
 	if (!eigrp)
 		return;
 
-	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = eigrp_table_next(rn)) {
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
 		pe = rn->info;
 
 		if (!pe)
@@ -1195,21 +1264,22 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 	if (!eigrp || !dest)
 		return;
 
-	/* Use the same FC-aware selector as the FSM.  A lower-CD path that fails
-	 * the Feasibility Condition must not hide a later feasible path in the
-	 * same route class.  The selected path determines which class may carry
-	 * successor and feasible-successor flags.
+	/* Use the same FC-aware selector as the FSM.  A lower-CD path that
+	 * fails the Feasibility Condition must not hide a later feasible path
+	 * in the same route class.  The selected path determines which class
+	 * may carry successor and feasible-successor flags.
 	 */
 	best = eigrp_topology_route_select(dest);
 	if (best)
 		eligible = eigrp_topology_route_class_queue(dest, best);
-	max_paths = eigrp->max_paths ? eigrp->max_paths : EIGRP_MAX_PATHS_DEFAULT;
+	max_paths =
+		eigrp->max_paths ? eigrp->max_paths : EIGRP_MAX_PATHS_DEFAULT;
 
 	/* Only the selected I/E class participates in successor/FS marking. */
-	for (route = eigrp_topology_route_iterator_first(dest, &iterator); route;
-	     route = eigrp_topology_route_iterator_next(&iterator))
+	for (route = eigrp_topology_route_iterator_first(dest, &iterator);
+	     route; route = eigrp_topology_route_iterator_next(&iterator))
 		route->flags &= ~(EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
-				 | EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG);
+				  | EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG);
 
 	for (EIGRP_LIST_ITERATE_RO(eligible, node, route)) {
 		uint32_t old_flags = route->flags;
@@ -1217,14 +1287,17 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 		bool within_variance =
 			route->distance != EIGRP_MAX_METRIC
 			&& (uint64_t)route->distance
-				<= (uint64_t)dest->distance * (uint64_t)eigrp->variance;
+				   <= (uint64_t)dest->distance
+					      * (uint64_t)eigrp->variance;
 
 		if (feasible) {
 			if (within_variance && successor_count < max_paths) {
-				route->flags |= EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
+				route->flags |=
+					EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 				successor_count++;
 			} else {
-				route->flags |= EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG;
+				route->flags |=
+					EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG;
 			}
 		}
 
@@ -1236,14 +1309,24 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 
 			eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 					      &dest->destination);
-			eigrp_log(EIGRP_LOG_DEBUG,
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
 				"EIGRP AS %u prefix %s via %s: successor %s feasible-successor %s RD %u FD %u distance %u",
 				eigrp->AS, prefix_buf,
-				route->adv_router ? eigrp_print_addr(&route->adv_router->src)
-						  : "connected",
-				(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG) ? "yes" : "no",
-				(route->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG) ? "yes" : "no",
-				route->reported_distance, dest->fdistance, route->distance);
+				route->adv_router
+					? eigrp_print_addr(
+						  &route->adv_router->src)
+					: "connected",
+				(route->flags
+				 & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
+					? "yes"
+					: "no",
+				(route->flags
+				 & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)
+					? "yes"
+					: "no",
+				route->reported_distance, dest->fdistance,
+				route->distance);
 		}
 	}
 }
@@ -1275,9 +1358,10 @@ void eigrp_topology_traffic_share_update(eigrp_instance_t *eigrp)
 	for (rn = eigrp_table_first(eigrp->topology_table); rn;
 	     rn = eigrp_table_next(rn)) {
 		prefix = rn->info;
-		/* A forwarding-hint change must not alter or reinstall frozen Active
-		 * destination state. Passive destinations retain their existing
-		 * successor set; only the RIB snapshot weights are refreshed.
+		/* A forwarding-hint change must not alter or reinstall frozen
+		 * Active destination state. Passive destinations retain their
+		 * existing successor set; only the RIB snapshot weights are
+		 * refreshed.
 		 */
 		if (!prefix || prefix->state != EIGRP_FSM_STATE_PASSIVE)
 			continue;
@@ -1322,67 +1406,89 @@ void eigrp_topology_metric_update(eigrp_instance_t *eigrp)
 		prefix = rn->info;
 		if (!prefix || prefix->state != EIGRP_FSM_STATE_PASSIVE)
 			continue;
-		/* A QUERY for an unknown prefix retains its neighbor RDB but has
-		 * no elected successor. Recalculate the candidate's metrics without
-		 * electing it, changing the advertised distance, or touching the RIB.
-		 * Local connected/redistributed candidates are different: they can
-		 * legitimately recover after their own metric becomes reachable. */
-		unelected = prefix->distance == EIGRP_MAX_METRIC
+		/* A QUERY for an unknown prefix retains its neighbor RDB but
+		 * has no elected successor. Recalculate the candidate's metrics
+		 * without electing it, changing the advertised distance, or
+		 * touching the RIB. Local connected/redistributed candidates
+		 * are different: they can legitimately recover after their own
+		 * metric becomes reachable. */
+		unelected =
+			prefix->distance == EIGRP_MAX_METRIC
 			&& prefix->fdistance == EIGRP_MAX_METRIC
 			&& prefix->reported_metric.delay == EIGRP_MAX_METRIC;
-		for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
+		for (route = eigrp_topology_route_iterator_first(prefix,
+								 &iterator);
+		     route;
 		     route = eigrp_topology_route_iterator_next(&iterator)) {
 			if (route->adv_router == eigrp->neighbor_self) {
 				unelected = false;
-				/* A local path has no neighbor-reported distance.  Its
-				 * advertised distance is still the complete local cost. */
+				/* A local path has no neighbor-reported
+				 * distance.  Its advertised distance is still
+				 * the complete local cost. */
 				route->reported_distance = 0;
 				if (!route->ei) {
-					/* A redistributed path has no inbound interface.
-					 * Its retained seed is the entire advertised vector,
-					 * including when the path has been poisoned. */
+					/* A redistributed path has no inbound
+					 * interface. Its retained seed is the
+					 * entire advertised vector, including
+					 * when the path has been poisoned. */
 					route->reported_metric = route->metric;
 					route->total_metric = route->metric;
 				}
 				if (route->metric.delay == EIGRP_MAX_METRIC) {
 					if (route->ei) {
-						route->reported_metric = route->metric;
-						route->total_metric = route->metric;
+						route->reported_metric =
+							route->metric;
+						route->total_metric =
+							route->metric;
 					}
 					route->distance = EIGRP_MAX_METRIC;
 				} else if (route->ei) {
-					/* A connected route already includes its local link. */
+					/* A connected route already includes
+					 * its local link. */
 					eigrp_metrics_t metric = route->metric;
 
-					metric.bandwidth = eigrp_bandwidth_to_scaled(
-						route->ei->params.bandwidth);
+					metric.bandwidth =
+						eigrp_bandwidth_to_scaled(
+							route->ei->params
+								.bandwidth);
 					metric.delay = eigrp_delay_to_scaled(
 						route->ei->params.delay);
 					metric.load = route->ei->params.load;
-					metric.reliability = route->ei->params.reliability;
+					metric.reliability =
+						route->ei->params.reliability;
 					metric.hop_count = 0;
 					route->metric = metric;
 					route->reported_metric = metric;
 					route->total_metric = metric;
-					route->distance = eigrp_metric_calculate(eigrp, metric);
+					route->distance =
+						eigrp_metric_calculate(eigrp,
+								       metric);
 				} else {
-					/* Redistribution seed delay is still in 10-us units. */
-					route->distance = eigrp_topology_redistributed_distance(
-						eigrp, &route->metric);
+					/* Redistribution seed delay is still in
+					 * 10-us units. */
+					route->distance =
+						eigrp_topology_redistributed_distance(
+							eigrp, &route->metric);
 				}
 			} else {
-				route->reported_distance = eigrp_metric_calculate(
-					eigrp, route->reported_metric);
+				route->reported_distance =
+					eigrp_metric_calculate(
+						eigrp, route->reported_metric);
 				if (route->ei)
-					route->distance = eigrp_metric_total_calculate(eigrp, route);
+					route->distance =
+						eigrp_metric_total_calculate(
+							eigrp, route);
 				else
-					route->distance = eigrp_metric_calculate(
-						eigrp, route->total_metric);
+					route->distance =
+						eigrp_metric_calculate(
+							eigrp,
+							route->total_metric);
 			}
 		}
 		eigrp_topology_route_queue_resort(prefix->internal_routes);
 		eigrp_topology_route_queue_resort(prefix->external_routes);
-		/* Only a subsequent DUAL event may elect a retained QUERY route. */
+		/* Only a subsequent DUAL event may elect a retained QUERY
+		 * route. */
 		if (unelected)
 			continue;
 		best = eigrp_topology_route_read(prefix);
@@ -1414,17 +1520,24 @@ void eigrp_update_routing_table(eigrp_instance_t *eigrp,
 	bool successor_changed = false;
 
 	/* Compare the currently installed successor set with the newly selected
-	 * DUAL successor set before INTABLE is cleared.  This catches replacement
-	 * of one successor by another even when the path count is unchanged. */
+	 * DUAL successor set before INTABLE is cleared.  This catches
+	 * replacement of one successor by another even when the path count is
+	 * unchanged. */
 	{
 		eigrp_topology_route_iterator_t iterator;
 
-		for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
+		for (route = eigrp_topology_route_iterator_first(prefix,
+								 &iterator);
+		     route;
 		     route = eigrp_topology_route_iterator_next(&iterator)) {
 			bool old_successor =
-				(route->flags & EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG) != 0;
+				(route->flags
+				 & EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG)
+				!= 0;
 			bool new_successor =
-				(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG) != 0;
+				(route->flags
+				 & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
+				!= 0;
 
 			if (old_successor)
 				old_successor_count++;
@@ -1435,22 +1548,28 @@ void eigrp_update_routing_table(eigrp_instance_t *eigrp,
 		}
 	}
 	if (successor_changed)
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SUCCESSOR_CHANGE,
-			&prefix->destination, old_successor_count, new_successor_count,
-			prefix->distance, prefix->fdistance);
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_SUCCESSOR_CHANGE,
+			&prefix->destination, old_successor_count,
+			new_successor_count, prefix->distance,
+			prefix->fdistance);
 
-	/* INTABLE describes the current southbound successor set, not historical
-	 * ownership. Clear stale flags before replacing the RIB snapshot so a
-	 * retired former successor cannot later remove the replacement route. */
+	/* INTABLE describes the current southbound successor set, not
+	 * historical ownership. Clear stale flags before replacing the RIB
+	 * snapshot so a retired former successor cannot later remove the
+	 * replacement route. */
 	{
 		eigrp_topology_route_iterator_t iterator;
 
-		for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
+		for (route = eigrp_topology_route_iterator_first(prefix,
+								 &iterator);
+		     route;
 		     route = eigrp_topology_route_iterator_next(&iterator))
 			route->flags &= ~EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG;
 	}
 
-	successors = eigrp_topology_successors_max_read(prefix, eigrp->max_paths);
+	successors =
+		eigrp_topology_successors_max_read(prefix, eigrp->max_paths);
 
 	if (successors) {
 		nexthop_count = eigrp_topology_southbound_nexthops(
@@ -1467,7 +1586,8 @@ void eigrp_update_routing_table(eigrp_instance_t *eigrp,
 
 			for (EIGRP_LIST_ITERATE_RO(successors, node, route)) {
 				if (eigrp_topology_route_external(route)) {
-					rib_route.install.type = EIGRP_RIB_ROUTE_EXTERNAL;
+					rib_route.install.type =
+						EIGRP_RIB_ROUTE_EXTERNAL;
 					rib_route.install.admin_dist =
 						eigrp->distance_external;
 					rib_route.tag = route->extdata.tag;
@@ -1475,11 +1595,15 @@ void eigrp_update_routing_table(eigrp_instance_t *eigrp,
 				break;
 			}
 			{
-				eigrp_result_t rib_result = eigrp_rib_route_add(eigrp, &rib_route);
+				eigrp_result_t rib_result =
+					eigrp_rib_route_add(eigrp, &rib_route);
 
-				(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_RIB_INSTALL,
-					&prefix->destination, prefix->distance, nexthop_count,
-					rib_route.install.type, rib_result);
+				(void)eigrp_eventlog_msg_add(
+					eigrp,
+					EIGRP_EVENTLOG_OPCODE_RIB_INSTALL,
+					&prefix->destination, prefix->distance,
+					nexthop_count, rib_route.install.type,
+					rib_result);
 			}
 		}
 		for (EIGRP_LIST_ITERATE_RO(successors, node, route))
@@ -1488,19 +1612,21 @@ void eigrp_update_routing_table(eigrp_instance_t *eigrp,
 		eigrp_list_delete(&successors);
 	} else {
 		{
-			eigrp_result_t rib_result = eigrp_rib_route_del(eigrp, &prefix->destination);
+			eigrp_result_t rib_result = eigrp_rib_route_del(
+				eigrp, &prefix->destination);
 
-			(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
+			(void)eigrp_eventlog_msg_add(
+				eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
 				&prefix->destination, rib_result, 0, 0, 0);
 		}
 		eigrp_topology_route_iterator_t iterator;
-		for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
+		for (route = eigrp_topology_route_iterator_first(prefix,
+								 &iterator);
+		     route;
 		     route = eigrp_topology_route_iterator_next(&iterator))
 			route->flags &= ~EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG;
 	}
 }
-
-
 
 
 void eigrp_topology_connected_interface_down(eigrp_instance_t *eigrp,
@@ -1522,16 +1648,20 @@ void eigrp_topology_connected_interface_down(eigrp_instance_t *eigrp,
 		if (!prefix)
 			continue;
 
-		/* Preserve the failed connected successor long enough for DUAL to
-		 * process the distance increase.  Deleting it first bypasses the FSM
-		 * and turns a local destination loss into a silent PASSIVE poison,
-		 * so neighbors never participate in the required diffusing
-		 * computation.  Interface-up retires this poisoned local descriptor
-		 * before installing the recovered connected route. */
+		/* Preserve the failed connected successor long enough for DUAL
+		 * to process the distance increase.  Deleting it first bypasses
+		 * the FSM and turns a local destination loss into a silent
+		 * PASSIVE poison, so neighbors never participate in the
+		 * required diffusing computation.  Interface-up retires this
+		 * poisoned local descriptor before installing the recovered
+		 * connected route. */
 		owned = eigrp_list_create();
-		for (route = eigrp_topology_route_iterator_first(prefix, &iterator);
-		     route; route = eigrp_topology_route_iterator_next(&iterator)) {
-			if (route->adv_router == eigrp->neighbor_self && route->ei == ei)
+		for (route = eigrp_topology_route_iterator_first(prefix,
+								 &iterator);
+		     route;
+		     route = eigrp_topology_route_iterator_next(&iterator)) {
+			if (route->adv_router == eigrp->neighbor_self
+			    && route->ei == ei)
 				eigrp_list_add(owned, route);
 		}
 
@@ -1561,11 +1691,12 @@ void eigrp_topology_connected_interface_down(eigrp_instance_t *eigrp,
 static bool eigrp_topology_suspended_peer(const eigrp_nbr_t *nbr)
 {
 	return nbr && nbr->published && nbr->eigrp_pfxlimits_af_suspended
-		&& nbr->limit_state == EIGRP_NBR_LIMIT_NONE;
+	       && nbr->limit_state == EIGRP_NBR_LIMIT_NONE;
 }
 
 static void eigrp_topology_suspended_peer_add(eigrp_nbr_t **peers,
-	size_t *count, size_t capacity, eigrp_nbr_t *nbr)
+					      size_t *count, size_t capacity,
+					      eigrp_nbr_t *nbr)
 {
 	if (!eigrp_topology_suspended_peer(nbr) || nbr->topo_batch_seen)
 		return;
@@ -1577,7 +1708,8 @@ static void eigrp_topology_suspended_peer_add(eigrp_nbr_t **peers,
 /* All peers have completed RTP/adjacency teardown. Retire their DUAL
  * ownership with one scan, preserving route and pending-REPLY semantics. */
 void eigrp_topology_suspended_neighbors_down(eigrp_instance_t *eigrp,
-	eigrp_nbr_t **peers, size_t capacity)
+					     eigrp_nbr_t **peers,
+					     size_t capacity)
 {
 	eigrp_table_node_t *rn;
 	eigrp_prefix_descriptor_t *pe;
@@ -1598,14 +1730,17 @@ void eigrp_topology_suspended_neighbors_down(eigrp_instance_t *eigrp,
 			pe->query_origin = NULL;
 		count = 0;
 		for (q = 0; q < 2; ++q) {
-			eigrp_list_t *routes = eigrp_topology_route_queue(pe, q);
+			eigrp_list_t *routes =
+				eigrp_topology_route_queue(pe, q);
 			for (EIGRP_LIST_ITERATE_RO(routes, node, route))
-				eigrp_topology_suspended_peer_add(peers, &count, capacity,
+				eigrp_topology_suspended_peer_add(
+					peers, &count, capacity,
 					route->adv_router);
 		}
 		if (pe->rij)
 			for (EIGRP_LIST_ITERATE_RO(pe->rij, node, status))
-				eigrp_topology_suspended_peer_add(peers, &count, capacity,
+				eigrp_topology_suspended_peer_add(
+					peers, &count, capacity,
 					status->neighbor);
 
 		/* Clear marks before invoking any FSM callback. */
@@ -1618,18 +1753,23 @@ void eigrp_topology_suspended_neighbors_down(eigrp_instance_t *eigrp,
 				eigrp_fsm_action_message_t msg = {0};
 
 				msg.metrics.delay = EIGRP_MAX_METRIC;
-				msg.packet_type = pe->state == EIGRP_FSM_STATE_PASSIVE
-					? EIGRP_OPC_UPDATE : EIGRP_OPC_REPLY;
+				msg.packet_type =
+					pe->state == EIGRP_FSM_STATE_PASSIVE
+						? EIGRP_OPC_UPDATE
+						: EIGRP_OPC_REPLY;
 				msg.eigrp = eigrp;
-				msg.data_type = eigrp_topology_route_external(route)
-					? EIGRP_EXT : EIGRP_INT;
+				msg.data_type =
+					eigrp_topology_route_external(route)
+						? EIGRP_EXT
+						: EIGRP_INT;
 				msg.adv_router = nbr;
 				msg.route = route;
 				msg.prefix = pe;
 				eigrp_fsm_event(&msg);
 			} else {
-				/* A pending REPLY may have no corresponding DRDB. */
-			eigrp_fsm_neighbor_down(eigrp, pe, nbr);
+				/* A pending REPLY may have no corresponding
+				 * DRDB. */
+				eigrp_fsm_neighbor_down(eigrp, pe, nbr);
 			}
 		}
 	}
@@ -1643,15 +1783,17 @@ void eigrp_topology_neighbor_down(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
 	eigrp_route_descriptor_t *route;
 	eigrp_table_node_t *rn;
 
-	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = eigrp_table_next(rn)) {
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
 		pe = rn->info;
 
 		if (!pe)
 			continue;
 
 		/* A neighbor that originated a deferred QUERY no longer needs a
-		 * REPLY after it goes down. Clear the DUAL origin before processing
-		 * its poisoned path so the prefix never retains a freed neighbor. */
+		 * REPLY after it goes down. Clear the DUAL origin before
+		 * processing its poisoned path so the prefix never retains a
+		 * freed neighbor. */
 		if (pe->query_origin == nbr)
 			pe->query_origin = NULL;
 
@@ -1661,15 +1803,19 @@ void eigrp_topology_neighbor_down(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
 
 			msg.metrics.delay = EIGRP_MAX_METRIC;
 			msg.packet_type = pe->state == EIGRP_FSM_STATE_PASSIVE
-					  ? EIGRP_OPC_UPDATE : EIGRP_OPC_REPLY;
+						  ? EIGRP_OPC_UPDATE
+						  : EIGRP_OPC_REPLY;
 			msg.eigrp = eigrp;
-			msg.data_type = eigrp_topology_route_external(route) ? EIGRP_EXT : EIGRP_INT;
+			msg.data_type = eigrp_topology_route_external(route)
+						? EIGRP_EXT
+						: EIGRP_INT;
 			msg.adv_router = nbr;
 			msg.route = route;
 			msg.prefix = pe;
 			eigrp_fsm_event(&msg);
 		} else {
-			/* A pending REPLY need not have a corresponding route RDB. */
+			/* A pending REPLY need not have a corresponding route
+			 * RDB. */
 			eigrp_fsm_neighbor_down(eigrp, pe, nbr);
 		}
 	}
@@ -1697,7 +1843,8 @@ void eigrp_update_topology_table_prefix(eigrp_instance_t *eigrp,
 		eigrp_list_t *routes = eigrp_topology_route_queue(prefix, q);
 		for (EIGRP_LIST_ITERATE(routes, node1, node2, route)) {
 			if (route->distance == EIGRP_MAX_METRIC)
-				eigrp_route_descriptor_delete(eigrp, prefix, route);
+				eigrp_route_descriptor_delete(eigrp, prefix,
+							      route);
 		}
 	}
 	/* Once DUAL is PASSIVE and the packetizer has encoded every pending
@@ -1705,18 +1852,17 @@ void eigrp_update_topology_table_prefix(eigrp_instance_t *eigrp,
 	 * ownership.  Remove it from the live table; earlier packetizer work
 	 * may still refer to it, so defer destruction behind that work rather
 	 * than freeing it synchronously from the DUAL/packetizer callback. */
-	if (prefix->state == EIGRP_FSM_STATE_PASSIVE
-	    && !prefix->req_action
-	    && (!prefix->rij || !prefix->rij->count)
-	    && !prefix->query_origin
+	if (prefix->state == EIGRP_FSM_STATE_PASSIVE && !prefix->req_action
+	    && (!prefix->rij || !prefix->rij->count) && !prefix->query_origin
 	    && !prefix->internal_routes->count
 	    && !prefix->external_routes->count
 	    && eigrp_topology_prefix_detach(eigrp, prefix))
 		eigrp_packetizer_prefix_defer_free(eigrp, prefix);
 }
 
-static eigrp_list_t *eigrp_topology_connected_route_snapshot(
-	eigrp_instance_t *eigrp, const eigrp_prefix_descriptor_t *prefix)
+static eigrp_list_t *
+eigrp_topology_connected_route_snapshot(eigrp_instance_t *eigrp,
+					const eigrp_prefix_descriptor_t *prefix)
 {
 	eigrp_list_t *routes;
 	eigrp_route_descriptor_t *route;
@@ -1752,15 +1898,16 @@ static void eigrp_topology_route_snapshot_free(eigrp_list_t *routes)
 }
 
 
-static eigrp_route_descriptor_t *eigrp_topology_query_route_snapshot(
-	const eigrp_prefix_descriptor_t *prefix)
+static eigrp_route_descriptor_t *
+eigrp_topology_query_route_snapshot(const eigrp_prefix_descriptor_t *prefix)
 {
 	eigrp_route_descriptor_t *route;
 	eigrp_route_descriptor_t *copy;
 
 	eigrp_topology_route_iterator_t iterator;
-	for (route = eigrp_topology_route_iterator_first((eigrp_prefix_descriptor_t *)prefix, &iterator); route;
-	     route = eigrp_topology_route_iterator_next(&iterator)) {
+	for (route = eigrp_topology_route_iterator_first(
+		     (eigrp_prefix_descriptor_t *)prefix, &iterator);
+	     route; route = eigrp_topology_route_iterator_next(&iterator)) {
 		if (route->adv_router == NULL)
 			continue;
 		copy = eigrp_topology_route_create(NULL);
@@ -1776,26 +1923,30 @@ static eigrp_route_descriptor_t *eigrp_topology_query_route_snapshot(
 }
 
 static bool eigrp_topology_prefix_detach(eigrp_instance_t *eigrp,
-					  eigrp_prefix_descriptor_t *prefix)
+					 eigrp_prefix_descriptor_t *prefix)
 {
 	eigrp_prefix_t key;
 	eigrp_table_node_t *rn;
 
 	if (!eigrp_topology_table_key(&prefix->destination, &key))
 		return false;
-	rn = prefix->table_node ? prefix->table_node
-		: eigrp_table_node_lookup(eigrp->topology_table, &key);
+	rn = prefix->table_node
+		     ? prefix->table_node
+		     : eigrp_table_node_lookup(eigrp->topology_table, &key);
 	if (!rn || rn->info != prefix)
 		return false;
 
 	/* The same destination may have been queued more than once by DUAL
-	 * during an in-flight QUERY.  Detachment must remove every reference. */
+	 * during an in-flight QUERY.  Detachment must remove every reference.
+	 */
 	while (eigrp_list_lookup(eigrp->topology_changes, prefix))
 		eigrp_list_delete_data(eigrp->topology_changes, prefix);
 	{
-		eigrp_result_t rib_result = eigrp_rib_route_del(eigrp, &prefix->destination);
+		eigrp_result_t rib_result =
+			eigrp_rib_route_del(eigrp, &prefix->destination);
 
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
 			&prefix->destination, rib_result, 0, 0, 0);
 	}
 	rn->info = NULL;
@@ -1805,8 +1956,8 @@ static bool eigrp_topology_prefix_detach(eigrp_instance_t *eigrp,
 }
 
 static eigrp_prefix_descriptor_t *eigrp_topology_prefix_recreate(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination, uint8_t type,
-	const eigrp_metrics_t *reported_metric, uint8_t state)
+	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination,
+	uint8_t type, const eigrp_metrics_t *reported_metric, uint8_t state)
 {
 	eigrp_prefix_descriptor_t *prefix;
 
@@ -1825,8 +1976,8 @@ static eigrp_prefix_descriptor_t *eigrp_topology_prefix_recreate(
 }
 
 static eigrp_result_t eigrp_topology_connected_recreate(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination, uint8_t type,
-	const eigrp_metrics_t *reported_metric, uint32_t distance,
+	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination,
+	uint8_t type, const eigrp_metrics_t *reported_metric, uint32_t distance,
 	uint32_t feasible_distance, uint32_t reported_distance,
 	eigrp_list_t *routes)
 {
@@ -1837,8 +1988,9 @@ static eigrp_result_t eigrp_topology_connected_recreate(
 	if (!routes || routes->count == 0)
 		return EIGRP_RESULT_SUCCESS;
 
-	prefix = eigrp_topology_prefix_recreate(
-		eigrp, destination, type, reported_metric, EIGRP_FSM_STATE_PASSIVE);
+	prefix = eigrp_topology_prefix_recreate(eigrp, destination, type,
+						reported_metric,
+						EIGRP_FSM_STATE_PASSIVE);
 	if (!prefix)
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 	prefix->distance = distance;
@@ -1853,9 +2005,11 @@ static eigrp_result_t eigrp_topology_connected_recreate(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_topology_remote_requery(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination, uint8_t type,
-	const eigrp_metrics_t *reported_metric, eigrp_route_descriptor_t *query_route)
+static eigrp_result_t
+eigrp_topology_remote_requery(eigrp_instance_t *eigrp,
+			      const eigrp_prefix_t *destination, uint8_t type,
+			      const eigrp_metrics_t *reported_metric,
+			      eigrp_route_descriptor_t *query_route)
 {
 	eigrp_prefix_descriptor_t *prefix;
 
@@ -1865,8 +2019,9 @@ static eigrp_result_t eigrp_topology_remote_requery(
 		return EIGRP_RESULT_SUCCESS;
 	}
 
-	prefix = eigrp_topology_prefix_recreate(
-		eigrp, destination, type, reported_metric, EIGRP_FSM_STATE_ACTIVE_1);
+	prefix = eigrp_topology_prefix_recreate(eigrp, destination, type,
+						reported_metric,
+						EIGRP_FSM_STATE_ACTIVE_1);
 	if (!prefix) {
 		if (query_route)
 			eigrp_topology_route_free(query_route);
@@ -1885,8 +2040,8 @@ static eigrp_result_t eigrp_topology_remote_requery(
 	if (!query_route) {
 		query_route = eigrp_topology_route_create(NULL);
 		if (!query_route) {
-			eigrp_prefix_descriptor_delete(eigrp, eigrp->topology_table,
-						       prefix);
+			eigrp_prefix_descriptor_delete(
+				eigrp, eigrp->topology_table, prefix);
 			return EIGRP_RESULT_INTERNAL_FAILURE;
 		}
 		query_route->type = type == EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
@@ -1905,8 +2060,9 @@ static eigrp_result_t eigrp_topology_remote_requery(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_topology_clear_prefix(
-	eigrp_instance_t *eigrp, eigrp_prefix_descriptor_t *prefix)
+static eigrp_result_t
+eigrp_topology_clear_prefix(eigrp_instance_t *eigrp,
+			    eigrp_prefix_descriptor_t *prefix)
 {
 	eigrp_prefix_t destination;
 	eigrp_list_t *connected_routes = NULL;
@@ -1928,15 +2084,16 @@ static eigrp_result_t eigrp_topology_clear_prefix(
 	feasible_distance = prefix->fdistance;
 	reported_distance = prefix->rdistance;
 	if (type == EIGRP_TOPOLOGY_TYPE_CONNECTED)
-		connected_routes = eigrp_topology_connected_route_snapshot(eigrp,
-								       prefix);
+		connected_routes =
+			eigrp_topology_connected_route_snapshot(eigrp, prefix);
 	else
 		query_route = eigrp_topology_query_route_snapshot(prefix);
 
 	/*
 	 * Remove the old NDB from the live topology and remove its RIB route.
-	 * Packetizer work queued before the EXEC command may still reference the
-	 * old NDB/RDBs, so their storage is released only by a tail work item.
+	 * Packetizer work queued before the EXEC command may still reference
+	 * the old NDB/RDBs, so their storage is released only by a tail work
+	 * item.
 	 */
 	if (!eigrp_topology_prefix_detach(eigrp, prefix)) {
 		eigrp_topology_route_snapshot_free(connected_routes);
@@ -1970,7 +2127,8 @@ static eigrp_result_t eigrp_topology_clear_all(eigrp_instance_t *eigrp,
 	size_t affected = 0;
 
 	destinations = eigrp_list_create();
-	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = eigrp_table_next(rn)) {
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
 		prefix = rn->info;
 		if (!prefix)
 			continue;
@@ -1982,10 +2140,11 @@ static eigrp_result_t eigrp_topology_clear_all(eigrp_instance_t *eigrp,
 	for (EIGRP_LIST_ITERATE(destinations, node, nnode, destination)) {
 		eigrp_list_delete_data(destinations, destination);
 		if (result == EIGRP_RESULT_SUCCESS) {
-			prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						       destination);
+			prefix = eigrp_topology_table_lookup(
+				eigrp->topology_table, destination);
 			if (prefix) {
-				result = eigrp_topology_clear_prefix(eigrp, prefix);
+				result = eigrp_topology_clear_prefix(eigrp,
+								     prefix);
 				if (result == EIGRP_RESULT_SUCCESS)
 					affected++;
 			}
@@ -2005,12 +2164,14 @@ static eigrp_result_t eigrp_topology_clear_all(eigrp_instance_t *eigrp,
  * Placement:
  *   Privileged operational
  * Description:
- * Clears selected EIGRP topology runtime state without changing retained configuration.
- * The operation is owned by the topology module, not by FRR VTY code.
+ * Clears selected EIGRP topology runtime state without changing retained
+ * configuration. The operation is owned by the topology module, not by FRR VTY
+ * code.
  */
-eigrp_result_t eigrp_topology_clear(
-	eigrp_instance_context_t *context,
-	const eigrp_topology_clear_request_t *request, size_t *affected_count)
+eigrp_result_t
+eigrp_topology_clear(eigrp_instance_context_t *context,
+		     const eigrp_topology_clear_request_t *request,
+		     size_t *affected_count)
 {
 	eigrp_prefix_t destination;
 	eigrp_prefix_descriptor_t *prefix;
@@ -2023,13 +2184,13 @@ eigrp_result_t eigrp_topology_clear(
 
 	if (!context->runtime)
 		return EIGRP_RESULT_NOT_FOUND;
-	if (context->config
-	    && context->config->afi != EIGRP_AFI_IPV4
+	if (context->config && context->config->afi != EIGRP_AFI_IPV4
 	    && context->config->afi != EIGRP_AFI_IPV6)
 		return EIGRP_RESULT_UNSUPPORTED;
 
 	if (!request->destination)
-		return eigrp_topology_clear_all(context->runtime, affected_count);
+		return eigrp_topology_clear_all(context->runtime,
+						affected_count);
 
 	if (request->destination->address.afi
 	    != eigrp_instance_afi(context->runtime))
@@ -2050,28 +2211,30 @@ eigrp_result_t eigrp_topology_clear(
 	return result;
 }
 
-static uint32_t eigrp_topology_successor_count(eigrp_prefix_descriptor_t *prefix)
+static uint32_t
+eigrp_topology_successor_count(eigrp_prefix_descriptor_t *prefix)
 {
 	eigrp_route_descriptor_t *route;
 	uint32_t count = 0;
 
 	eigrp_topology_route_iterator_t iterator;
-	for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
-	     route = eigrp_topology_route_iterator_next(&iterator))
+	for (route = eigrp_topology_route_iterator_first(prefix, &iterator);
+	     route; route = eigrp_topology_route_iterator_next(&iterator))
 		if (route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
 			count++;
 	return count;
 }
 
-static void eigrp_route_nexthop_export(
-	const eigrp_route_descriptor_t *route, eigrp_topology_route_state_t *state)
+static void eigrp_route_nexthop_export(const eigrp_route_descriptor_t *route,
+				       eigrp_topology_route_state_t *state)
 {
 	memset(&state->next_hop, 0, sizeof(state->next_hop));
 	if (!route->adv_router)
 		return;
 	if (route->adv_router->src.afi == AF_INET6) {
 		state->next_hop.afi = EIGRP_AFI_IPV6;
-		memcpy(state->next_hop.bytes, &route->adv_router->src.ip.v6, 16);
+		memcpy(state->next_hop.bytes, &route->adv_router->src.ip.v6,
+		       16);
 		return;
 	}
 	state->next_hop.afi = EIGRP_AFI_IPV4;
@@ -2079,8 +2242,8 @@ static void eigrp_route_nexthop_export(
 }
 
 static eigrp_result_t eigrp_topology_state_emit_prefix(
-	eigrp_instance_t *runtime, eigrp_prefix_descriptor_t *prefix, bool all_links,
-	eigrp_topology_prefix_state_cb prefix_callback,
+	eigrp_instance_t *runtime, eigrp_prefix_descriptor_t *prefix,
+	bool all_links, eigrp_topology_prefix_state_cb prefix_callback,
 	eigrp_topology_route_state_cb route_callback, void *arg)
 {
 	eigrp_topology_prefix_state_t prefix_state = {0};
@@ -2099,12 +2262,14 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 		return result;
 
 	eigrp_topology_route_iterator_t iterator;
-	for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
-	     route = eigrp_topology_route_iterator_next(&iterator)) {
+	for (route = eigrp_topology_route_iterator_first(prefix, &iterator);
+	     route; route = eigrp_topology_route_iterator_next(&iterator)) {
 		bool successor =
-			(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG) != 0;
+			(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
+			!= 0;
 		bool feasible =
-			(route->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG) != 0;
+			(route->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)
+			!= 0;
 
 		if (route->reported_distance == EIGRP_MAX_METRIC)
 			continue;
@@ -2112,13 +2277,14 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 			continue;
 
 		memset(&route_state, 0, sizeof(route_state));
-		route_state.connected = route->adv_router == runtime->neighbor_self;
+		route_state.connected =
+			route->adv_router == runtime->neighbor_self;
 		route_state.successor = successor;
 		route_state.feasible_successor = feasible;
 		route_state.distance = route->distance;
 		route_state.reported_distance = route->reported_distance;
-		route_state.interface_name = route->ei ? eigrp_intf_name_string(route->ei)
-						       : NULL;
+		route_state.interface_name =
+			route->ei ? eigrp_intf_name_string(route->ei) : NULL;
 		if (!route_state.connected)
 			eigrp_route_nexthop_export(route, &route_state);
 
@@ -2132,13 +2298,11 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 
 /*
  * Syntax:
- *   EXEC: `show eigrp address-family <ipv4|ipv6> ... topology [TARGET] [all-links]`
- * Supported: EXEC
- * Placement:
- *   Operational/read-only
- * Description:
+ *   EXEC: `show eigrp address-family <ipv4|ipv6> ... topology [TARGET]
+ * [all-links]` Supported: EXEC Placement: Operational/read-only Description:
  * Walks EIGRP topology descriptors for show commands.
- * Filtering and presentation are supplied by the caller while topology ownership remains in common EIGRP code.
+ * Filtering and presentation are supplied by the caller while topology
+ * ownership remains in common EIGRP code.
  */
 eigrp_result_t eigrp_topology_state_iterate(
 	eigrp_af_config_t *config, eigrp_instance_t *runtime,
@@ -2170,9 +2334,9 @@ eigrp_result_t eigrp_topology_state_iterate(
 			eigrp_table_node_release(node);
 			return EIGRP_RESULT_NOT_FOUND;
 		}
-		result = eigrp_topology_state_emit_prefix(runtime, prefix, all_links,
-							 prefix_callback, route_callback,
-							 arg);
+		result = eigrp_topology_state_emit_prefix(
+			runtime, prefix, all_links, prefix_callback,
+			route_callback, arg);
 		eigrp_table_node_release(node);
 		return result;
 	}
@@ -2182,9 +2346,9 @@ eigrp_result_t eigrp_topology_state_iterate(
 		prefix = node->info;
 		if (!prefix)
 			continue;
-		result = eigrp_topology_state_emit_prefix(runtime, prefix, all_links,
-							 prefix_callback, route_callback,
-							 arg);
+		result = eigrp_topology_state_emit_prefix(
+			runtime, prefix, all_links, prefix_callback,
+			route_callback, arg);
 		if (result != EIGRP_RESULT_SUCCESS)
 			return result;
 		matched = true;
@@ -2216,24 +2380,26 @@ eigrp_result_t eigrp_topology_instance_iterate(
 
 	if (!callback)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	if (afi != EIGRP_AFI_IPV4
-	    && afi != EIGRP_AFI_IPV6)
+	if (afi != EIGRP_AFI_IPV4 && afi != EIGRP_AFI_IPV6)
 		return EIGRP_RESULT_UNSUPPORTED;
 	if (!eigrp_process.virt_router)
 		return EIGRP_RESULT_NOT_FOUND;
 
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)) {
-	for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, runtime)) {
-		if (runtime->af_vectors.afi != afi || runtime->vrf_id != vrf_id)
-			continue;
-		if (asn && runtime->AS != asn)
-			continue;
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router)) {
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
+					   runtime)) {
+			if (runtime->af_vectors.afi != afi
+			    || runtime->vrf_id != vrf_id)
+				continue;
+			if (asn && runtime->AS != asn)
+				continue;
 
-		matched = true;
-		result = callback(runtime, arg);
-		if (result != EIGRP_RESULT_SUCCESS)
-			return result;
-	}
+			matched = true;
+			result = callback(runtime, arg);
+			if (result != EIGRP_RESULT_SUCCESS)
+				return result;
+		}
 	}
 
 	return matched ? EIGRP_RESULT_SUCCESS : EIGRP_RESULT_NOT_FOUND;
@@ -2278,23 +2444,26 @@ typedef struct eigrp_topology_message_args {
 } eigrp_topology_message_args_t;
 
 static eigrp_result_t eigrp_topology_message_process(eigrp_instance_t *eigrp,
-	void *arg);
+						     void *arg);
 
 eigrp_result_t eigrp_topology_create(eigrp_instance_context_t *context)
 {
 	eigrp_topology_message_args_t message = {
-		.type = EIGRP_TOPOLOGY_MESSAGE_CREATE, .context = context,
+		.type = EIGRP_TOPOLOGY_MESSAGE_CREATE,
+		.context = context,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_topology_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_topology_message_process,
+			&message);
 	eigrp_result_t result;
 
 	/*
-	 * Topology IDs are a portable EIGRP protocol identity.  Host integrations
-	 * may expose only the base topology, but the common API must not reject a
-	 * valid non-base TID merely because a particular CLI does not expose it.
+	 * Topology IDs are a portable EIGRP protocol identity.  Host
+	 * integrations may expose only the base topology, but the common API
+	 * must not reject a valid non-base TID merely because a particular CLI
+	 * does not expose it.
 	 */
 	result = eigrp_topology_context_validate(context);
 	if (result != EIGRP_RESULT_SUCCESS)
@@ -2317,12 +2486,14 @@ eigrp_result_t eigrp_topology_create(eigrp_instance_context_t *context)
 eigrp_result_t eigrp_topology_delete(eigrp_instance_context_t *context)
 {
 	eigrp_topology_message_args_t message = {
-		.type = EIGRP_TOPOLOGY_MESSAGE_DELETE, .context = context,
+		.type = EIGRP_TOPOLOGY_MESSAGE_DELETE,
+		.context = context,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_topology_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_topology_message_process,
+			&message);
 	eigrp_result_t result;
 
 	result = eigrp_topology_context_validate(context);
@@ -2335,10 +2506,8 @@ eigrp_result_t eigrp_topology_delete(eigrp_instance_context_t *context)
 
 /*
  * Syntax:
- *   Named: `default-information <in|out> [POLICY]` / `no default-information <in|out> [POLICY]`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
+ *   Named: `default-information <in|out> [POLICY]` / `no default-information
+ * <in|out> [POLICY]` Supported: Named Placement: Named: topology base mode
  * Description:
  * Controls default-route acceptance/advertisement for the named topology.
  * A configured access list is evaluated by the host policy adapter.  Policy
@@ -2352,7 +2521,8 @@ static bool eigrp_topology_default_prefix(const eigrp_prefix_t *prefix)
 }
 
 bool eigrp_topology_default_information_denies(
-	eigrp_instance_t *eigrp, eigrp_default_information_direction_t direction,
+	eigrp_instance_t *eigrp,
+	eigrp_default_information_direction_t direction,
 	const eigrp_prefix_t *prefix)
 {
 	eigrp_af_config_t *af;
@@ -2362,8 +2532,9 @@ bool eigrp_topology_default_information_denies(
 
 	if (!eigrp_topology_default_prefix(prefix))
 		return false;
-	if (!eigrp || (direction != EIGRP_DEFAULT_INFORMATION_IN
-		       && direction != EIGRP_DEFAULT_INFORMATION_OUT))
+	if (!eigrp
+	    || (direction != EIGRP_DEFAULT_INFORMATION_IN
+		&& direction != EIGRP_DEFAULT_INFORMATION_OUT))
 		return true;
 
 	af = eigrp_af_config_runtime_read(eigrp);
@@ -2381,7 +2552,8 @@ bool eigrp_topology_default_information_denies(
 }
 
 static void eigrp_topology_default_information_refresh(
-	eigrp_instance_t *eigrp, eigrp_default_information_direction_t direction)
+	eigrp_instance_t *eigrp,
+	eigrp_default_information_direction_t direction)
 {
 	eigrp_nbr_clear_request_t request;
 
@@ -2400,16 +2572,21 @@ static void eigrp_topology_default_information_refresh(
 
 eigrp_result_t eigrp_topology_default_information_update(
 	eigrp_operation_t operation, eigrp_instance_context_t *context,
-	eigrp_default_information_direction_t direction, const char *access_list)
+	eigrp_default_information_direction_t direction,
+	const char *access_list)
 {
 	eigrp_topology_message_args_t message = {
-		.type = EIGRP_TOPOLOGY_MESSAGE_DEFAULT_INFORMATION, .operation = operation,
-		.context = context, .direction = direction, .access_list = access_list,
+		.type = EIGRP_TOPOLOGY_MESSAGE_DEFAULT_INFORMATION,
+		.operation = operation,
+		.context = context,
+		.direction = direction,
+		.access_list = access_list,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_topology_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_topology_message_process,
+			&message);
 	eigrp_af_config_t *af;
 	char *replacement = NULL;
 	bool enabled;
@@ -2442,13 +2619,10 @@ eigrp_result_t eigrp_topology_default_information_update(
 	af->default_information_enabled[direction] = enabled;
 
 	if (context->runtime)
-		eigrp_topology_default_information_refresh(context->runtime, direction);
+		eigrp_topology_default_information_refresh(context->runtime,
+							   direction);
 	return EIGRP_RESULT_SUCCESS;
 }
-
-
-
-
 
 
 /*
@@ -2462,7 +2636,7 @@ eigrp_result_t eigrp_topology_default_information_update(
  * Configuration is retained and supported runtime limit semantics are enforced.
  */
 static eigrp_result_t eigrp_topology_message_process(eigrp_instance_t *eigrp,
-	void *arg)
+						     void *arg)
 {
 	eigrp_topology_message_args_t *message = arg;
 
@@ -2473,14 +2647,16 @@ static eigrp_result_t eigrp_topology_message_process(eigrp_instance_t *eigrp,
 	case EIGRP_TOPOLOGY_MESSAGE_DELETE:
 		return eigrp_topology_delete(message->context);
 	case EIGRP_TOPOLOGY_MESSAGE_DEFAULT_INFORMATION:
-		return eigrp_topology_default_information_update(message->operation,
-			message->context, message->direction, message->access_list);
+		return eigrp_topology_default_information_update(
+			message->operation, message->context,
+			message->direction, message->access_list);
 	case EIGRP_TOPOLOGY_MESSAGE_MAX_PREFIX:
-		return eigrp_topology_max_prefix_update(message->operation,
-			message->context, message->limit);
+		return eigrp_topology_max_prefix_update(
+			message->operation, message->context, message->limit);
 	case EIGRP_TOPOLOGY_MESSAGE_MAX_PATHS:
-		return eigrp_topology_maximum_paths_update(message->operation,
-			message->context, message->maximum_paths);
+		return eigrp_topology_maximum_paths_update(
+			message->operation, message->context,
+			message->maximum_paths);
 	}
 	return EIGRP_RESULT_INVALID_ARGUMENT;
 }
@@ -2499,7 +2675,7 @@ static uint32_t eigrp_topology_prefix_count(eigrp_instance_t *runtime)
 }
 
 bool eigrp_topology_prefix_admit(eigrp_instance_t *runtime,
-	const eigrp_prefix_t *prefix)
+				 const eigrp_prefix_t *prefix)
 {
 	eigrp_af_config_t *af;
 	const eigrp_prefix_limit_t *limit;
@@ -2518,16 +2694,19 @@ bool eigrp_topology_prefix_admit(eigrp_instance_t *runtime,
 	{
 		uint32_t count = eigrp_topology_prefix_count(runtime);
 		if (eigrp_prefix_limit_threshold_crossed(limit, count))
-			eigrp_log(EIGRP_LOG_WARNING,
-				  "EIGRP topology maximum-prefix threshold reached (%u/%u)",
-				  count + 1U, limit->maximum);
+			eigrp_log(
+				EIGRP_LOG_WARNING,
+				"EIGRP topology maximum-prefix threshold reached (%u/%u)",
+				count + 1U, limit->maximum);
 		/* Process admission supports restart/reset/dampening policies.
-		 * The legacy basic-only admission helper would bypass hard limits
-		 * whenever any of those options was configured. */
+		 * The legacy basic-only admission helper would bypass hard
+		 * limits whenever any of those options was configured. */
 		if (!limit->warning_only && count >= limit->maximum) {
-			(void)eigrp_eventlog_msg_add(runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
-				prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_TOPOLOGY, count + 1U,
-				limit->maximum, 0);
+			(void)eigrp_eventlog_msg_add(
+				runtime,
+				EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
+				prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_TOPOLOGY,
+				count + 1U, limit->maximum, 0);
 			eigrp_pfxlimits_prefix_exceeded(runtime, limit);
 			return false;
 		}
@@ -2535,20 +2714,27 @@ bool eigrp_topology_prefix_admit(eigrp_instance_t *runtime,
 	}
 }
 
-eigrp_result_t eigrp_topology_max_prefix_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_prefix_limit_t *limit)
+eigrp_result_t
+eigrp_topology_max_prefix_update(eigrp_operation_t operation,
+				 eigrp_instance_context_t *context,
+				 const eigrp_prefix_limit_t *limit)
 {
 	eigrp_topology_message_args_t message = {
-		.type = EIGRP_TOPOLOGY_MESSAGE_MAX_PREFIX, .operation = operation,
-		.context = context, .limit = limit,
+		.type = EIGRP_TOPOLOGY_MESSAGE_MAX_PREFIX,
+		.operation = operation,
+		.context = context,
+		.limit = limit,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_topology_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_topology_message_process,
+			&message);
 	if (!context || (!context->config && !context->runtime))
 		return EIGRP_RESULT_NOT_FOUND;
 	if (operation == EIGRP_RESET) {
-		if (!context->config || !context->config->topology_maximum_prefix_configured)
+		if (!context->config
+		    || !context->config->topology_maximum_prefix_configured)
 			return EIGRP_RESULT_NOT_FOUND;
 		context->config->topology_maximum_prefix_configured = false;
 		memset(&context->config->topology_maximum_prefix, 0,
@@ -2557,15 +2743,17 @@ eigrp_result_t eigrp_topology_max_prefix_update(eigrp_operation_t operation, eig
 			(void)eigrp_pfxlimits_state_clear(context->runtime);
 		return EIGRP_RESULT_SUCCESS;
 	}
-	if (operation != EIGRP_SET || !limit || !limit->maximum || limit->threshold > 100)
+	if (operation != EIGRP_SET || !limit || !limit->maximum
+	    || limit->threshold > 100)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (context->config) {
-		/* Reapplying the same policy must not bypass a process lockout or
-		 * reset incident history. Only an actual configuration change may
-		 * clear the running penalty. */
+		/* Reapplying the same policy must not bypass a process lockout
+		 * or reset incident history. Only an actual configuration
+		 * change may clear the running penalty. */
 		const eigrp_prefix_limit_t *old =
 			&context->config->topology_maximum_prefix;
-		bool changed = !context->config->topology_maximum_prefix_configured
+		bool changed =
+			!context->config->topology_maximum_prefix_configured
 			|| old->maximum != limit->maximum
 			|| old->threshold != limit->threshold
 			|| old->warning_only != limit->warning_only
@@ -2591,26 +2779,33 @@ eigrp_result_t eigrp_topology_max_prefix_update(eigrp_operation_t operation, eig
  *   Named: topology base mode
  * Description:
  * Sets or resets the number of EIGRP successor paths eligible for installation.
- * The named parser reaches the same EIGRP-owned topology limit instead of a separate named implementation.
+ * The named parser reaches the same EIGRP-owned topology limit instead of a
+ * separate named implementation.
  */
-eigrp_result_t eigrp_topology_maximum_paths_update(eigrp_operation_t operation, eigrp_instance_context_t *context, uint8_t maximum_paths)
+eigrp_result_t
+eigrp_topology_maximum_paths_update(eigrp_operation_t operation,
+				    eigrp_instance_context_t *context,
+				    uint8_t maximum_paths)
 {
 	eigrp_topology_message_args_t message = {
-		.type = EIGRP_TOPOLOGY_MESSAGE_MAX_PATHS, .operation = operation,
-		.context = context, .maximum_paths = maximum_paths,
+		.type = EIGRP_TOPOLOGY_MESSAGE_MAX_PATHS,
+		.operation = operation,
+		.context = context,
+		.maximum_paths = maximum_paths,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_topology_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_topology_message_process,
+			&message);
 	if (operation == EIGRP_RESET) {
-	if (!context || (!context->config && !context->runtime))
-		return EIGRP_RESULT_NOT_FOUND;
-	if (context->runtime) {
-		context->runtime->max_paths = EIGRP_MAX_PATHS_DEFAULT;
-		eigrp_topology_multipath_update(context->runtime);
-	}
-	return EIGRP_RESULT_SUCCESS;
+		if (!context || (!context->config && !context->runtime))
+			return EIGRP_RESULT_NOT_FOUND;
+		if (context->runtime) {
+			context->runtime->max_paths = EIGRP_MAX_PATHS_DEFAULT;
+			eigrp_topology_multipath_update(context->runtime);
+		}
+		return EIGRP_RESULT_SUCCESS;
 	}
 
 	if (operation != EIGRP_SET)
@@ -2637,7 +2832,8 @@ eigrp_result_t eigrp_topology_maximum_paths_update(eigrp_operation_t operation, 
  *   Named: topology base mode
  * Description:
  * Sets or resets the number of EIGRP successor paths eligible for installation.
- * The named parser reaches the same EIGRP-owned topology limit instead of a separate named implementation.
+ * The named parser reaches the same EIGRP-owned topology limit instead of a
+ * separate named implementation.
  */
 
 
@@ -2651,4 +2847,3 @@ eigrp_result_t eigrp_topology_maximum_paths_update(eigrp_operation_t operation, 
  * Sets or removes the topology prefix-limit policy.
  * Configuration is retained and supported runtime limit semantics are enforced.
  */
-

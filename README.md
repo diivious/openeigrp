@@ -75,36 +75,41 @@ make
 
 The root build compiles the portable EIGRP core and Unix host support without requiring an FRR checkout, BIRD checkout, VM, root privileges, or host VLAN configuration.
 
-### Portable qualification
+### Build, test and pre-merge qualification
+
+From the repository root:
 
 ```sh
-make test
+make                        # Build portable EIGRP and Unix support (default)
+make check                  # Changed-file style check + checker unit tests
+make check SOURCE=all       # Full-tree style check + checker unit tests
+make uut                    # All portable pytest and YAML UUT scenarios
+make uut SUITE=rtp-core     # Named scenario group
+make uut SCENARIO=prefix-limit-lifecycle/scenario-peer-timers-ipv6.yaml
+make scale                  # Quick pacing/backpressure qualification
+make scale SUITE=100k       # Heavy scale qualification when needed
 ```
 
-The root test gate includes portable compile/build validation, portable Python/UUT tests, Unix-host tests, IPv4 and IPv6 core scenarios, RTP qualification, and topology scenarios.
+**Run `make all` before opening a pull request for merge.** It runs `build`,
+`check SOURCE=all`, `uut`, then the quick `scale` gate in that order. It stops
+at the first failure. `make` alone remains a build only. Full scale suites are
+explicit, not part of `make all`.
 
-Useful targets include:
+`make help` lists the short command interface and selectors. GitHub Actions
+runs its build, style and portable UUT gates on Linux and macOS; the local
+pre-merge `make all` also runs the quick scale qualification.
+
+For Docker development:
 
 ```sh
-make portable-build
-make portable-test
-make uut
-make ipv4-basic-core
-make ipv6-basic-core
-make rtp-core
-make core-topology
-make mesh-topology
+make docker                 # Local OpenEIGRP and FRR checkouts
+make docker FRR=../frr      # Choose a different FRR checkout
+make docker GITHUB=latest   # Latest OpenEIGRP release tag
+make docker GITHUB=1.2.3   # Specific rel-1.2.3 plus its FRR pin
 ```
 
-Run:
-
-```sh
-make help
-```
-
-for the complete target list.
-
-GitHub Actions runs the root portable gate on Linux and macOS.
+See [Docker development](docker/README.md) for source selection and advanced
+`tools/docker.sh` options.
 
 </details>
 

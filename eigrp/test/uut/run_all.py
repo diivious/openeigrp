@@ -151,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                         default=os.environ.get("EIGRP_UUT_SCENARIO_TIMEOUT", str(DEFAULT_SCENARIO_TIMEOUT)),
                         help="wall-clock watchdog for each scenario (seconds, default: 180; "
                              "env: EIGRP_UUT_SCENARIO_TIMEOUT)")
+    parser.add_argument("--scenario", metavar="PATH", help="run only the named YAML scenario; resolve its topology from the scenario")
     args = parser.parse_args(argv)
     try:
         timeout = positive_seconds(str(args.scenario_timeout))
@@ -158,13 +159,26 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     try:
         scenarios = discover()
+        if args.scenario:
+            name = Path(args.scenario)
+            if name.is_absolute():
+                selected = name.resolve()
+            else:
+                candidates = ((HERE / name).resolve(), (TEST_ROOT / name).resolve(),
+                              (PROJECT_ROOT / name).resolve())
+                selected = next((p for p in candidates if p.is_file()), candidates[0])
+            scenarios = [(topology, scenario) for topology, scenario in scenarios
+                         if scenario == selected]
+            if not scenarios:
+                raise RuntimeError(f"YAML scenario not found: {args.scenario}")
     except Exception as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
 
     LOG_ROOT.mkdir(parents=True, exist_ok=True)
-    for old_log in LOG_ROOT.glob("*.log"):
-        old_log.unlink()
+    if not args.scenario:
+        for old_log in LOG_ROOT.glob("*.log"):
+            old_log.unlink()
 
     print(f"YAML UUT scenarios discovered: {len(scenarios)}")
     failures: list[tuple[str, Path]] = []

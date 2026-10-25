@@ -22,13 +22,15 @@
 #include "eigrp_sys.h"
 #include <stdint.h>
 
-eigrp_result_t eigrp_topology_redistributed_route_update(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *source_route,
-	const eigrp_metrics_t *metric);
+eigrp_result_t
+eigrp_topology_redistributed_route_update(eigrp_instance_t *eigrp,
+					  const eigrp_rib_route_t *source_route,
+					  const eigrp_metrics_t *metric);
 eigrp_result_t eigrp_topology_redistributed_route_remove(
 	eigrp_instance_t *eigrp, const eigrp_rib_route_t *source_route);
-eigrp_result_t eigrp_topology_redistributed_source_remove(
-	eigrp_instance_t *eigrp, const eigrp_redist_source_t *source);
+eigrp_result_t
+eigrp_topology_redistributed_source_remove(eigrp_instance_t *eigrp,
+					   const eigrp_redist_source_t *source);
 
 struct eigrp_redist_config {
 	eigrp_redist_source_t source;
@@ -65,8 +67,7 @@ static char *eigrp_redist_string_dup(const char *value)
 	return copy;
 }
 
-static bool eigrp_redist_source_valid(
-	const eigrp_redist_source_t *source)
+static bool eigrp_redist_source_valid(const eigrp_redist_source_t *source)
 {
 	if (!source)
 		return false;
@@ -74,18 +75,17 @@ static bool eigrp_redist_source_valid(
 	       && source->protocol <= EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
 }
 
-static bool eigrp_redist_source_match(
-	const eigrp_redist_source_t *left,
-	const eigrp_redist_source_t *right)
+static bool eigrp_redist_source_match(const eigrp_redist_source_t *left,
+				      const eigrp_redist_source_t *right)
 {
 	return left && right && left->protocol == right->protocol
 	       && left->route_instance == right->route_instance;
 }
 
-static eigrp_result_t eigrp_redist_validate(
-	eigrp_instance_context_t *context,
-	const eigrp_redist_source_t *source,
-	const eigrp_metric_values_t *metric, const char *route_map)
+static eigrp_result_t eigrp_redist_validate(eigrp_instance_context_t *context,
+					    const eigrp_redist_source_t *source,
+					    const eigrp_metric_values_t *metric,
+					    const char *route_map)
 {
 	if (!eigrp_redist_source_valid(source))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
@@ -98,9 +98,9 @@ static eigrp_result_t eigrp_redist_validate(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_redist_config_t *eigrp_redist_config_lookup(
-	eigrp_af_config_t *af,
-	const eigrp_redist_source_t *source)
+static eigrp_redist_config_t *
+eigrp_redist_config_lookup(eigrp_af_config_t *af,
+			   const eigrp_redist_source_t *source)
 {
 	eigrp_redist_config_t *config;
 
@@ -117,16 +117,14 @@ static bool eigrp_redist_runtime_result_committable(eigrp_result_t result)
 	return result == EIGRP_RESULT_SUCCESS;
 }
 
-static bool eigrp_redist_vecmetric_usable(
-	const eigrp_rib_route_t *route)
+static bool eigrp_redist_vecmetric_usable(const eigrp_rib_route_t *route)
 {
 	return route && route->redist.vecmetric.bandwidth != 0
 	       && route->redist.vecmetric.delay != 0;
 }
 
 static eigrp_redist_metric_origin_t eigrp_redist_metric_select(
-	const eigrp_af_config_t *af,
-	const eigrp_redist_config_t *config,
+	const eigrp_af_config_t *af, const eigrp_redist_config_t *config,
 	const eigrp_rib_route_t *route, eigrp_metrics_t *metric)
 {
 	eigrp_metric_values_t values;
@@ -173,15 +171,19 @@ typedef struct eigrp_redist_message_args {
 } eigrp_redist_message_args_t;
 
 static eigrp_result_t eigrp_redist_message_process(eigrp_instance_t *eigrp,
-	void *arg);
+						   void *arg);
 
-eigrp_result_t eigrp_redist_add(
-	eigrp_instance_context_t *context, const eigrp_redist_source_t *source,
-	const eigrp_metric_values_t *metric, const char *route_map)
+eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
+				const eigrp_redist_source_t *source,
+				const eigrp_metric_values_t *metric,
+				const char *route_map)
 {
 	eigrp_redist_message_args_t message = {
-		.type = EIGRP_REDIST_MESSAGE_ADD, .context = context,
-		.source = source, .metric = metric, .route_map = route_map,
+		.type = EIGRP_REDIST_MESSAGE_ADD,
+		.context = context,
+		.source = source,
+		.metric = metric,
+		.route_map = route_map,
 	};
 	eigrp_redist_config_t *config = NULL;
 	eigrp_redist_config_t *new_config = NULL;
@@ -193,7 +195,8 @@ eigrp_result_t eigrp_redist_add(
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_redist_message_process, &message);
+						   eigrp_redist_message_process,
+						   &message);
 
 	result = eigrp_redist_validate(context, source, metric, route_map);
 	if (result != EIGRP_RESULT_SUCCESS)
@@ -235,8 +238,8 @@ eigrp_result_t eigrp_redist_add(
 	}
 
 	result = context->runtime
-		? eigrp_rib_redistribute_add(context->runtime, source)
-		: EIGRP_RESULT_SUCCESS;
+			 ? eigrp_rib_redistribute_add(context->runtime, source)
+			 : EIGRP_RESULT_SUCCESS;
 	if (!eigrp_redist_runtime_result_committable(result)) {
 		if (new_config) {
 			context->config->redistributions = new_config->next;
@@ -257,17 +260,19 @@ eigrp_result_t eigrp_redist_add(
 	return result;
 }
 
-eigrp_result_t eigrp_redist_remove(
-	eigrp_instance_context_t *context, const eigrp_redist_source_t *source)
+eigrp_result_t eigrp_redist_remove(eigrp_instance_context_t *context,
+				   const eigrp_redist_source_t *source)
 {
 	eigrp_redist_message_args_t message = {
-		.type = EIGRP_REDIST_MESSAGE_REMOVE, .context = context,
+		.type = EIGRP_REDIST_MESSAGE_REMOVE,
+		.context = context,
 		.source = source,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_redist_message_process, &message);
+						   eigrp_redist_message_process,
+						   &message);
 	eigrp_redist_config_t **cursor = NULL;
 	eigrp_redist_config_t *config = NULL;
 	eigrp_result_t result = EIGRP_RESULT_NOT_FOUND;
@@ -280,7 +285,8 @@ eigrp_result_t eigrp_redist_remove(
 	if (context->config) {
 		for (cursor = &context->config->redistributions; *cursor;
 		     cursor = &(*cursor)->next) {
-			if (eigrp_redist_source_match(&(*cursor)->source, source)) {
+			if (eigrp_redist_source_match(&(*cursor)->source,
+						      source)) {
 				config = *cursor;
 				break;
 			}
@@ -291,12 +297,14 @@ eigrp_result_t eigrp_redist_remove(
 
 	if (context->runtime) {
 		eigrp_result_t withdraw_result =
-			eigrp_topology_redistributed_source_remove(context->runtime, source);
+			eigrp_topology_redistributed_source_remove(
+				context->runtime, source);
 
 		if (withdraw_result != EIGRP_RESULT_SUCCESS
 		    && withdraw_result != EIGRP_RESULT_NOT_FOUND)
 			return withdraw_result;
-		result = eigrp_rib_redistribute_remove(context->runtime, source);
+		result =
+			eigrp_rib_redistribute_remove(context->runtime, source);
 		if (result != EIGRP_RESULT_SUCCESS
 		    && result != EIGRP_RESULT_NOT_FOUND)
 			return result;
@@ -335,8 +343,9 @@ static void eigrp_redist_limit_timers_cancel(eigrp_instance_t *runtime)
 }
 
 static void eigrp_redist_limit_timer_arm(eigrp_instance_t *runtime,
-	eigrp_timer_event_t **timer, eigrp_event_callback_t callback,
-	uint64_t deadline)
+					 eigrp_timer_event_t **timer,
+					 eigrp_event_callback_t callback,
+					 uint64_t deadline)
 {
 	uint64_t now = eigrp_sys_monotime_msec();
 	uint64_t delta = deadline > now ? deadline - now : 1;
@@ -346,11 +355,10 @@ static void eigrp_redist_limit_timer_arm(eigrp_instance_t *runtime,
 }
 
 static uint32_t eigrp_redist_limit_decay(uint32_t score, uint64_t elapsed,
-	uint64_t half_life)
+					 uint64_t half_life)
 {
-	static const uint32_t factors[8] = {
-		46341U, 55109U, 60097U, 62758U, 64132U, 64830U, 65182U, 65359U
-	};
+	static const uint32_t factors[8] = {46341U, 55109U, 60097U, 62758U,
+					    64132U, 64830U, 65182U, 65359U};
 	uint32_t fraction;
 	unsigned i;
 	if (!score || !elapsed || !half_life)
@@ -361,7 +369,8 @@ static uint32_t eigrp_redist_limit_decay(uint32_t score, uint64_t elapsed,
 	fraction = (uint32_t)(((elapsed % half_life) * 256U) / half_life);
 	for (i = 0; i < 8; ++i)
 		if (fraction & (128U >> i))
-			score = (uint32_t)(((uint64_t)score * factors[i]) >> 16);
+			score = (uint32_t)(((uint64_t)score * factors[i])
+					   >> 16);
 	return score;
 }
 
@@ -372,7 +381,8 @@ void eigrp_redist_routes_withdraw(eigrp_instance_t *runtime)
 	if (!af)
 		return;
 	for (cfg = af->redistributions; cfg; cfg = cfg->next)
-		(void)eigrp_topology_redistributed_source_remove(runtime, &cfg->source);
+		(void)eigrp_topology_redistributed_source_remove(runtime,
+								 &cfg->source);
 }
 
 void eigrp_redist_routes_replay(eigrp_instance_t *runtime)
@@ -391,7 +401,7 @@ void eigrp_redist_routes_replay(eigrp_instance_t *runtime)
 }
 
 static void eigrp_redist_limit_release(eigrp_instance_t *runtime,
-	bool reset_history)
+				       bool reset_history)
 {
 	if (!runtime)
 		return;
@@ -409,12 +419,13 @@ void eigrp_redist_limit_restart_expired(void *arg)
 {
 	eigrp_instance_t *runtime = arg;
 	uint64_t now;
-	if (!runtime || runtime->redist_limit_state != 1 ||
-	    !runtime->redist_limit_restart_due_msec)
+	if (!runtime || runtime->redist_limit_state != 1
+	    || !runtime->redist_limit_restart_due_msec)
 		return;
 	now = eigrp_sys_monotime_msec();
 	if (now < runtime->redist_limit_restart_due_msec) {
-		eigrp_redist_limit_timer_arm(runtime, &runtime->t_redist_limit_restart,
+		eigrp_redist_limit_timer_arm(
+			runtime, &runtime->t_redist_limit_restart,
 			eigrp_redist_limit_restart_expired,
 			runtime->redist_limit_restart_due_msec);
 		return;
@@ -433,7 +444,8 @@ static void eigrp_redist_limit_reset_expired(void *arg)
 		return;
 	now = eigrp_sys_monotime_msec();
 	if (now < runtime->redist_limit_reset_due_msec) {
-		eigrp_redist_limit_timer_arm(runtime, &runtime->t_redist_limit_reset,
+		eigrp_redist_limit_timer_arm(
+			runtime, &runtime->t_redist_limit_reset,
 			eigrp_redist_limit_reset_expired,
 			runtime->redist_limit_reset_due_msec);
 		return;
@@ -448,7 +460,7 @@ static void eigrp_redist_limit_reset_expired(void *arg)
 }
 
 static void eigrp_redist_limit_exceeded(eigrp_instance_t *runtime,
-	const eigrp_prefix_limit_t *limit)
+					const eigrp_prefix_limit_t *limit)
 {
 	eigrp_af_config_t *af = eigrp_af_config_runtime_read(runtime);
 	uint64_t now, base, interval, half_life;
@@ -456,30 +468,46 @@ static void eigrp_redist_limit_exceeded(eigrp_instance_t *runtime,
 	bool dampened;
 	if (!runtime || !limit || runtime->redist_limit_state)
 		return;
-	restart_minutes = limit->restart_minutes ? limit->restart_minutes :
-		(af && af->topology_maximum_prefix_configured &&
-		 af->topology_maximum_prefix.restart_minutes ?
-		 af->topology_maximum_prefix.restart_minutes : REDIST_LIMIT_RESTART_DEFAULT);
-	reset_minutes = limit->reset_time_minutes ? limit->reset_time_minutes :
-		(af && af->topology_maximum_prefix_configured &&
-		 af->topology_maximum_prefix.reset_time_minutes ?
-		 af->topology_maximum_prefix.reset_time_minutes : REDIST_LIMIT_RESET_DEFAULT);
-	count = limit->restart_count ? limit->restart_count :
-		(af && af->topology_maximum_prefix_configured &&
-		 af->topology_maximum_prefix.restart_count ?
-		 af->topology_maximum_prefix.restart_count : REDIST_LIMIT_COUNT_DEFAULT);
-	dampened = limit->dampened || (af && af->topology_maximum_prefix_configured &&
-		 af->topology_maximum_prefix.dampened);
+	restart_minutes =
+		limit->restart_minutes
+			? limit->restart_minutes
+			: (af && af->topology_maximum_prefix_configured
+					   && af->topology_maximum_prefix
+						      .restart_minutes
+				   ? af->topology_maximum_prefix.restart_minutes
+				   : REDIST_LIMIT_RESTART_DEFAULT);
+	reset_minutes =
+		limit->reset_time_minutes
+			? limit->reset_time_minutes
+			: (af && af->topology_maximum_prefix_configured
+					   && af->topology_maximum_prefix
+						      .reset_time_minutes
+				   ? af->topology_maximum_prefix
+					     .reset_time_minutes
+				   : REDIST_LIMIT_RESET_DEFAULT);
+	count = limit->restart_count
+			? limit->restart_count
+			: (af && af->topology_maximum_prefix_configured
+					   && af->topology_maximum_prefix
+						      .restart_count
+				   ? af->topology_maximum_prefix.restart_count
+				   : REDIST_LIMIT_COUNT_DEFAULT);
+	dampened = limit->dampened
+		   || (af && af->topology_maximum_prefix_configured
+		       && af->topology_maximum_prefix.dampened);
 	now = eigrp_sys_monotime_msec();
 	base = (uint64_t)restart_minutes * REDIST_LIMIT_MINUTE_MSEC;
 	half_life = base + base / 2U;
 	if (dampened) {
-		if (runtime->redist_limit_decay_msec &&
-		    now > runtime->redist_limit_decay_msec)
-			runtime->redist_limit_penalty_q16 = eigrp_redist_limit_decay(
-				runtime->redist_limit_penalty_q16,
-				now - runtime->redist_limit_decay_msec, half_life);
-		if (runtime->redist_limit_penalty_q16 > UINT32_MAX - REDIST_LIMIT_Q16)
+		if (runtime->redist_limit_decay_msec
+		    && now > runtime->redist_limit_decay_msec)
+			runtime->redist_limit_penalty_q16 =
+				eigrp_redist_limit_decay(
+					runtime->redist_limit_penalty_q16,
+					now - runtime->redist_limit_decay_msec,
+					half_life);
+		if (runtime->redist_limit_penalty_q16
+		    > UINT32_MAX - REDIST_LIMIT_Q16)
 			runtime->redist_limit_penalty_q16 = UINT32_MAX;
 		else
 			runtime->redist_limit_penalty_q16 += REDIST_LIMIT_Q16;
@@ -497,18 +525,20 @@ static void eigrp_redist_limit_exceeded(eigrp_instance_t *runtime,
 	eigrp_redist_routes_withdraw(runtime);
 	if (runtime->redist_limit_state == 2)
 		return;
-	interval = dampened ? (base * runtime->redist_limit_penalty_q16) /
-		REDIST_LIMIT_Q16 : base;
+	interval = dampened ? (base * runtime->redist_limit_penalty_q16)
+				      / REDIST_LIMIT_Q16
+			    : base;
 	runtime->redist_limit_restart_due_msec = now + interval;
-	runtime->redist_limit_reset_due_msec = now +
-		(uint64_t)reset_minutes * REDIST_LIMIT_MINUTE_MSEC;
+	runtime->redist_limit_reset_due_msec =
+		now + (uint64_t)reset_minutes * REDIST_LIMIT_MINUTE_MSEC;
 	eigrp_redist_limit_timer_arm(runtime, &runtime->t_redist_limit_restart,
-		eigrp_redist_limit_restart_expired,
-		runtime->redist_limit_restart_due_msec);
+				     eigrp_redist_limit_restart_expired,
+				     runtime->redist_limit_restart_due_msec);
 	eigrp_redist_limit_timer_arm(runtime, &runtime->t_redist_limit_reset,
-		eigrp_redist_limit_reset_expired,
-		runtime->redist_limit_reset_due_msec);
-	if (!runtime->t_redist_limit_restart || !runtime->t_redist_limit_reset) {
+				     eigrp_redist_limit_reset_expired,
+				     runtime->redist_limit_reset_due_msec);
+	if (!runtime->t_redist_limit_restart
+	    || !runtime->t_redist_limit_reset) {
 		eigrp_redist_limit_timers_cancel(runtime);
 		runtime->redist_limit_state = 2;
 	}
@@ -523,9 +553,10 @@ eigrp_result_t eigrp_redist_limit_clear(eigrp_instance_t *runtime)
 	if (runtime->redist_limit_state) {
 		eigrp_redist_limit_release(runtime, true);
 	} else {
-		/* Automatic restart restores admission but leaves the reset-window
-		 * history intact. A manual clear or changed policy must erase it
-		 * without replaying sources that are already active. */
+		/* Automatic restart restores admission but leaves the
+		 * reset-window history intact. A manual clear or changed policy
+		 * must erase it without replaying sources that are already
+		 * active. */
 		eigrp_redist_limit_timers_cancel(runtime);
 		runtime->redist_limit_restart_cnt = 0;
 		runtime->redist_limit_penalty_q16 = 0;
@@ -540,7 +571,7 @@ static uint32_t eigrp_redist_prefix_count(eigrp_instance_t *runtime)
 }
 
 bool eigrp_redist_prefix_admit(eigrp_instance_t *runtime,
-	const eigrp_rib_route_t *route)
+			       const eigrp_rib_route_t *route)
 {
 	eigrp_af_config_t *af;
 	eigrp_prefix_descriptor_t *prefix;
@@ -554,20 +585,25 @@ bool eigrp_redist_prefix_admit(eigrp_instance_t *runtime,
 	if (!af || !af->redistribute_policy
 	    || !af->redistribute_policy->maximum_prefix_configured)
 		return true;
-	prefix = eigrp_topology_table_lookup(runtime->topology_table, &route->prefix);
+	prefix = eigrp_topology_table_lookup(runtime->topology_table,
+					     &route->prefix);
 	if (eigrp_topology_redist_present(runtime, prefix))
 		return true;
 	limit = &af->redistribute_policy->maximum_prefix;
 	{
 		uint32_t count = eigrp_redist_prefix_count(runtime);
 		if (eigrp_prefix_limit_threshold_crossed(limit, count))
-			eigrp_log(EIGRP_LOG_WARNING,
-				  "EIGRP redistribution maximum-prefix threshold reached (%u/%u)",
-				  count + 1U, limit->maximum);
+			eigrp_log(
+				EIGRP_LOG_WARNING,
+				"EIGRP redistribution maximum-prefix threshold reached (%u/%u)",
+				count + 1U, limit->maximum);
 		if (!limit->warning_only && count >= limit->maximum) {
 			eigrp_redist_limit_exceeded(runtime, limit);
-			(void)eigrp_eventlog_msg_add(runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
-				&route->prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_REDISTRIBUTION,
+			(void)eigrp_eventlog_msg_add(
+				runtime,
+				EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
+				&route->prefix,
+				EIGRP_EVENTLOG_PREFIX_LIMIT_REDISTRIBUTION,
 				count + 1U, limit->maximum, 0);
 			return false;
 		}
@@ -581,24 +617,28 @@ enum {
 };
 
 static void eigrp_redist_event_add(eigrp_instance_t *runtime, uint16_t opcode,
-	const eigrp_rib_route_t *route, eventmsg_arg_t arg3)
+				   const eigrp_rib_route_t *route,
+				   eventmsg_arg_t arg3)
 {
 	if (!runtime || !route)
 		return;
-	(void)eigrp_eventlog_msg_add(runtime, opcode, &route->prefix,
+	(void)eigrp_eventlog_msg_add(
+		runtime, opcode, &route->prefix,
 		(eventmsg_arg_t)route->redist.source.protocol,
 		(eventmsg_arg_t)route->redist.source.route_instance, arg3, 0);
 }
 
-static eigrp_result_t eigrp_redist_source_route_receive(
-	eigrp_instance_t *runtime, const eigrp_rib_route_t *route,
-	bool importing)
+static eigrp_result_t
+eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
+				  const eigrp_rib_route_t *route,
+				  bool importing)
 {
 	eigrp_af_config_t *af;
 	eigrp_redist_config_t *config;
 	eigrp_metrics_t metric;
 
-	if (!runtime || !route || !eigrp_redist_source_valid(&route->redist.source))
+	if (!runtime || !route
+	    || !eigrp_redist_source_valid(&route->redist.source))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	af = eigrp_af_config_runtime_read(runtime);
 	if (!af)
@@ -608,82 +648,95 @@ static eigrp_result_t eigrp_redist_source_route_receive(
 		return EIGRP_RESULT_SUCCESS;
 
 	if (!importing) {
-		eigrp_redist_event_add(runtime,
-			EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_WITHDRAW, route, 0);
-		return eigrp_topology_redistributed_route_remove(runtime, route);
+		eigrp_redist_event_add(
+			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_WITHDRAW,
+			route, 0);
+		return eigrp_topology_redistributed_route_remove(runtime,
+								 route);
 	}
 
 	if (importing && config->route_map) {
 		eigrp_filter_decision_t decision = EIGRP_FILTER_DECISION_DENY;
-		eigrp_result_t policy_result = eigrp_sys_redistribute_route_map_evaluate(
-			runtime, config->route_map, route, &decision);
+		eigrp_result_t policy_result =
+			eigrp_sys_redistribute_route_map_evaluate(
+				runtime, config->route_map, route, &decision);
 
-		/* A configured-but-missing route-map and a no-match both fail closed.
-		 * If this prefix had previously been admitted, withdraw it now. */
+		/* A configured-but-missing route-map and a no-match both fail
+		 * closed. If this prefix had previously been admitted, withdraw
+		 * it now. */
 		if (policy_result != EIGRP_RESULT_SUCCESS
 		    || decision == EIGRP_FILTER_DECISION_DENY) {
-			eigrp_redist_event_add(runtime,
-				EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_FILTERED, route, 0);
-			return eigrp_topology_redistributed_route_remove(runtime, route);
+			eigrp_redist_event_add(
+				runtime,
+				EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_FILTERED,
+				route, 0);
+			return eigrp_topology_redistributed_route_remove(
+				runtime, route);
 		}
 	}
 	if (eigrp_redist_metric_select(af, config, route, &metric)
 	    == EIGRP_REDISTRIBUTE_METRIC_NONE) {
-		eigrp_redist_event_add(runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
+		eigrp_redist_event_add(
+			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
 			route, EIGRP_REDIST_REJECT_NO_METRIC);
 		return EIGRP_RESULT_SUCCESS;
 	}
 	if (!eigrp_redist_prefix_admit(runtime, route)
 	    || !eigrp_topology_prefix_admit(runtime, &route->prefix)) {
-		eigrp_redist_event_add(runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
+		eigrp_redist_event_add(
+			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
 			route, EIGRP_REDIST_REJECT_PREFIX_LIMIT);
 		return EIGRP_RESULT_CONFLICT;
 	}
-	eigrp_redist_event_add(runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_UPDATE,
-		route, (eventmsg_arg_t)metric.delay);
-	return eigrp_topology_redistributed_route_update(runtime, route, &metric);
+	eigrp_redist_event_add(runtime,
+			       EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_UPDATE, route,
+			       (eventmsg_arg_t)metric.delay);
+	return eigrp_topology_redistributed_route_update(runtime, route,
+							 &metric);
 }
 
-eigrp_result_t eigrp_rib_event_process(
-	eigrp_instance_t *runtime, const eigrp_rib_event_t *event)
+eigrp_result_t eigrp_rib_event_process(eigrp_instance_t *runtime,
+				       const eigrp_rib_event_t *event)
 {
 	uint16_t opcode;
 
 	if (!runtime || !event)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	opcode = event->type == EIGRP_RIB_EVENT_DELETE
-		 ? EIGRP_EVENTLOG_OPCODE_RIB_ROUTE_DELETE
-		 : EIGRP_EVENTLOG_OPCODE_RIB_ROUTE_UPDATE;
+			 ? EIGRP_EVENTLOG_OPCODE_RIB_ROUTE_DELETE
+			 : EIGRP_EVENTLOG_OPCODE_RIB_ROUTE_UPDATE;
 	eigrp_redist_event_add(runtime, opcode, &event->route, 0);
-	return eigrp_redist_source_route_receive(runtime, &event->route,
-		event->type == EIGRP_RIB_EVENT_UPDATE);
+	return eigrp_redist_source_route_receive(
+		runtime, &event->route, event->type == EIGRP_RIB_EVENT_UPDATE);
 }
 
 /* Zebra uses ADD for both first appearance and changed route snapshots. */
-eigrp_result_t eigrp_rib_redist_add(
-	eigrp_instance_t *runtime, const eigrp_rib_route_t *route)
+eigrp_result_t eigrp_rib_redist_add(eigrp_instance_t *runtime,
+				    const eigrp_rib_route_t *route)
 {
 	eigrp_rib_event_t event;
 
 	if (!runtime || !route)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (eigrp_instance_thread_dispatch_needed(runtime))
-		return eigrp_instance_rib_event_enqueue(runtime, EIGRP_RIB_EVENT_UPDATE, route);
+		return eigrp_instance_rib_event_enqueue(
+			runtime, EIGRP_RIB_EVENT_UPDATE, route);
 	memset(&event, 0, sizeof(event));
 	event.type = EIGRP_RIB_EVENT_UPDATE;
 	event.route = *route;
 	return eigrp_rib_event_process(runtime, &event);
 }
 
-eigrp_result_t eigrp_rib_redist_del(
-	eigrp_instance_t *runtime, const eigrp_rib_route_t *route)
+eigrp_result_t eigrp_rib_redist_del(eigrp_instance_t *runtime,
+				    const eigrp_rib_route_t *route)
 {
 	eigrp_rib_event_t event;
 
 	if (!runtime || !route)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (eigrp_instance_thread_dispatch_needed(runtime))
-		return eigrp_instance_rib_event_enqueue(runtime, EIGRP_RIB_EVENT_DELETE, route);
+		return eigrp_instance_rib_event_enqueue(
+			runtime, EIGRP_RIB_EVENT_DELETE, route);
 	memset(&event, 0, sizeof(event));
 	event.type = EIGRP_RIB_EVENT_DELETE;
 	event.route = *route;
@@ -715,43 +768,48 @@ void eigrp_redist_policy_update_all(void)
 
 	if (!eigrp_process.virt_router)
 		return;
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)) {
-	for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, runtime)) {
-		if (!runtime)
-			continue;
-		af = eigrp_af_config_runtime_read(runtime);
-		if (!af)
-			continue;
-		for (config = af->redistributions; config; config = config->next) {
-			if (!config->route_map)
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router)) {
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
+					   runtime)) {
+			if (!runtime)
 				continue;
-			/* Re-subscription makes Zebra replay the current source RIB so
-			 * route-map edits are applied to already-existing IPv4/IPv6
-			 * candidates, not only to future route events. */
-			(void)eigrp_rib_redistribute_remove(runtime, &config->source);
-			(void)eigrp_rib_redistribute_add(runtime, &config->source);
+			af = eigrp_af_config_runtime_read(runtime);
+			if (!af)
+				continue;
+			for (config = af->redistributions; config;
+			     config = config->next) {
+				if (!config->route_map)
+					continue;
+				/* Re-subscription makes Zebra replay the
+				 * current source RIB so route-map edits are
+				 * applied to already-existing IPv4/IPv6
+				 * candidates, not only to future route events.
+				 */
+				(void)eigrp_rib_redistribute_remove(
+					runtime, &config->source);
+				(void)eigrp_rib_redistribute_add(
+					runtime, &config->source);
+			}
 		}
-	}
 	}
 }
 
 
-
 /*
  * Syntax:
- *   Named: `redistribute maximum-prefix LIMIT [...]` / `no redistribute maximum-prefix`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
+ *   Named: `redistribute maximum-prefix LIMIT [...]` / `no redistribute
+ * maximum-prefix` Supported: Named Placement: Named: topology base mode
  * Description:
  * Sets or removes the redistribution prefix-limit configuration.
- * Retained configuration stays here while supported runtime limit semantics are enforced.
+ * Retained configuration stays here while supported runtime limit semantics are
+ * enforced.
  */
 /* Compare configured values, not struct bytes (which may include padding).
  * Every limit parameter participates in the policy; an unchanged replay is
  * not an operator-initiated recovery from suspension or lockout. */
 static bool eigrp_redist_limit_equal(const eigrp_prefix_limit_t *a,
-	const eigrp_prefix_limit_t *b)
+				     const eigrp_prefix_limit_t *b)
 {
 	return a->maximum == b->maximum && a->threshold == b->threshold
 	       && a->warning_only == b->warning_only
@@ -761,26 +819,36 @@ static bool eigrp_redist_limit_equal(const eigrp_prefix_limit_t *a,
 	       && a->restart_count == b->restart_count;
 }
 
-eigrp_result_t eigrp_redist_max_prefix_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_prefix_limit_t *limit)
+eigrp_result_t eigrp_redist_max_prefix_update(eigrp_operation_t operation,
+					      eigrp_instance_context_t *context,
+					      const eigrp_prefix_limit_t *limit)
 {
 	eigrp_redist_message_args_t message = {
-		.type = EIGRP_REDIST_MESSAGE_MAX_PREFIX, .operation = operation,
-		.context = context, .limit = limit,
+		.type = EIGRP_REDIST_MESSAGE_MAX_PREFIX,
+		.operation = operation,
+		.context = context,
+		.limit = limit,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_redist_message_process, &message);
+						   eigrp_redist_message_process,
+						   &message);
 	if (operation == EIGRP_RESET) {
 		bool changed = false;
 
 		if (!context || (!context->config && !context->runtime))
 			return EIGRP_RESULT_NOT_FOUND;
 		if (context->config && context->config->redistribute_policy) {
-			changed = context->config->redistribute_policy->maximum_prefix_configured;
-			context->config->redistribute_policy->maximum_prefix_configured = false;
-			memset(&context->config->redistribute_policy->maximum_prefix, 0,
-			       sizeof(context->config->redistribute_policy->maximum_prefix));
+			changed = context->config->redistribute_policy
+					  ->maximum_prefix_configured;
+			context->config->redistribute_policy
+				->maximum_prefix_configured = false;
+			memset(&context->config->redistribute_policy
+					->maximum_prefix,
+			       0,
+			       sizeof(context->config->redistribute_policy
+					      ->maximum_prefix));
 		}
 		if (changed && context->runtime)
 			(void)eigrp_redist_limit_clear(context->runtime);
@@ -796,7 +864,8 @@ eigrp_result_t eigrp_redist_max_prefix_update(eigrp_operation_t operation, eigrp
 		return EIGRP_RESULT_NOT_FOUND;
 	if (context->config) {
 		bool changed;
-		eigrp_redist_policy_config_t *policy = context->config->redistribute_policy;
+		eigrp_redist_policy_config_t *policy =
+			context->config->redistribute_policy;
 
 		if (!policy) {
 			policy = calloc(1, sizeof(*policy));
@@ -805,7 +874,8 @@ eigrp_result_t eigrp_redist_max_prefix_update(eigrp_operation_t operation, eigrp
 			context->config->redistribute_policy = policy;
 		}
 		changed = !policy->maximum_prefix_configured
-			  || !eigrp_redist_limit_equal(&policy->maximum_prefix, limit);
+			  || !eigrp_redist_limit_equal(&policy->maximum_prefix,
+						       limit);
 		policy->maximum_prefix = *limit;
 		policy->maximum_prefix_configured = true;
 		if (changed && context->runtime)
@@ -816,18 +886,17 @@ eigrp_result_t eigrp_redist_max_prefix_update(eigrp_operation_t operation, eigrp
 
 /*
  * Syntax:
- *   Named: `redistribute maximum-prefix LIMIT [...]` / `no redistribute maximum-prefix`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
+ *   Named: `redistribute maximum-prefix LIMIT [...]` / `no redistribute
+ * maximum-prefix` Supported: Named Placement: Named: topology base mode
  * Description:
  * Sets or removes the redistribution prefix-limit configuration.
- * Retained configuration stays here while supported runtime limit semantics are enforced.
+ * Retained configuration stays here while supported runtime limit semantics are
+ * enforced.
  */
 
 
 static eigrp_result_t eigrp_redist_message_process(eigrp_instance_t *eigrp,
-	void *arg)
+						   void *arg)
 {
 	eigrp_redist_message_args_t *message = arg;
 
@@ -835,12 +904,12 @@ static eigrp_result_t eigrp_redist_message_process(eigrp_instance_t *eigrp,
 	switch (message->type) {
 	case EIGRP_REDIST_MESSAGE_ADD:
 		return eigrp_redist_add(message->context, message->source,
-			message->metric, message->route_map);
+					message->metric, message->route_map);
 	case EIGRP_REDIST_MESSAGE_REMOVE:
 		return eigrp_redist_remove(message->context, message->source);
 	case EIGRP_REDIST_MESSAGE_MAX_PREFIX:
-		return eigrp_redist_max_prefix_update(message->operation,
-			message->context, message->limit);
+		return eigrp_redist_max_prefix_update(
+			message->operation, message->context, message->limit);
 	}
 	return EIGRP_RESULT_INVALID_ARGUMENT;
 }

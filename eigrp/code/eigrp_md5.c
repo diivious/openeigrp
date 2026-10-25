@@ -52,34 +52,34 @@
 		(a) = (b) + (a);                                               \
 	}
 
-#define Sa	 7
-#define Sb	12
-#define Sc	17
-#define Sd	22
+#define Sa 7
+#define Sb 12
+#define Sc 17
+#define Sd 22
 
-#define Se	 5
-#define Sf	 9
-#define Sg	14
-#define Sh	20
+#define Se 5
+#define Sf 9
+#define Sg 14
+#define Sh 20
 
-#define Si	 4
-#define Sj	11
-#define Sk	16
-#define Sl	23
+#define Si 4
+#define Sj 11
+#define Sk 16
+#define Sl 23
 
-#define Sm	 6
-#define Sn	10
-#define So	15
-#define Sp	21
+#define Sm 6
+#define Sn 10
+#define So 15
+#define Sp 21
 
-#define MD5_A0	0x67452301
-#define MD5_B0	0xefcdab89
-#define MD5_C0	0x98badcfe
-#define MD5_D0	0x10325476
+#define MD5_A0 0x67452301
+#define MD5_B0 0xefcdab89
+#define MD5_C0 0x98badcfe
+#define MD5_D0 0x10325476
 
 /* Integer part of 4294967296 times abs(sin(i)), where i is in radians. */
 static const uint32_t T[65] = {
-	0,	  0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf,
+	0,	    0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf,
 	0x4787c62a, 0xa8304613, 0xfd469501, 0x698098d8, 0x8b44f7af, 0xffff5bb1,
 	0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
 
@@ -115,7 +115,8 @@ void eigrp_md5_init(eigrp_md5_ctx_t *ctxt)
 	memset(ctxt->md5_buf, 0, sizeof(ctxt->md5_buf));
 }
 
-void eigrp_md5_update(eigrp_md5_ctx_t *ctxt, const void *vinput, unsigned int len)
+void eigrp_md5_update(eigrp_md5_ctx_t *ctxt, const void *vinput,
+		      unsigned int len)
 {
 	unsigned int gap, i;
 	const uint8_t *input = vinput;
@@ -361,15 +362,15 @@ void eigrp_md5_final(uint8_t *digest, eigrp_md5_ctx_t *ctxt)
 }
 
 void eigrp_hmac_md5(unsigned char *text, int text_len, unsigned char *key,
-	      int key_len, uint8_t *digest)
+		    int key_len, uint8_t *digest)
 {
 	eigrp_md5_ctx_t context;
 	unsigned char k_ipad[65]; /* inner padding -
-				  * key XORd with ipad
-				  */
+				   * key XORd with ipad
+				   */
 	unsigned char k_opad[65]; /* outer padding -
-				  * key XORd with opad
-				  */
+				   * key XORd with opad
+				   */
 	unsigned char tk[16];
 	int i;
 	/* if key is longer than 64 bytes reset it to key=MD5(key) */
@@ -410,19 +411,19 @@ void eigrp_hmac_md5(unsigned char *text, int text_len, unsigned char *key,
 	/*
 	 * perform inner MD5
 	 */
-	eigrp_md5_init(&context);		       /* init context for 1st
-						* pass */
-	eigrp_md5_update(&context, k_ipad, 64);       /* start with inner pad */
-	eigrp_md5_update(&context, text, text_len);   /* then text of datagram */
-	eigrp_md5_final(digest, &context); /* finish up 1st pass */
+	eigrp_md5_init(&context);		    /* init context for 1st
+						     * pass */
+	eigrp_md5_update(&context, k_ipad, 64);	    /* start with inner pad */
+	eigrp_md5_update(&context, text, text_len); /* then text of datagram */
+	eigrp_md5_final(digest, &context);	    /* finish up 1st pass */
 	/*
 	 * perform outer MD5
 	 */
-	eigrp_md5_init(&context);		       /* init context for 2nd
-						* pass */
-	eigrp_md5_update(&context, k_opad, 64);       /* start with outer pad */
-	eigrp_md5_update(&context, digest, 16);       /* then results of 1st
-						* hash */
-	eigrp_md5_final(digest, &context); /* finish up 2nd pass */
+	eigrp_md5_init(&context);		/* init context for 2nd
+						 * pass */
+	eigrp_md5_update(&context, k_opad, 64); /* start with outer pad */
+	eigrp_md5_update(&context, digest, 16); /* then results of 1st
+						 * hash */
+	eigrp_md5_final(digest, &context);	/* finish up 2nd pass */
 	eigrp_memory_wipe(&context, sizeof(context));
 }

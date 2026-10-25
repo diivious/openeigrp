@@ -48,8 +48,9 @@ static void eigrp_process_packet_input_free(eigrp_packet_input_t *input)
 	free(input);
 }
 
-static eigrp_instance_t *eigrp_process_packet_target_lookup_locked(
-	eigrp_vrid_t vrid, eigrp_afi_t afi, uint16_t asn, eigrp_vrf_id_t vrf_id)
+static eigrp_instance_t *
+eigrp_process_packet_target_lookup_locked(eigrp_vrid_t vrid, eigrp_afi_t afi,
+					  uint16_t asn, eigrp_vrf_id_t vrf_id)
 {
 	eigrp_virt_router_t *virt_router;
 	eigrp_instance_t *instance;
@@ -59,20 +60,25 @@ static eigrp_instance_t *eigrp_process_packet_target_lookup_locked(
 	if (!eigrp_process.virt_router)
 		return NULL;
 
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)) {
-		if (!virt_router || virt_router->shutdown || virt_router->vrid != vrid)
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router)) {
+		if (!virt_router || virt_router->shutdown
+		    || virt_router->vrid != vrid)
 			continue;
-		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, instance)) {
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
+					   instance)) {
 			if (!instance || instance->shutdown)
 				continue;
-			if (instance->af_vectors.afi != afi || instance->AS != asn
+			if (instance->af_vectors.afi != afi
+			    || instance->AS != asn
 			    || instance->vrf_id != vrf_id)
 				continue;
 			if (match) {
-				eigrp_log(EIGRP_LOG_ERROR,
+				eigrp_log(
+					EIGRP_LOG_ERROR,
 					"packet demux identity is ambiguous: vrid %u afi %u as %u vrf %u",
-					(unsigned)vrid, (unsigned)afi, (unsigned)asn,
-					(unsigned)vrf_id);
+					(unsigned)vrid, (unsigned)afi,
+					(unsigned)asn, (unsigned)vrf_id);
 				return NULL;
 			}
 			match = instance;
@@ -82,7 +88,7 @@ static eigrp_instance_t *eigrp_process_packet_target_lookup_locked(
 }
 
 static bool eigrp_process_packet_validate(const eigrp_packet_input_t *input,
-	const eigrp_header_t **header)
+					  const eigrp_header_t **header)
 {
 	const uint8_t *data;
 	size_t endp;
@@ -140,7 +146,8 @@ static void *eigrp_packet_thread(void *arg)
 
 		pthread_mutex_lock(&process->receive_lock);
 		while (process->receive_running && !process->receive_head)
-			pthread_cond_wait(&process->receive_cond, &process->receive_lock);
+			pthread_cond_wait(&process->receive_cond,
+					  &process->receive_lock);
 		if (!process->receive_running && !process->receive_head) {
 			pthread_mutex_unlock(&process->receive_lock);
 			break;
@@ -208,7 +215,7 @@ static void eigrp_process_receive_stop(void)
 }
 
 const char *eigrp_message_lookup(const eigrp_message_t *messages, int value,
-                                 const char *fallback)
+				 const char *fallback)
 {
 	const eigrp_message_t *message;
 	if (!messages)
@@ -251,25 +258,28 @@ struct eigrp_router_id_select {
 	uint32_t physical;
 };
 
-static void eigrp_router_id_ipv4_candidate_read(
-	const eigrp_intf_runtime_state_t *state, void *arg)
+static void
+eigrp_router_id_ipv4_candidate_read(const eigrp_intf_runtime_state_t *state,
+				    void *arg)
 {
 	struct eigrp_router_id_select *selection = arg;
 	struct in_addr candidate;
 	char address[INET_ADDRSTRLEN] = {0};
 	uint32_t host_address;
 
-	if (!state || !selection || state->address.address.afi != EIGRP_AFI_IPV4)
+	if (!state || !selection
+	    || state->address.address.afi != EIGRP_AFI_IPV4)
 		return;
 
 	memcpy(&candidate.s_addr, state->address.address.bytes,
 	       sizeof(candidate.s_addr));
 	(void)inet_ntop(AF_INET, &candidate, address, sizeof(address));
-	eigrp_log(EIGRP_LOG_DEBUG,
-		  "EIGRP router-id auto candidate: interface %s[%u] address %s type %u operative %u secondary %u",
-		  state->interface_name ? state->interface_name : "?", state->ifindex,
-		  address[0] ? address : "?", state->type, state->operative,
-		  state->secondary);
+	eigrp_log(
+		EIGRP_LOG_DEBUG,
+		"EIGRP router-id auto candidate: interface %s[%u] address %s type %u operative %u secondary %u",
+		state->interface_name ? state->interface_name : "?",
+		state->ifindex, address[0] ? address : "?", state->type,
+		state->operative, state->secondary);
 
 	if (state->secondary || !state->operative)
 		return;
@@ -279,10 +289,10 @@ static void eigrp_router_id_ipv4_candidate_read(
 		return;
 
 	/* Cisco EIGRP router-ID selection prefers an IPv4 loopback.  Otherwise
-	 * retain the first operative physical interface in host interface order.
-	 * The selected 32-bit ID is independent of the address-family carried by
-	 * EIGRP; IPv6 EIGRP therefore does not require the IPv4 candidate itself
-	 * to belong to an IPv6 EIGRP runtime interface. */
+	 * retain the first operative physical interface in host interface
+	 * order. The selected 32-bit ID is independent of the address-family
+	 * carried by EIGRP; IPv6 EIGRP therefore does not require the IPv4
+	 * candidate itself to belong to an IPv6 EIGRP runtime interface. */
 	if (state->type == EIGRP_IFTYPE_LOOPBACK) {
 		if (!selection->loopback_ifindex
 		    || state->ifindex < selection->loopback_ifindex) {
@@ -313,17 +323,20 @@ static bool eigrp_router_id_auto_select(eigrp_instance_t *eigrp,
 	result = eigrp_sys_interface_walk(
 		eigrp, eigrp_router_id_ipv4_candidate_read, &selection);
 	if (result != EIGRP_RESULT_SUCCESS) {
-		eigrp_log(EIGRP_LOG_DEBUG,
-			  "EIGRP router-id auto selection: interface walk failed for AS(%u), result %u",
-			  eigrp->AS, (unsigned)result);
+		eigrp_log(
+			EIGRP_LOG_DEBUG,
+			"EIGRP router-id auto selection: interface walk failed for AS(%u), result %u",
+			eigrp->AS, (unsigned)result);
 		return false;
 	}
 
-	*router_id = selection.loopback ? selection.loopback : selection.physical;
+	*router_id =
+		selection.loopback ? selection.loopback : selection.physical;
 	if (!*router_id) {
-		eigrp_log(EIGRP_LOG_DEBUG,
-			  "EIGRP router-id auto selection: no eligible IPv4 address for AS(%u)",
-			  eigrp->AS);
+		eigrp_log(
+			EIGRP_LOG_DEBUG,
+			"EIGRP router-id auto selection: no eligible IPv4 address for AS(%u)",
+			eigrp->AS);
 		return false;
 	}
 
@@ -360,8 +373,8 @@ void eigrp_router_id_update(eigrp_instance_t *eigrp)
 	    && eigrp_instance_afi(eigrp) == EIGRP_AFI_IPV6) {
 		if (!eigrp->router_id_missing_event_logged) {
 			(void)eigrp_eventlog_msg_add(
-				eigrp, EIGRP_EVENTLOG_OPCODE_IPV6_NO_ROUTER_ID, NULL,
-				eigrp->AS, 0, 0, 0);
+				eigrp, EIGRP_EVENTLOG_OPCODE_IPV6_NO_ROUTER_ID,
+				NULL, eigrp->AS, 0, 0, 0);
 			eigrp->router_id_missing_event_logged = true;
 		}
 	} else {
@@ -391,8 +404,10 @@ bool eigrp_process_receive_start(void)
 	if (error != 0) {
 		eigrp_process.receive_running = false;
 		pthread_mutex_unlock(&eigrp_process.receive_lock);
-		eigrp_log(EIGRP_LOG_ERROR,
-			"unable to start EIGRP packet thread (pthread_create: %d)", error);
+		eigrp_log(
+			EIGRP_LOG_ERROR,
+			"unable to start EIGRP packet thread (pthread_create: %d)",
+			error);
 		return false;
 	}
 	eigrp_process.receive_started = true;
@@ -440,7 +455,8 @@ void eigrp_terminate(void)
 	while (eigrp_process.virt_router && eigrp_process.virt_router->count) {
 		virt_router = eigrp_list_item_data(
 			eigrp_list_first(eigrp_process.virt_router));
-		while (virt_router->af_instance && virt_router->af_instance->count) {
+		while (virt_router->af_instance
+		       && virt_router->af_instance->count) {
 			instance = eigrp_list_item_data(
 				eigrp_list_first(virt_router->af_instance));
 			eigrp_instance_delete(instance);

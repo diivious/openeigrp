@@ -34,7 +34,7 @@
 #include "eigrp_debug.h"
 #include "eigrp_metric.h"
 
-#define EIGRP_NEIGHBOR_SRTT_ALPHA_SHIFT 3U /* alpha = 1/8 */
+#define EIGRP_NEIGHBOR_SRTT_ALPHA_SHIFT 3U  /* alpha = 1/8 */
 #define EIGRP_NEIGHBOR_RTTVAR_BETA_SHIFT 2U /* beta = 1/4 */
 
 /* Count all allocated interface peers, including DOWN and PENDING.  The
@@ -52,7 +52,8 @@ bool eigrp_nbr_admit_locked(const eigrp_intf_t *ei)
 	for (EIGRP_LIST_ITERATE_RO(ei->eigrp->eiflist, node, iface)) {
 		if (!iface || !iface->nbrs)
 			continue;
-		if (iface->nbrs->count >= EIGRP_NEIGHBOR_MAX_PER_INSTANCE - total)
+		if (iface->nbrs->count
+		    >= EIGRP_NEIGHBOR_MAX_PER_INSTANCE - total)
 			return false;
 		total += iface->nbrs->count;
 	}
@@ -61,7 +62,8 @@ bool eigrp_nbr_admit_locked(const eigrp_intf_t *ei)
 
 static uint32_t eigrp_nbr_rto_calculate(uint32_t srtt_msec)
 {
-	uint64_t rto = (uint64_t)srtt_msec * EIGRP_TRANSPORT_RTO_SRTT_MULTIPLIER;
+	uint64_t rto =
+		(uint64_t)srtt_msec * EIGRP_TRANSPORT_RTO_SRTT_MULTIPLIER;
 
 	if (rto < EIGRP_TRANSPORT_RTO_MIN_MSEC)
 		return EIGRP_TRANSPORT_RTO_MIN_MSEC;
@@ -81,8 +83,7 @@ void eigrp_nbr_rtt_clear(eigrp_nbr_t *nbr)
 	nbr->rto_msec = EIGRP_TRANSPORT_RTO_INITIAL_MSEC;
 }
 
-static void eigrp_nbr_rtt_sample(eigrp_nbr_t *nbr,
-				      uint32_t sample_msec)
+static void eigrp_nbr_rtt_sample(eigrp_nbr_t *nbr, uint32_t sample_msec)
 {
 	int64_t error;
 	int64_t variance_error;
@@ -102,8 +103,8 @@ static void eigrp_nbr_rtt_sample(eigrp_nbr_t *nbr,
 
 	/* RFC 6298 ordering: RTTVAR uses the old SRTT, then SRTT is updated. */
 	error = (int64_t)sample_msec - (int64_t)nbr->srtt_msec;
-	variance_error = (error < 0 ? -error : error)
-			 - (int64_t)nbr->rttvar_msec;
+	variance_error =
+		(error < 0 ? -error : error) - (int64_t)nbr->rttvar_msec;
 	rttvar = (int64_t)nbr->rttvar_msec
 		 + variance_error / (1U << EIGRP_NEIGHBOR_RTTVAR_BETA_SHIFT);
 	if (rttvar < 0)
@@ -118,8 +119,7 @@ static void eigrp_nbr_rtt_sample(eigrp_nbr_t *nbr,
 	nbr->rto_msec = eigrp_nbr_rto_calculate(nbr->srtt_msec);
 }
 
-void eigrp_nbr_srtt_update(eigrp_nbr_t *nbr,
-				const eigrp_packet_t *packet)
+void eigrp_nbr_srtt_update(eigrp_nbr_t *nbr, const eigrp_packet_t *packet)
 {
 	uint64_t now_msec;
 	uint64_t sample_msec;
@@ -212,7 +212,7 @@ struct eigrp_nbr_warning_state {
 };
 
 static bool eigrp_nbr_warning_address_match(const eigrp_addr_t *a,
-					 const eigrp_addr_t *b)
+					    const eigrp_addr_t *b)
 {
 	if (!a || !b || a->afi != b->afi)
 		return false;
@@ -224,7 +224,9 @@ static bool eigrp_nbr_warning_address_match(const eigrp_addr_t *a,
 }
 
 static bool eigrp_nbr_warning_should_emit_at(eigrp_instance_t *runtime,
-	const eigrp_nbr_t *neighbor, const char *reason, uint64_t now_msec)
+					     const eigrp_nbr_t *neighbor,
+					     const char *reason,
+					     uint64_t now_msec)
 {
 	struct eigrp_nbr_warning_entry *entry;
 	uint64_t interval_msec;
@@ -232,16 +234,20 @@ static bool eigrp_nbr_warning_should_emit_at(eigrp_instance_t *runtime,
 	if (!runtime || !neighbor || !reason || !runtime->log_neighbor_warnings)
 		return false;
 	if (!runtime->neighbor_warning_state) {
-		runtime->neighbor_warning_state = calloc(1, sizeof(*runtime->neighbor_warning_state));
+		runtime->neighbor_warning_state =
+			calloc(1, sizeof(*runtime->neighbor_warning_state));
 		if (!runtime->neighbor_warning_state)
 			return false;
 	}
-	for (entry = runtime->neighbor_warning_state->entries; entry; entry = entry->next) {
-		if (eigrp_nbr_warning_address_match(&entry->address, &neighbor->src)
+	for (entry = runtime->neighbor_warning_state->entries; entry;
+	     entry = entry->next) {
+		if (eigrp_nbr_warning_address_match(&entry->address,
+						    &neighbor->src)
 		    && strcmp(entry->reason, reason) == 0)
 			break;
 	}
-	interval_msec = (uint64_t)runtime->log_neighbor_warning_interval * 1000U;
+	interval_msec =
+		(uint64_t)runtime->log_neighbor_warning_interval * 1000U;
 	if (entry) {
 		if (now_msec >= entry->last_msec
 		    && now_msec - entry->last_msec < interval_msec)
@@ -265,17 +271,20 @@ static bool eigrp_nbr_warning_should_emit_at(eigrp_instance_t *runtime,
 }
 
 bool eigrp_nbr_warning_should_emit(eigrp_instance_t *runtime,
-	const eigrp_nbr_t *neighbor, const char *reason)
+				   const eigrp_nbr_t *neighbor,
+				   const char *reason)
 {
 	return eigrp_nbr_warning_should_emit_at(runtime, neighbor, reason,
-					 eigrp_sys_monotime_msec());
+						eigrp_sys_monotime_msec());
 }
 
 #ifdef EIGRP_TESTING
 bool eigrp_nbr_warning_should_emit_test(eigrp_instance_t *runtime,
-	const eigrp_nbr_t *neighbor, const char *reason, uint64_t now_msec)
+					const eigrp_nbr_t *neighbor,
+					const char *reason, uint64_t now_msec)
 {
-	return eigrp_nbr_warning_should_emit_at(runtime, neighbor, reason, now_msec);
+	return eigrp_nbr_warning_should_emit_at(runtime, neighbor, reason,
+						now_msec);
 }
 #endif
 
@@ -285,7 +294,8 @@ void eigrp_nbr_warning_state_clear(eigrp_instance_t *runtime)
 
 	if (!runtime || !runtime->neighbor_warning_state)
 		return;
-	for (entry = runtime->neighbor_warning_state->entries; entry; entry = next) {
+	for (entry = runtime->neighbor_warning_state->entries; entry;
+	     entry = next) {
 		next = entry->next;
 		free(entry->reason);
 		free(entry);
@@ -295,7 +305,7 @@ void eigrp_nbr_warning_state_clear(eigrp_instance_t *runtime)
 }
 
 static bool eigrp_nbr_address_match(const eigrp_address_t *a,
-					 const eigrp_address_t *b)
+				    const eigrp_address_t *b)
 {
 	size_t len;
 
@@ -306,9 +316,9 @@ static bool eigrp_nbr_address_match(const eigrp_address_t *a,
 }
 
 static void eigrp_nbr_static_debug(const char *action,
-					const eigrp_af_config_t *af,
-					const eigrp_address_t *address,
-					const char *interface_name)
+				   const eigrp_af_config_t *af,
+				   const eigrp_address_t *address,
+				   const char *interface_name)
 {
 	char address_text[INET6_ADDRSTRLEN];
 	int family;
@@ -316,11 +326,13 @@ static void eigrp_nbr_static_debug(const char *action,
 	if (!(term_debug_eigrp_nei & EIGRP_DEBUG_NEI_STATIC) || !address)
 		return;
 	family = address->afi == EIGRP_AFI_IPV6 ? AF_INET6 : AF_INET;
-	if (!inet_ntop(family, address->bytes, address_text, sizeof(address_text)))
+	if (!inet_ntop(family, address->bytes, address_text,
+		       sizeof(address_text)))
 		memcpy(address_text, "<invalid>", sizeof("<invalid>"));
-	eigrp_log(EIGRP_LOG_DEBUG, "EIGRP: %s static neighbor %s AS %u interface %s", action,
-		   address_text, af ? af->asn : 0,
-		   interface_name ? interface_name : "-");
+	eigrp_log(EIGRP_LOG_DEBUG,
+		  "EIGRP: %s static neighbor %s AS %u interface %s", action,
+		  address_text, af ? af->asn : 0,
+		  interface_name ? interface_name : "-");
 }
 
 /*
@@ -333,7 +345,8 @@ static void eigrp_nbr_static_debug(const char *action,
  *   Named: address-family mode
  * Description:
  * Creates or removes a static EIGRP neighbor definition.
- * Named mode terminates at EIGRP-owned neighbor state instead of invoking the classic FRR command callback.
+ * Named mode terminates at EIGRP-owned neighbor state instead of invoking the
+ * classic FRR command callback.
  */
 typedef enum eigrp_nbr_message_type {
 	EIGRP_NBR_MESSAGE_STATIC_CREATE,
@@ -359,20 +372,22 @@ typedef struct eigrp_nbr_message_args {
 } eigrp_nbr_message_args_t;
 
 static eigrp_result_t eigrp_nbr_message_process(eigrp_instance_t *eigrp,
-	void *arg);
+						void *arg);
 
 eigrp_result_t eigrp_nbr_static_create(eigrp_af_config_t *af,
-					    const eigrp_address_t *address,
-					    const char *interface_name)
+				       const eigrp_address_t *address,
+				       const char *interface_name)
 {
 	eigrp_nbr_message_args_t message = {
-		.type = EIGRP_NBR_MESSAGE_STATIC_CREATE, .af = af, .address = address,
+		.type = EIGRP_NBR_MESSAGE_STATIC_CREATE,
+		.af = af,
+		.address = address,
 		.interface_name = interface_name,
 	};
 
 	if (af && eigrp_instance_thread_dispatch_needed(af->runtime))
-		return eigrp_instance_message_call(af->runtime,
-			eigrp_nbr_message_process, &message);
+		return eigrp_instance_message_call(
+			af->runtime, eigrp_nbr_message_process, &message);
 	eigrp_nbr_config_t *neighbor;
 
 	if (!af)
@@ -417,20 +432,23 @@ eigrp_result_t eigrp_nbr_static_create(eigrp_af_config_t *af,
  *   Named: address-family mode
  * Description:
  * Creates or removes a static EIGRP neighbor definition.
- * Named mode terminates at EIGRP-owned neighbor state instead of invoking the classic FRR command callback.
+ * Named mode terminates at EIGRP-owned neighbor state instead of invoking the
+ * classic FRR command callback.
  */
 eigrp_result_t eigrp_nbr_static_delete(eigrp_af_config_t *af,
-					    const eigrp_address_t *address,
-					    const char *interface_name)
+				       const eigrp_address_t *address,
+				       const char *interface_name)
 {
 	eigrp_nbr_message_args_t message = {
-		.type = EIGRP_NBR_MESSAGE_STATIC_DELETE, .af = af, .address = address,
+		.type = EIGRP_NBR_MESSAGE_STATIC_DELETE,
+		.af = af,
+		.address = address,
 		.interface_name = interface_name,
 	};
 
 	if (af && eigrp_instance_thread_dispatch_needed(af->runtime))
-		return eigrp_instance_message_call(af->runtime,
-			eigrp_nbr_message_process, &message);
+		return eigrp_instance_message_call(
+			af->runtime, eigrp_nbr_message_process, &message);
 	eigrp_nbr_config_t **cursor;
 	eigrp_nbr_config_t *neighbor;
 
@@ -453,8 +471,7 @@ eigrp_result_t eigrp_nbr_static_delete(eigrp_af_config_t *af,
 	return EIGRP_RESULT_NOT_FOUND;
 }
 
-bool eigrp_nbr_static_source_allowed(eigrp_intf_t *ei,
-                                          const eigrp_addr_t *src)
+bool eigrp_nbr_static_source_allowed(eigrp_intf_t *ei, const eigrp_addr_t *src)
 {
 	eigrp_af_config_t *af;
 	eigrp_nbr_config_t *neighbor;
@@ -473,14 +490,16 @@ bool eigrp_nbr_static_source_allowed(eigrp_intf_t *ei,
 		return false;
 	address_length = ei->eigrp->af_vectors.packet_address_bytes;
 	source_bytes = src->afi == AF_INET6 ? (const void *)&src->ip.v6
-					      : (const void *)&src->ip.v4;
+					    : (const void *)&src->ip.v4;
 	interface_name = eigrp_intf_name_string(ei);
 
 	for (neighbor = af->neighbors; neighbor; neighbor = neighbor->next) {
 		if (strcmp(neighbor->interface_name, interface_name) != 0)
 			continue;
 		has_static = true;
-		if (memcmp(neighbor->address.bytes, source_bytes, address_length) == 0)
+		if (memcmp(neighbor->address.bytes, source_bytes,
+			   address_length)
+		    == 0)
 			return true;
 	}
 	return !has_static;
@@ -508,10 +527,12 @@ bool eigrp_nbr_static_hello_send(eigrp_intf_t *ei)
 		memset(&dst, 0, sizeof(dst));
 		if (af->afi == EIGRP_AFI_IPV6) {
 			dst.afi = AF_INET6;
-			memcpy(&dst.ip.v6, neighbor->address.bytes, sizeof(dst.ip.v6));
+			memcpy(&dst.ip.v6, neighbor->address.bytes,
+			       sizeof(dst.ip.v6));
 		} else {
 			dst.afi = AF_INET;
-			memcpy(&dst.ip.v4, neighbor->address.bytes, sizeof(dst.ip.v4));
+			memcpy(&dst.ip.v4, neighbor->address.bytes,
+			       sizeof(dst.ip.v4));
 		}
 		eigrp_hello_send_unicast(ei, &dst);
 	}
@@ -534,7 +555,7 @@ void eigrp_nbr_static_delete_all(eigrp_af_config_t *af)
 }
 
 static void eigrp_nbr_runtime_address(const eigrp_nbr_t *nbr,
-					   eigrp_address_t *address)
+				      eigrp_address_t *address)
 {
 	memset(address, 0, sizeof(*address));
 	if (nbr->src.afi == AF_INET6) {
@@ -549,13 +570,14 @@ static void eigrp_nbr_runtime_address(const eigrp_nbr_t *nbr,
 /* Every retained neighbor destination consumes a prefix slot, regardless
  * of whether it arrived in UPDATE or QUERY or has an infinite metric. */
 static bool eigrp_nbr_prefix_present(eigrp_prefix_descriptor_t *prefix,
-				      eigrp_nbr_t *neighbor)
+				     eigrp_nbr_t *neighbor)
 {
-	return prefix && eigrp_prefix_descriptor_lookup(prefix, neighbor) != NULL;
+	return prefix
+	       && eigrp_prefix_descriptor_lookup(prefix, neighbor) != NULL;
 }
 
 static uint32_t eigrp_nbr_prefix_count(eigrp_instance_t *runtime,
-					    eigrp_nbr_t *neighbor)
+				       eigrp_nbr_t *neighbor)
 {
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_table_node_t *route_node;
@@ -565,8 +587,8 @@ static uint32_t eigrp_nbr_prefix_count(eigrp_instance_t *runtime,
 		return 0;
 	if (neighbor->limit_prefix_count_valid)
 		return neighbor->limit_prefix_count;
-	for (route_node = eigrp_table_first(runtime->topology_table); route_node;
-	     route_node = eigrp_table_next(route_node)) {
+	for (route_node = eigrp_table_first(runtime->topology_table);
+	     route_node; route_node = eigrp_table_next(route_node)) {
 		prefix = route_node->info;
 		if (!prefix)
 			continue;
@@ -578,18 +600,16 @@ static uint32_t eigrp_nbr_prefix_count(eigrp_instance_t *runtime,
 
 /*
  * Syntax:
- *   EXEC: `show eigrp address-family <ipv4|ipv6> ... neighbors [static] [detail] [IFNAME]`
- * Supported: EXEC
- * Placement:
- *   Operational/read-only
+ *   EXEC: `show eigrp address-family <ipv4|ipv6> ... neighbors [static]
+ * [detail] [IFNAME]` Supported: EXEC Placement: Operational/read-only
  * Description:
  * Walks EIGRP neighbor state for operational display.
  * The common API exposes protocol state without FRR VTY objects.
  */
-eigrp_result_t eigrp_nbr_state_iterate(
-	eigrp_af_config_t *config, eigrp_instance_t *runtime,
-	const char *interface_name, bool static_only,
-	eigrp_nbr_state_iterate_cb callback, void *arg)
+eigrp_result_t
+eigrp_nbr_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime,
+			const char *interface_name, bool static_only,
+			eigrp_nbr_state_iterate_cb callback, void *arg)
 {
 	eigrp_nbr_config_t *configured;
 	eigrp_intf_t *ei;
@@ -609,7 +629,9 @@ eigrp_result_t eigrp_nbr_state_iterate(
 		for (configured = config->neighbors; configured;
 		     configured = configured->next) {
 			if (interface_name
-			    && strcmp(configured->interface_name, interface_name) != 0)
+			    && strcmp(configured->interface_name,
+				      interface_name)
+				       != 0)
 				continue;
 			memset(&state, 0, sizeof(state));
 			state.address = configured->address;
@@ -633,7 +655,8 @@ eigrp_result_t eigrp_nbr_state_iterate(
 		if (interface_name && strcmp(name, interface_name) != 0)
 			continue;
 		for (EIGRP_LIST_ITERATE_RO(ei->nbrs, nbr_node, nbr)) {
-			/* Also expose retained prefix-penalized peers to show/accounting. */
+			/* Also expose retained prefix-penalized peers to
+			 * show/accounting. */
 			if (!eigrp_nbr_limit_status(nbr))
 				continue;
 			memset(&state, 0, sizeof(state));
@@ -641,31 +664,39 @@ eigrp_result_t eigrp_nbr_state_iterate(
 			state.interface_name = name;
 			state.state_name = eigrp_nbr_state_str(nbr);
 			state.runtime_present = true;
-			state.hold_time = (uint16_t)eigrp_timer_remaining_seconds(nbr->ei->eigrp,
-				nbr->t_holddown);
+			state.hold_time =
+				(uint16_t)eigrp_timer_remaining_seconds(
+					nbr->ei->eigrp, nbr->t_holddown);
 			if (nbr->up_since_msec) {
 				uint64_t now = eigrp_sys_monotime_msec();
 
 				if (now >= nbr->up_since_msec)
 					state.uptime_seconds =
-						(now - nbr->up_since_msec) / 1000U;
+						(now - nbr->up_since_msec)
+						/ 1000U;
 			}
 			state.reliable_queue_count =
-				nbr->retrans_queue ? nbr->retrans_queue->count : 0;
+				nbr->retrans_queue ? nbr->retrans_queue->count
+						   : 0;
 			state.sequence_number = nbr->recv_sequence_number;
-			state.prefix_count = eigrp_nbr_prefix_count(runtime, nbr);
+			state.prefix_count =
+				eigrp_nbr_prefix_count(runtime, nbr);
 			state.limit_status = eigrp_nbr_limit_status(nbr);
 			state.limit_restart_cnt = nbr->limit_restart_cnt;
 			{
 				uint64_t now = eigrp_sys_monotime_msec();
-				state.limit_restart_seconds = eigrp_nbr_limit_remaining(
-					nbr->limit_restart_due_msec, now);
-				state.limit_reset_seconds = eigrp_nbr_limit_remaining(
-					nbr->limit_reset_due_msec, now);
+				state.limit_restart_seconds =
+					eigrp_nbr_limit_remaining(
+						nbr->limit_restart_due_msec,
+						now);
+				state.limit_reset_seconds =
+					eigrp_nbr_limit_remaining(
+						nbr->limit_reset_due_msec, now);
 			}
 			state.retransmit_count = nbr->retransmissions;
 			if (nbr->retrans_queue && nbr->retrans_queue->tail)
-				state.retry_count = nbr->retrans_queue->tail->retrans_counter;
+				state.retry_count = nbr->retrans_queue->tail
+							    ->retrans_counter;
 			state.srtt_valid = nbr->srtt_valid;
 			state.srtt_msec = nbr->srtt_msec;
 			state.rto_msec = eigrp_nbr_rto(nbr);
@@ -714,9 +745,10 @@ void eigrp_nbr_codec_select(eigrp_nbr_t *nbr, uint8_t tlv_version)
 		eigrp_prefix_t peer_addr;
 
 		eigrp_eventlog_addr_from_legacy(&peer_addr, &nbr->src);
-		(void)eigrp_eventlog_msg_add(nbr->ei->eigrp,
-			EIGRP_EVENTLOG_OPCODE_PEER_CAPABILITY, &peer_addr, old_version,
-			tlv_version, nbr->tlv_rel_major, nbr->K6);
+		(void)eigrp_eventlog_msg_add(
+			nbr->ei->eigrp, EIGRP_EVENTLOG_OPCODE_PEER_CAPABILITY,
+			&peer_addr, old_version, tlv_version,
+			nbr->tlv_rel_major, nbr->K6);
 	}
 }
 
@@ -736,14 +768,17 @@ void eigrp_nbr_codec_update(eigrp_instance_t *eigrp)
 		for (EIGRP_LIST_ITERATE_RO(ei->nbrs, nbr_node, nbr)) {
 			if (!nbr || !nbr->tlv_rel_major)
 				continue;
-			selected = eigrp_metric_version_select(eigrp, nbr->tlv_rel_major);
+			selected = eigrp_metric_version_select(
+				eigrp, nbr->tlv_rel_major);
 			if (selected == nbr->tlv_version)
 				continue;
 			if (nbr->state == EIGRP_NEIGHBOR_UP)
-				eigrp_intf_encoder_peer_remove(ei, nbr->tlv_version);
+				eigrp_intf_encoder_peer_remove(
+					ei, nbr->tlv_version);
 			eigrp_nbr_codec_select(nbr, selected);
 			if (nbr->state == EIGRP_NEIGHBOR_UP)
-				eigrp_intf_encoder_peer_add(ei, nbr->tlv_version);
+				eigrp_intf_encoder_peer_add(ei,
+							    nbr->tlv_version);
 		}
 	}
 }
@@ -770,7 +805,7 @@ static void eigrp_nbr_init(eigrp_nbr_t *nbr, eigrp_addr_t *src)
 	nbr->encoder = eigrp_packet_encoder_safe;
 
 	//  if (IS_DEBUG_EIGRP_EVENT)
-		//               eigrp_print_routerid(nbr->router_id));
+	//               eigrp_print_routerid(nbr->router_id));
 }
 
 /**
@@ -784,7 +819,8 @@ eigrp_nbr_t *eigrp_nbr_create(eigrp_intf_t *ei, eigrp_addr_t *src)
 	    || (ei && (!ei->eigrp || !ei->nbrs)))
 		return NULL;
 
-	/* Reject full interfaces/processes before neighbor and RTP allocations. */
+	/* Reject full interfaces/processes before neighbor and RTP allocations.
+	 */
 	if (ei) {
 		bool admitted;
 
@@ -827,25 +863,27 @@ eigrp_nbr_t *eigrp_nbr_create(eigrp_intf_t *ei, eigrp_addr_t *src)
 		pthread_mutex_unlock(&ei->eigrp->peer_lock);
 	}
 	if (IS_DEBUG_EIGRP_EVENT) {
-		eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event: neighbor %s created%s%s",
-			   eigrp_print_addr(&nbr->src),
-			   ei ? " on " : "", ei ? eigrp_intf_name_string(ei) : "");
+		eigrp_log(EIGRP_LOG_DEBUG,
+			  "EIGRP event: neighbor %s created%s%s",
+			  eigrp_print_addr(&nbr->src), ei ? " on " : "",
+			  ei ? eigrp_intf_name_string(ei) : "");
 		if (IS_DEBUG_EIGRP(0, DETAIL) && ei && ei->eigrp)
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event detail: AS %u hold %u state %u",
-				   ei->eigrp->AS, nbr->v_holddown, nbr->state);
+			eigrp_log(EIGRP_LOG_DEBUG,
+				  "EIGRP event detail: AS %u hold %u state %u",
+				  ei->eigrp->AS, nbr->v_holddown, nbr->state);
 	}
 	return nbr;
 }
 
 eigrp_nbr_t *eigrp_nbr_lookup(eigrp_intf_t *ei, eigrp_header_t *eigrph,
-				   eigrp_addr_t *src)
+			      eigrp_addr_t *src)
 {
 	eigrp_nbr_t *nbr;
 	eigrp_list_item_t *node, *nnode;
 
 	for (EIGRP_LIST_ITERATE(ei->nbrs, node, nnode, nbr)) {
-	    if (eigrp_addr_match(src, &nbr->src)) {
-		    return nbr;
+		if (eigrp_addr_match(src, &nbr->src)) {
+			return nbr;
 		}
 	}
 
@@ -864,8 +902,7 @@ eigrp_nbr_t *eigrp_nbr_lookup(eigrp_intf_t *ei, eigrp_header_t *eigrph,
  * Function is used for neighbor lookup by address
  * in specified interface.
  */
-eigrp_nbr_t *eigrp_nbr_lookup_by_addr(eigrp_intf_t *ei,
-					   struct in_addr *addr)
+eigrp_nbr_t *eigrp_nbr_lookup_by_addr(eigrp_intf_t *ei, struct in_addr *addr)
 {
 	eigrp_nbr_t *nbr;
 	eigrp_list_item_t *node, *nnode;
@@ -892,7 +929,7 @@ eigrp_nbr_t *eigrp_nbr_lookup_by_addr(eigrp_intf_t *ei,
  * in whole EIGRP process.
  */
 eigrp_nbr_t *eigrp_nbr_lookup_by_addr_process(eigrp_instance_t *eigrp,
-						   struct in_addr nbr_addr)
+					      struct in_addr nbr_addr)
 {
 	eigrp_intf_t *ei;
 	eigrp_list_item_t *node, *node2, *nnode2;
@@ -913,7 +950,8 @@ eigrp_nbr_t *eigrp_nbr_lookup_by_addr_process(eigrp_instance_t *eigrp,
 }
 
 
-/* Cisco accounting state reflects prefix-limit eligibility, not the DUAL FSM. */
+/* Cisco accounting state reflects prefix-limit eligibility, not the DUAL FSM.
+ */
 char eigrp_nbr_limit_status(const eigrp_nbr_t *nbr)
 {
 	if (!nbr)
@@ -942,9 +980,10 @@ uint32_t eigrp_nbr_limit_remaining(uint64_t deadline_msec, uint64_t now_msec)
 bool eigrp_nbr_is_eligible(const eigrp_nbr_t *nbr)
 {
 	return nbr && nbr->limit_state == EIGRP_NBR_LIMIT_NONE
-	       && !nbr->limit_cleanup_pending && !nbr->eigrp_pfxlimits_af_suspended
+	       && !nbr->limit_cleanup_pending
+	       && !nbr->eigrp_pfxlimits_af_suspended
 	       && (!nbr->ei || !nbr->ei->eigrp
-	           || !nbr->ei->eigrp->eigrp_pfxlimits_af_state);
+		   || !nbr->ei->eigrp->eigrp_pfxlimits_af_state);
 }
 
 /* Begin neighbor teardown but leave DUAL processing to the caller's
@@ -957,7 +996,8 @@ void eigrp_nbr_down_deferred(eigrp_nbr_t *nbr)
 	 * Retire the old UP encoder ownership here, not in that callback. */
 	if (nbr->limit_cleanup_pending) {
 		if (nbr->limit_prev_state == EIGRP_NEIGHBOR_UP) {
-			eigrp_intf_encoder_peer_remove(nbr->ei, nbr->tlv_version);
+			eigrp_intf_encoder_peer_remove(nbr->ei,
+						       nbr->tlv_version);
 			nbr->up_since_msec = 0;
 		}
 		nbr->limit_cleanup_pending = false;
@@ -967,7 +1007,8 @@ void eigrp_nbr_down_deferred(eigrp_nbr_t *nbr)
 	eigrp_nbr_state_update(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN);
 	/* A pending sync can exist before the peer is fully UP. */
 	eigrp_update_sync_cancel(nbr);
-	eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL, &nbr->t_nbr_send_gr);
+	eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL,
+			   &nbr->t_nbr_send_gr);
 	if (nbr->nbr_gr_prefixes)
 		eigrp_list_delete(&nbr->nbr_gr_prefixes);
 	if (nbr->nbr_gr_prefixes_send)
@@ -988,20 +1029,23 @@ void eigrp_nbr_down(eigrp_nbr_t *nbr)
 /* Keep the same published peer for prefix-limit penalty accounting. Ingress
  * and the ordinary adjacency FSM see it as DOWN and ineligible. Generation
  * changes invalidate any pre-suspension authenticated work still in packetQ. */
-bool eigrp_nbr_limit_state_update(eigrp_nbr_t *nbr, eigrp_nbr_limit_state_t state)
+bool eigrp_nbr_limit_state_update(eigrp_nbr_t *nbr,
+				  eigrp_nbr_limit_state_t state)
 {
 	eigrp_instance_t *eigrp;
 	bool first;
 
 	if (!nbr || !nbr->ei
-	    || (state != EIGRP_NBR_LIMIT_SUSPENDED && state != EIGRP_NBR_LIMIT_LOCKED))
+	    || (state != EIGRP_NBR_LIMIT_SUSPENDED
+		&& state != EIGRP_NBR_LIMIT_LOCKED))
 		return false;
 	eigrp = nbr->ei->eigrp;
 	if (!eigrp)
 		return false;
 	pthread_mutex_lock(&eigrp->peer_lock);
-	if (!nbr->published || (nbr->limit_state == EIGRP_NBR_LIMIT_LOCKED
-			      && state == EIGRP_NBR_LIMIT_SUSPENDED)) {
+	if (!nbr->published
+	    || (nbr->limit_state == EIGRP_NBR_LIMIT_LOCKED
+		&& state == EIGRP_NBR_LIMIT_SUSPENDED)) {
 		pthread_mutex_unlock(&eigrp->peer_lock);
 		return false;
 	}
@@ -1049,7 +1093,8 @@ void eigrp_nbr_limit_release(eigrp_nbr_t *nbr)
 #define EIGRP_LIMIT_Q16 UINT32_C(65536)
 
 static void eigrp_nbr_limit_values_read(eigrp_nbr_t *nbr,
-	const eigrp_prefix_limit_t *limit, eigrp_prefix_limit_t *effective)
+					const eigrp_prefix_limit_t *limit,
+					eigrp_prefix_limit_t *effective)
 {
 	eigrp_af_config_t *af;
 	const eigrp_prefix_limit_t *all = NULL;
@@ -1064,22 +1109,26 @@ static void eigrp_nbr_limit_values_read(eigrp_nbr_t *nbr,
 		if (af->topology_maximum_prefix_configured)
 			process = &af->topology_maximum_prefix;
 	}
-if (!effective->restart_minutes)
-		effective->restart_minutes = all && all->restart_minutes
-			? all->restart_minutes
+	if (!effective->restart_minutes)
+		effective->restart_minutes =
+			all && all->restart_minutes ? all->restart_minutes
 			: process && process->restart_minutes
-				? process->restart_minutes : EIGRP_LIMIT_RESTART_MINUTES;
+				? process->restart_minutes
+				: EIGRP_LIMIT_RESTART_MINUTES;
 	if (!effective->reset_time_minutes)
-		effective->reset_time_minutes = all && all->reset_time_minutes
-			? all->reset_time_minutes
+		effective->reset_time_minutes =
+			all && all->reset_time_minutes ? all->reset_time_minutes
 			: process && process->reset_time_minutes
-				? process->reset_time_minutes : EIGRP_LIMIT_RESET_MINUTES;
+				? process->reset_time_minutes
+				: EIGRP_LIMIT_RESET_MINUTES;
 	if (!effective->restart_count)
 		effective->restart_count = all && all->restart_count
-			? all->restart_count
-			: process && process->restart_count
-				? process->restart_count : EIGRP_LIMIT_RESTART_COUNT;
-	/* Dampening is enabled on the selected scope or its inherited defaults. */
+						   ? all->restart_count
+					   : process && process->restart_count
+						   ? process->restart_count
+						   : EIGRP_LIMIT_RESTART_COUNT;
+	/* Dampening is enabled on the selected scope or its inherited defaults.
+	 */
 	if (!effective->dampened)
 		effective->dampened = (all && all->dampened)
 				      || (process && process->dampened);
@@ -1089,11 +1138,10 @@ if (!effective->restart_minutes)
  * binary bits.  Whole half-lives divide by two exactly; fractional half
  * lives use deterministic fixed-point factors without a libm dependency. */
 static uint32_t eigrp_nbr_limit_decay(uint32_t score, uint64_t elapsed,
-	uint64_t half_life)
+				      uint64_t half_life)
 {
 	static const uint32_t factor[8] = {
-		46341U, 55109U, 60097U, 62758U,
-		64132U, 64830U, 65182U, 65359U,
+		46341U, 55109U, 60097U, 62758U, 64132U, 64830U, 65182U, 65359U,
 	};
 	uint32_t fraction;
 	unsigned i;
@@ -1113,15 +1161,15 @@ static uint32_t eigrp_nbr_limit_decay(uint32_t score, uint64_t elapsed,
 /* The timer queue accepts uint32 milliseconds; rearm long intervals in
  * chunks rather than truncating valid user-configured minute values. */
 static void eigrp_nbr_limit_timer_arm(eigrp_nbr_t *nbr,
-	eigrp_timer_event_t **timer, eigrp_event_callback_t callback,
-	uint64_t deadline)
+				      eigrp_timer_event_t **timer,
+				      eigrp_event_callback_t callback,
+				      uint64_t deadline)
 {
 	uint64_t now = eigrp_sys_monotime_msec();
 	uint64_t delta = deadline > now ? deadline - now : 1U;
 	if (delta > UINT32_MAX)
 		delta = UINT32_MAX;
-	eigrp_timer_add(nbr->ei->eigrp, timer, callback, nbr,
-			(uint32_t)delta);
+	eigrp_timer_add(nbr->ei->eigrp, timer, callback, nbr, (uint32_t)delta);
 }
 
 void eigrp_nbr_limit_timers_cancel(eigrp_nbr_t *nbr)
@@ -1148,8 +1196,8 @@ void eigrp_nbr_limit_restart_expired(void *arg)
 	now = eigrp_sys_monotime_msec();
 	if (now < nbr->limit_restart_due_msec) {
 		eigrp_nbr_limit_timer_arm(nbr, &nbr->t_limit_restart,
-			eigrp_nbr_limit_restart_expired,
-			nbr->limit_restart_due_msec);
+					  eigrp_nbr_limit_restart_expired,
+					  nbr->limit_restart_due_msec);
 		return;
 	}
 	nbr->limit_restart_due_msec = 0;
@@ -1166,12 +1214,13 @@ void eigrp_nbr_limit_reset_expired(void *arg)
 	now = eigrp_sys_monotime_msec();
 	if (now < nbr->limit_reset_due_msec) {
 		eigrp_nbr_limit_timer_arm(nbr, &nbr->t_limit_reset,
-			eigrp_nbr_limit_reset_expired,
-			nbr->limit_reset_due_msec);
+					  eigrp_nbr_limit_reset_expired,
+					  nbr->limit_reset_due_msec);
 		return;
 	}
 	nbr->limit_reset_due_msec = 0;
-	/* Never unlock a peer: manual clear is required even if reset expires. */
+	/* Never unlock a peer: manual clear is required even if reset expires.
+	 */
 	if (nbr->limit_state != EIGRP_NBR_LIMIT_LOCKED) {
 		nbr->limit_restart_cnt = 0;
 		nbr->limit_penalty_q16 = 0;
@@ -1183,14 +1232,15 @@ void eigrp_nbr_limit_reset_expired(void *arg)
  * packetizer work referenced by the current UPDATE/QUERY TLV walker.
  * The neighbor becomes ineligible synchronously at this state mutation. */
 bool eigrp_nbr_limit_mark_down(eigrp_nbr_t *nbr,
-	const eigrp_prefix_limit_t *limit)
+			       const eigrp_prefix_limit_t *limit)
 {
 	eigrp_instance_t *eigrp;
 	eigrp_prefix_t peer;
 	uint8_t old;
 
 	if (!nbr || !nbr->ei || !(eigrp = nbr->ei->eigrp) || !limit
-	    || limit->warning_only || !nbr->published || !eigrp_nbr_is_eligible(nbr))
+	    || limit->warning_only || !nbr->published
+	    || !eigrp_nbr_is_eligible(nbr))
 		return false;
 	old = nbr->state;
 	/* Ingress checks limit_cleanup_pending as well as the normal FSM. */
@@ -1199,9 +1249,9 @@ bool eigrp_nbr_limit_mark_down(eigrp_nbr_t *nbr,
 	nbr->limit_pending_cfg = *limit;
 	nbr->state = EIGRP_NEIGHBOR_DOWN;
 	eigrp_eventlog_addr_from_legacy(&peer, &nbr->src);
-	(void)eigrp_eventlog_msg_add(eigrp,
-		EIGRP_EVENTLOG_OPCODE_NEIGHBOR_STATE_CHANGE, &peer,
-		old, EIGRP_NEIGHBOR_DOWN, nbr->ei->ifindex,
+	(void)eigrp_eventlog_msg_add(
+		eigrp, EIGRP_EVENTLOG_OPCODE_NEIGHBOR_STATE_CHANGE, &peer, old,
+		EIGRP_NEIGHBOR_DOWN, nbr->ei->ifindex,
 		EIGRP_EVENTLOG_NBR_PREFIX_LIMIT);
 	return true;
 }
@@ -1216,8 +1266,9 @@ void eigrp_nbr_limit_cleanup(eigrp_nbr_t *nbr)
 		return;
 	cfg = nbr->limit_pending_cfg;
 	if (!eigrp_nbr_limit_exceeded(nbr, &cfg)) {
-		/* Even if a timer could not be allocated, never leave live RTP or
-		 * topology state behind after the DOWN state was committed. */
+		/* Even if a timer could not be allocated, never leave live RTP
+		 * or topology state behind after the DOWN state was committed.
+		 */
 		if (nbr->limit_cleanup_pending)
 			eigrp_nbr_down(nbr);
 		(void)eigrp_nbr_limit_state_update(nbr, EIGRP_NBR_LIMIT_LOCKED);
@@ -1228,13 +1279,13 @@ void eigrp_nbr_limit_cleanup(eigrp_nbr_t *nbr)
  * violations cannot shorten an existing suspension.  The violation limit
  * counts incidents: the third violation locks under the default policy. */
 bool eigrp_nbr_limit_exceeded(eigrp_nbr_t *nbr,
-	const eigrp_prefix_limit_t *limit)
+			      const eigrp_prefix_limit_t *limit)
 {
 	eigrp_prefix_limit_t effective;
 	uint64_t now, base, restart, half_life, score;
 
-	if (!nbr || !nbr->ei || !nbr->ei->eigrp || !limit
-	    || !limit->maximum || limit->warning_only || !nbr->published
+	if (!nbr || !nbr->ei || !nbr->ei->eigrp || !limit || !limit->maximum
+	    || limit->warning_only || !nbr->published
 	    || nbr->limit_state != EIGRP_NBR_LIMIT_NONE)
 		return false;
 	eigrp_nbr_limit_values_read(nbr, limit, &effective);
@@ -1259,12 +1310,14 @@ bool eigrp_nbr_limit_exceeded(eigrp_nbr_t *nbr,
 		++nbr->limit_restart_cnt;
 	if (nbr->limit_restart_cnt >= effective.restart_count) {
 		eigrp_nbr_limit_timers_cancel(nbr);
-		return eigrp_nbr_limit_state_update(nbr, EIGRP_NBR_LIMIT_LOCKED);
+		return eigrp_nbr_limit_state_update(nbr,
+						    EIGRP_NBR_LIMIT_LOCKED);
 	}
 	restart = base;
 	if (effective.dampened) {
 		score = nbr->limit_penalty_q16;
-		/* Fixed point penalty gives one base interval on first violation. */
+		/* Fixed point penalty gives one base interval on first
+		 * violation. */
 		restart = (base * score) / EIGRP_LIMIT_Q16;
 	}
 	if (restart > UINT64_MAX - now || base == 0)
@@ -1272,14 +1325,18 @@ bool eigrp_nbr_limit_exceeded(eigrp_nbr_t *nbr,
 	if (!eigrp_nbr_limit_state_update(nbr, EIGRP_NBR_LIMIT_SUSPENDED))
 		return false;
 	nbr->limit_restart_due_msec = now + restart;
-	nbr->limit_reset_due_msec = now +
-		(uint64_t)effective.reset_time_minutes * EIGRP_LIMIT_MINUTE_MSEC;
+	nbr->limit_reset_due_msec = now
+				    + (uint64_t)effective.reset_time_minutes
+					      * EIGRP_LIMIT_MINUTE_MSEC;
 	eigrp_nbr_limit_timer_arm(nbr, &nbr->t_limit_restart,
-		eigrp_nbr_limit_restart_expired, nbr->limit_restart_due_msec);
+				  eigrp_nbr_limit_restart_expired,
+				  nbr->limit_restart_due_msec);
 	eigrp_nbr_limit_timer_arm(nbr, &nbr->t_limit_reset,
-		eigrp_nbr_limit_reset_expired, nbr->limit_reset_due_msec);
+				  eigrp_nbr_limit_reset_expired,
+				  nbr->limit_reset_due_msec);
 	if (!nbr->t_limit_restart || !nbr->t_limit_reset) {
-		/* Allocation/shutdown failure cannot silently restore eligibility. */
+		/* Allocation/shutdown failure cannot silently restore
+		 * eligibility. */
 		eigrp_nbr_limit_timers_cancel(nbr);
 		(void)eigrp_nbr_limit_state_update(nbr, EIGRP_NBR_LIMIT_LOCKED);
 		return false;
@@ -1293,12 +1350,16 @@ void eigrp_nbr_delete(eigrp_nbr_t *nbr)
 	if (!nbr)
 		return;
 	if (IS_DEBUG_EIGRP_EVENT) {
-		eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event: neighbor %s delete%s%s",
-			   eigrp_print_addr(&nbr->src), nbr->ei ? " on " : "",
-			   nbr->ei ? eigrp_intf_name_string(nbr->ei) : "");
+		eigrp_log(EIGRP_LOG_DEBUG,
+			  "EIGRP event: neighbor %s delete%s%s",
+			  eigrp_print_addr(&nbr->src), nbr->ei ? " on " : "",
+			  nbr->ei ? eigrp_intf_name_string(nbr->ei) : "");
 		if (IS_DEBUG_EIGRP(0, DETAIL) && nbr->ei && nbr->ei->eigrp)
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP event detail: AS %u state %u retrans %u",
-				   nbr->ei->eigrp->AS, nbr->state, nbr->retrans_counter);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"EIGRP event detail: AS %u state %u retrans %u",
+				nbr->ei->eigrp->AS, nbr->state,
+				nbr->retrans_counter);
 	}
 
 	/* Unpublish before destroying adjacency-owned objects, so ingress
@@ -1329,7 +1390,8 @@ void eigrp_nbr_holddown_expired(void *arg)
 
 	/* The AF may have dequeued this expiry just before the process receive
 	 * thread received a packet and reset the hold timer.  In that case the
-	 * owner now points at the replacement timer and this callback is stale. */
+	 * owner now points at the replacement timer and this callback is stale.
+	 */
 	pthread_mutex_lock(&eigrp->peer_lock);
 	if (!nbr->published) {
 		pthread_mutex_unlock(&eigrp->peer_lock);
@@ -1339,9 +1401,10 @@ void eigrp_nbr_holddown_expired(void *arg)
 	stale = nbr->t_holddown != NULL;
 	pthread_mutex_unlock(&eigrp->work_lock);
 	if (!stale) {
-		/* Commit the expiry while peer_lock is still held.  Once unpublished,
-		 * a concurrently received packet cannot rediscover this neighbor and
-		 * resurrect its hold timer between expiry validation and teardown. */
+		/* Commit the expiry while peer_lock is still held.  Once
+		 * unpublished, a concurrently received packet cannot rediscover
+		 * this neighbor and resurrect its hold timer between expiry
+		 * validation and teardown. */
 		eigrp_list_delete_data(nbr->ei->nbrs, nbr);
 		nbr->published = false;
 	}
@@ -1350,14 +1413,15 @@ void eigrp_nbr_holddown_expired(void *arg)
 		return;
 
 	if (IS_DEBUG_EIGRP(0, TIMERS))
-		eigrp_log(EIGRP_LOG_DEBUG, "EIGRP: hold timer expired for neighbor %s",
-			   eigrp_print_addr(&nbr->src));
+		eigrp_log(EIGRP_LOG_DEBUG,
+			  "EIGRP: hold timer expired for neighbor %s",
+			  eigrp_print_addr(&nbr->src));
 	if (eigrp->log_neighbor_changes)
-		eigrp_log(EIGRP_LOG_INFO, "Neighbor %s (%s) is down: holding time expired",
-			  eigrp_print_addr(&nbr->src),
-			  nbr->ei->name);
+		eigrp_log(EIGRP_LOG_INFO,
+			  "Neighbor %s (%s) is down: holding time expired",
+			  eigrp_print_addr(&nbr->src), nbr->ei->name);
 	eigrp_nbr_state_update_reason(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
-		EIGRP_EVENTLOG_NBR_HOLD_EXPIRED);
+				      EIGRP_EVENTLOG_NBR_HOLD_EXPIRED);
 	eigrp_nbr_delete(nbr);
 }
 
@@ -1366,14 +1430,16 @@ uint8_t eigrp_nbr_state(eigrp_nbr_t *nbr)
 	return (nbr->state);
 }
 
-void eigrp_nbr_state_update(eigrp_operation_t operation, eigrp_nbr_t *nbr, uint8_t state)
+void eigrp_nbr_state_update(eigrp_operation_t operation, eigrp_nbr_t *nbr,
+			    uint8_t state)
 {
 	eigrp_nbr_state_update_reason(operation, nbr, state,
-		EIGRP_EVENTLOG_NBR_NONE);
+				      EIGRP_EVENTLOG_NBR_NONE);
 }
 
-void eigrp_nbr_state_update_reason(eigrp_operation_t operation, eigrp_nbr_t *nbr,
-				   uint8_t state, uint16_t reason)
+void eigrp_nbr_state_update_reason(eigrp_operation_t operation,
+				   eigrp_nbr_t *nbr, uint8_t state,
+				   uint16_t reason)
 {
 	uint8_t old_state;
 
@@ -1401,26 +1467,30 @@ void eigrp_nbr_state_update_reason(eigrp_operation_t operation, eigrp_nbr_t *nbr
 		eigrp_prefix_t peer_addr;
 
 		eigrp_eventlog_addr_from_legacy(&peer_addr, &nbr->src);
-		(void)eigrp_eventlog_msg_add(nbr->ei->eigrp,
+		(void)eigrp_eventlog_msg_add(
+			nbr->ei->eigrp,
 			EIGRP_EVENTLOG_OPCODE_NEIGHBOR_STATE_CHANGE, &peer_addr,
 			old_state, nbr->state, nbr->ei->ifindex, reason);
 	}
 	eigrp_debug_neighbor_state(nbr, old_state, state);
 	if (old_state == EIGRP_NEIGHBOR_UP && state != EIGRP_NEIGHBOR_UP)
 		eigrp_debug_transmit_event(EIGRP_DEBUG_TRANSMIT_PEERDOWN,
-				   nbr->ei ? nbr->ei->eigrp : NULL, nbr->ei, nbr,
-				   "neighbor left UP state");
+					   nbr->ei ? nbr->ei->eigrp : NULL,
+					   nbr->ei, nbr,
+					   "neighbor left UP state");
 
 	if (state == EIGRP_NEIGHBOR_UP && old_state != EIGRP_NEIGHBOR_UP) {
-		/* A new adjacency cannot inherit a multicast encoded before it was UP.
-		 * This also covers a restart that reuses its neighbor object. */
+		/* A new adjacency cannot inherit a multicast encoded before it
+		 * was UP. This also covers a restart that reuses its neighbor
+		 * object. */
 		if (++nbr->ei->multicast_epoch == 0)
 			++nbr->ei->multicast_epoch;
 		nbr->multicast_epoch = nbr->ei->multicast_epoch;
 		eigrp_intf_encoder_peer_add(nbr->ei, nbr->tlv_version);
 		nbr->up_since_msec = eigrp_sys_monotime_msec();
 		nbr->retransmissions = 0;
-	} else if (old_state == EIGRP_NEIGHBOR_UP && state != EIGRP_NEIGHBOR_UP) {
+	} else if (old_state == EIGRP_NEIGHBOR_UP
+		   && state != EIGRP_NEIGHBOR_UP) {
 		nbr->up_since_msec = 0;
 	}
 
@@ -1448,7 +1518,8 @@ void eigrp_nbr_state_update_reason(eigrp_operation_t operation, eigrp_nbr_t *nbr
 
 		// hold time..
 		nbr->v_holddown = EIGRP_HOLD_INTERVAL_DEFAULT;
-		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL, &nbr->t_holddown);
+		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL,
+				   &nbr->t_holddown);
 
 		/* Allocate only on creation.  Reuse the queue across DOWN
 		 * resets, so a memory allocation failure cannot break RTP. */
@@ -1456,7 +1527,8 @@ void eigrp_nbr_state_update_reason(eigrp_operation_t operation, eigrp_nbr_t *nbr
 			eigrp_packet_queue_clear(nbr->retrans_queue);
 		else
 			nbr->retrans_queue = eigrp_packet_queue_create();
-		/* A down peer no longer consumes multicast reliable capacity. */
+		/* A down peer no longer consumes multicast reliable capacity.
+		 */
 		if (nbr->ei)
 			eigrp_packet_multicast_resume(nbr->ei);
 
@@ -1494,27 +1566,31 @@ void eigrp_nbr_holddown_update(eigrp_nbr_t *nbr)
 	if (!nbr)
 		return;
 	if (!eigrp_nbr_is_eligible(nbr)) {
-		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL, &nbr->t_holddown);
+		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL,
+				   &nbr->t_holddown);
 		return;
 	}
 	switch (nbr->state) {
 	case EIGRP_NEIGHBOR_DOWN:
-		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL, &nbr->t_holddown);
+		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL,
+				   &nbr->t_holddown);
 		break;
 	case EIGRP_NEIGHBOR_PENDING: {
 		/*Reset Hold Down Timer for neighbor*/
-		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL, &nbr->t_holddown);
+		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL,
+				   &nbr->t_holddown);
 		eigrp_timer_add(nbr->ei->eigrp, &nbr->t_holddown,
-				  eigrp_nbr_holddown_expired, nbr,
-				  (uint32_t)nbr->v_holddown * 1000U);
+				eigrp_nbr_holddown_expired, nbr,
+				(uint32_t)nbr->v_holddown * 1000U);
 		break;
 	}
 	case EIGRP_NEIGHBOR_UP: {
 		/*Reset Hold Down Timer for neighbor*/
-		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL, &nbr->t_holddown);
+		eigrp_timer_cancel(nbr->ei ? nbr->ei->eigrp : NULL,
+				   &nbr->t_holddown);
 		eigrp_timer_add(nbr->ei->eigrp, &nbr->t_holddown,
-				  eigrp_nbr_holddown_expired, nbr,
-				  (uint32_t)nbr->v_holddown * 1000U);
+				eigrp_nbr_holddown_expired, nbr,
+				(uint32_t)nbr->v_holddown * 1000U);
 		break;
 	}
 	}
@@ -1540,12 +1616,13 @@ int eigrp_nbr_count(eigrp_instance_t *eigrp)
 
 static bool eigrp_nbr_clear_address_valid(const eigrp_address_t *address)
 {
-	return address && (address->afi == EIGRP_AFI_IPV4
-			   || address->afi == EIGRP_AFI_IPV6);
+	return address
+	       && (address->afi == EIGRP_AFI_IPV4
+		   || address->afi == EIGRP_AFI_IPV6);
 }
 
 static bool eigrp_nbr_clear_address_match(const eigrp_nbr_t *nbr,
-				       const eigrp_address_t *address)
+					  const eigrp_address_t *address)
 {
 	if (!nbr || !address)
 		return false;
@@ -1553,17 +1630,18 @@ static bool eigrp_nbr_clear_address_match(const eigrp_nbr_t *nbr,
 	if (address->afi == EIGRP_AFI_IPV6)
 		return nbr->src.afi == AF_INET6
 		       && memcmp(&nbr->src.ip.v6, address->bytes,
-				 sizeof(nbr->src.ip.v6)) == 0;
+				 sizeof(nbr->src.ip.v6))
+				  == 0;
 	if (address->afi == EIGRP_AFI_IPV4)
 		return nbr->src.afi == AF_INET
 		       && memcmp(&nbr->src.ip.v4, address->bytes,
-				 sizeof(nbr->src.ip.v4)) == 0;
+				 sizeof(nbr->src.ip.v4))
+				  == 0;
 	return false;
 }
 
 static void eigrp_nbr_clear_report(const eigrp_nbr_t *nbr, bool soft,
-					eigrp_nbr_clear_cb callback,
-					void *arg)
+				   eigrp_nbr_clear_cb callback, void *arg)
 {
 	eigrp_nbr_clear_state_t state;
 
@@ -1572,24 +1650,26 @@ static void eigrp_nbr_clear_report(const eigrp_nbr_t *nbr, bool soft,
 	memset(&state, 0, sizeof(state));
 	if (nbr->src.afi == AF_INET) {
 		state.address.afi = EIGRP_AFI_IPV4;
-		memcpy(state.address.bytes, &nbr->src.ip.v4, sizeof(nbr->src.ip.v4));
+		memcpy(state.address.bytes, &nbr->src.ip.v4,
+		       sizeof(nbr->src.ip.v4));
 	} else if (nbr->src.afi == AF_INET6) {
 		state.address.afi = EIGRP_AFI_IPV6;
-		memcpy(state.address.bytes, &nbr->src.ip.v6, sizeof(nbr->src.ip.v6));
+		memcpy(state.address.bytes, &nbr->src.ip.v6,
+		       sizeof(nbr->src.ip.v6));
 	}
 	state.interface_name = nbr->ei ? eigrp_intf_name_string(nbr->ei) : NULL;
 	state.soft = soft;
 	callback(&state, arg);
 }
 
-static void eigrp_nbr_clear_hard(eigrp_nbr_t *nbr,
-				      bool peer_termination,
-				      eigrp_nbr_clear_cb callback, void *arg)
+static void eigrp_nbr_clear_hard(eigrp_nbr_t *nbr, bool peer_termination,
+				 eigrp_nbr_clear_cb callback, void *arg)
 {
-	const char *interface_name = nbr->ei ? eigrp_intf_name_string(nbr->ei) : "?";
+	const char *interface_name =
+		nbr->ei ? eigrp_intf_name_string(nbr->ei) : "?";
 
 	eigrp_log(EIGRP_LOG_DEBUG, "Neighbor %s (%s) is down: manually cleared",
-		   eigrp_print_addr(&nbr->src), interface_name);
+		  eigrp_print_addr(&nbr->src), interface_name);
 	eigrp_nbr_clear_report(nbr, false, callback, arg);
 
 	if (peer_termination && nbr->state != EIGRP_NEIGHBOR_DOWN)
@@ -1597,12 +1677,12 @@ static void eigrp_nbr_clear_hard(eigrp_nbr_t *nbr,
 				 &nbr->src);
 
 	eigrp_nbr_state_update_reason(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
-		EIGRP_EVENTLOG_NBR_ADMIN_CLEAR);
+				      EIGRP_EVENTLOG_NBR_ADMIN_CLEAR);
 	eigrp_nbr_delete(nbr);
 }
 
-static void eigrp_nbr_clear_soft(eigrp_nbr_t *nbr,
-				      eigrp_nbr_clear_cb callback, void *arg)
+static void eigrp_nbr_clear_soft(eigrp_nbr_t *nbr, eigrp_nbr_clear_cb callback,
+				 void *arg)
 {
 	eigrp_nbr_clear_report(nbr, true, callback, arg);
 	eigrp_update_send_GR(nbr, EIGRP_GR_MANUAL);
@@ -1610,17 +1690,17 @@ static void eigrp_nbr_clear_soft(eigrp_nbr_t *nbr,
 
 /*
  * Syntax:
- *   EXEC: `clear eigrp address-family <ipv4|ipv6> ... neighbors [IFNAME|ADDRESS] [soft]`
- * Supported: EXEC
- * Placement:
- *   Privileged operational
+ *   EXEC: `clear eigrp address-family <ipv4|ipv6> ... neighbors
+ * [IFNAME|ADDRESS] [soft]` Supported: EXEC Placement: Privileged operational
  * Description:
- * Clears selected neighbor adjacency state without changing retained configuration.
- * Selection is normalized before the portable neighbor target executes.
+ * Clears selected neighbor adjacency state without changing retained
+ * configuration. Selection is normalized before the portable neighbor target
+ * executes.
  */
-eigrp_result_t eigrp_nbr_clear(
-	eigrp_instance_t *runtime, const eigrp_nbr_clear_request_t *request,
-	eigrp_nbr_clear_cb callback, void *arg, size_t *affected_count)
+eigrp_result_t eigrp_nbr_clear(eigrp_instance_t *runtime,
+			       const eigrp_nbr_clear_request_t *request,
+			       eigrp_nbr_clear_cb callback, void *arg,
+			       size_t *affected_count)
 {
 	eigrp_intf_t *ei;
 	eigrp_nbr_t *nbr;
@@ -1642,14 +1722,15 @@ eigrp_result_t eigrp_nbr_clear(
 	if (request->address) {
 		for (EIGRP_LIST_ITERATE_RO(runtime->eiflist, if_node, ei)) {
 			for (EIGRP_LIST_ITERATE_RO(ei->nbrs, nbr_node, nbr)) {
-				if (!eigrp_nbr_clear_address_match(nbr,
-								request->address))
+				if (!eigrp_nbr_clear_address_match(
+					    nbr, request->address))
 					continue;
 				if (request->soft)
-					eigrp_nbr_clear_soft(nbr, callback, arg);
+					eigrp_nbr_clear_soft(nbr, callback,
+							     arg);
 				else
 					eigrp_nbr_clear_hard(nbr, true,
-							  callback, arg);
+							     callback, arg);
 				affected = 1;
 				if (affected_count)
 					*affected_count = affected;
@@ -1660,12 +1741,14 @@ eigrp_result_t eigrp_nbr_clear(
 	}
 
 	if (request->interface_name) {
-		ei = eigrp_intf_lookup_by_name(runtime, request->interface_name);
+		ei = eigrp_intf_lookup_by_name(runtime,
+					       request->interface_name);
 		if (!ei)
 			return EIGRP_RESULT_NOT_FOUND;
 
 		if (!request->soft)
-			eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN, NULL);
+			eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN,
+					 NULL);
 
 		for (EIGRP_LIST_ITERATE(ei->nbrs, nbr_node, next_node, nbr)) {
 			if (!request->soft && nbr->state == EIGRP_NEIGHBOR_DOWN
@@ -1674,8 +1757,7 @@ eigrp_result_t eigrp_nbr_clear(
 			if (request->soft)
 				eigrp_nbr_clear_soft(nbr, callback, arg);
 			else
-				eigrp_nbr_clear_hard(nbr, false,
-							  callback, arg);
+				eigrp_nbr_clear_hard(nbr, false, callback, arg);
 			affected++;
 		}
 		if (affected_count)
@@ -1685,7 +1767,8 @@ eigrp_result_t eigrp_nbr_clear(
 
 	for (EIGRP_LIST_ITERATE_RO(runtime->eiflist, if_node, ei)) {
 		if (!request->soft)
-			eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN, NULL);
+			eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN,
+					 NULL);
 
 		for (EIGRP_LIST_ITERATE(ei->nbrs, nbr_node, next_node, nbr)) {
 			if (!request->soft && nbr->state == EIGRP_NEIGHBOR_DOWN
@@ -1694,8 +1777,7 @@ eigrp_result_t eigrp_nbr_clear(
 			if (request->soft)
 				eigrp_nbr_clear_soft(nbr, callback, arg);
 			else
-				eigrp_nbr_clear_hard(nbr, false,
-							  callback, arg);
+				eigrp_nbr_clear_hard(nbr, false, callback, arg);
 			affected++;
 		}
 	}
@@ -1704,8 +1786,7 @@ eigrp_result_t eigrp_nbr_clear(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-int eigrp_nbr_split_horizon(eigrp_route_descriptor_t *erd,
-				  eigrp_intf_t *ei)
+int eigrp_nbr_split_horizon(eigrp_route_descriptor_t *erd, eigrp_intf_t *ei)
 {
 	if (!ei || !ei->split_horizon || erd->distance == EIGRP_MAX_METRIC)
 		return 0;
@@ -1715,12 +1796,13 @@ int eigrp_nbr_split_horizon(eigrp_route_descriptor_t *erd,
 
 static bool eigrp_nbr_config_address_valid(const eigrp_address_t *address)
 {
-	return address && (address->afi == EIGRP_AFI_IPV4
-			   || address->afi == EIGRP_AFI_IPV6);
+	return address
+	       && (address->afi == EIGRP_AFI_IPV4
+		   || address->afi == EIGRP_AFI_IPV6);
 }
 
-static eigrp_nbr_policy_state_t *eigrp_nbr_policy_state_create(
-	eigrp_af_config_t *af)
+static eigrp_nbr_policy_state_t *
+eigrp_nbr_policy_state_create(eigrp_af_config_t *af)
 {
 	if (!af)
 		return NULL;
@@ -1735,8 +1817,9 @@ static eigrp_nbr_policy_state_t *eigrp_nbr_policy_state_create(
 	return af->neighbor_policy;
 }
 
-static struct eigrp_nbr_policy_entry *eigrp_nbr_policy_entry_lookup(
-	eigrp_nbr_policy_state_t *state, const eigrp_address_t *address)
+static struct eigrp_nbr_policy_entry *
+eigrp_nbr_policy_entry_lookup(eigrp_nbr_policy_state_t *state,
+			      const eigrp_address_t *address)
 {
 	struct eigrp_nbr_policy_entry *entry;
 
@@ -1748,8 +1831,9 @@ static struct eigrp_nbr_policy_entry *eigrp_nbr_policy_entry_lookup(
 	return NULL;
 }
 
-static struct eigrp_nbr_policy_entry *eigrp_nbr_policy_entry_create(
-	eigrp_af_config_t *af, const eigrp_address_t *address)
+static struct eigrp_nbr_policy_entry *
+eigrp_nbr_policy_entry_create(eigrp_af_config_t *af,
+			      const eigrp_address_t *address)
 {
 	eigrp_nbr_policy_state_t *state;
 	struct eigrp_nbr_policy_entry *entry;
@@ -1769,9 +1853,8 @@ static struct eigrp_nbr_policy_entry *eigrp_nbr_policy_entry_create(
 	return entry;
 }
 
-static void eigrp_nbr_policy_entry_prune(
-	eigrp_nbr_policy_state_t *state,
-	struct eigrp_nbr_policy_entry *entry)
+static void eigrp_nbr_policy_entry_prune(eigrp_nbr_policy_state_t *state,
+					 struct eigrp_nbr_policy_entry *entry)
 {
 	struct eigrp_nbr_policy_entry **cursor;
 
@@ -1787,8 +1870,9 @@ static void eigrp_nbr_policy_entry_prune(
 	}
 }
 
-static eigrp_result_t eigrp_nbr_policy_context_validate(
-	eigrp_instance_context_t *context, const eigrp_address_t *address)
+static eigrp_result_t
+eigrp_nbr_policy_context_validate(eigrp_instance_context_t *context,
+				  const eigrp_address_t *address)
 {
 	if (!context || (!context->config && !context->runtime))
 		return EIGRP_RESULT_NOT_FOUND;
@@ -1799,45 +1883,49 @@ static eigrp_result_t eigrp_nbr_policy_context_validate(
 
 /*
  * Syntax:
- *   Named: `neighbor ADDRESS description TEXT` / `no neighbor ADDRESS description [TEXT]`
- * Supported: Named
- * Placement:
- *   Named: address-family mode
+ *   Named: `neighbor ADDRESS description TEXT` / `no neighbor ADDRESS
+ * description [TEXT]` Supported: Named Placement: Named: address-family mode
  * Description:
  * Sets or removes retained descriptive text for a configured neighbor.
  * Description metadata does not own adjacency behavior.
  */
 
-eigrp_result_t eigrp_nbr_description_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_address_t *address, const char *description)
+eigrp_result_t eigrp_nbr_description_update(eigrp_operation_t operation,
+					    eigrp_instance_context_t *context,
+					    const eigrp_address_t *address,
+					    const char *description)
 {
 	eigrp_nbr_message_args_t message = {
-		.type = EIGRP_NBR_MESSAGE_DESCRIPTION, .operation = operation,
-		.context = context, .address = address, .description = description,
+		.type = EIGRP_NBR_MESSAGE_DESCRIPTION,
+		.operation = operation,
+		.context = context,
+		.address = address,
+		.description = description,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_nbr_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_nbr_message_process, &message);
 	if (operation == EIGRP_RESET) {
-	eigrp_nbr_policy_state_t *state;
-	struct eigrp_nbr_policy_entry *entry;
-	eigrp_result_t result;
+		eigrp_nbr_policy_state_t *state;
+		struct eigrp_nbr_policy_entry *entry;
+		eigrp_result_t result;
 
-	if (!eigrp_nbr_config_address_valid(address))
-		return EIGRP_RESULT_INVALID_ARGUMENT;
-	result = eigrp_nbr_policy_context_validate(context, address);
-	if (result != EIGRP_RESULT_SUCCESS)
-		return result;
-	if (!context->config || !context->config->neighbor_policy)
-		return EIGRP_RESULT_NOT_FOUND;
-	state = context->config->neighbor_policy;
-	entry = eigrp_nbr_policy_entry_lookup(state, address);
-	if (!entry || !entry->description)
-		return EIGRP_RESULT_NOT_FOUND;
-	free(entry->description);
-	entry->description = NULL;
-	eigrp_nbr_policy_entry_prune(state, entry);
-	return EIGRP_RESULT_SUCCESS;
+		if (!eigrp_nbr_config_address_valid(address))
+			return EIGRP_RESULT_INVALID_ARGUMENT;
+		result = eigrp_nbr_policy_context_validate(context, address);
+		if (result != EIGRP_RESULT_SUCCESS)
+			return result;
+		if (!context->config || !context->config->neighbor_policy)
+			return EIGRP_RESULT_NOT_FOUND;
+		state = context->config->neighbor_policy;
+		entry = eigrp_nbr_policy_entry_lookup(state, address);
+		if (!entry || !entry->description)
+			return EIGRP_RESULT_NOT_FOUND;
+		free(entry->description);
+		entry->description = NULL;
+		eigrp_nbr_policy_entry_prune(state, entry);
+		return EIGRP_RESULT_SUCCESS;
 	}
 
 	if (operation != EIGRP_SET)
@@ -1871,10 +1959,8 @@ eigrp_result_t eigrp_nbr_description_update(eigrp_operation_t operation, eigrp_i
 
 /*
  * Syntax:
- *   Named: `neighbor ADDRESS description TEXT` / `no neighbor ADDRESS description [TEXT]`
- * Supported: Named
- * Placement:
- *   Named: address-family mode
+ *   Named: `neighbor ADDRESS description TEXT` / `no neighbor ADDRESS
+ * description [TEXT]` Supported: Named Placement: Named: address-family mode
  * Description:
  * Sets or removes retained descriptive text for a configured neighbor.
  * Description metadata does not own adjacency behavior.
@@ -1883,16 +1969,14 @@ eigrp_result_t eigrp_nbr_description_update(eigrp_operation_t operation, eigrp_i
 
 /*
  * Syntax:
- *   Named: `neighbor ADDRESS maximum-prefix LIMIT [...]` / `no neighbor ADDRESS maximum-prefix`
- * Supported: Named
- * Placement:
- *   Named: address-family mode
+ *   Named: `neighbor ADDRESS maximum-prefix LIMIT [...]` / `no neighbor ADDRESS
+ * maximum-prefix` Supported: Named Placement: Named: address-family mode
  * Description:
  * Sets or removes per-neighbor maximum-prefix configuration.
  * The target retains the configured limit and applies runtime limit handling.
  */
-static const eigrp_prefix_limit_t *eigrp_nbr_limit_lookup(
-	eigrp_af_config_t *af, const eigrp_address_t *address)
+static const eigrp_prefix_limit_t *
+eigrp_nbr_limit_lookup(eigrp_af_config_t *af, const eigrp_address_t *address)
 {
 	struct eigrp_nbr_policy_entry *entry;
 
@@ -1907,18 +1991,20 @@ static const eigrp_prefix_limit_t *eigrp_nbr_limit_lookup(
 }
 
 bool eigrp_nbr_route_admit(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-	const eigrp_prefix_t *dest, const eigrp_metrics_t *metric)
+			   const eigrp_prefix_t *dest,
+			   const eigrp_metrics_t *metric)
 {
 	/* Unreachable routes are still processed by DUAL as withdrawal/REPLY
 	 * events, but they must not consume a newly retained neighbor path. */
-	if (!metric || eigrp_metric_calculate(eigrp, *metric) == EIGRP_MAX_METRIC)
+	if (!metric
+	    || eigrp_metric_calculate(eigrp, *metric) == EIGRP_MAX_METRIC)
 		return false;
 	return eigrp_nbr_prefix_admit(eigrp, nbr, dest)
-		&& eigrp_topology_prefix_admit(eigrp, dest);
+	       && eigrp_topology_prefix_admit(eigrp, dest);
 }
 
 bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
-	const eigrp_prefix_t *prefix)
+			    const eigrp_prefix_t *prefix)
 {
 	eigrp_af_config_t *af;
 	eigrp_address_t address;
@@ -1926,7 +2012,8 @@ bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
 	eigrp_prefix_descriptor_t *existing;
 	uint32_t count;
 
-	if (!runtime || !neighbor || !prefix || !eigrp_nbr_is_eligible(neighbor))
+	if (!runtime || !neighbor || !prefix
+	    || !eigrp_nbr_is_eligible(neighbor))
 		return false;
 	existing = eigrp_topology_table_lookup(runtime->topology_table, prefix);
 	/* UPDATE and QUERY share one counted destination for the neighbor. */
@@ -1945,22 +2032,27 @@ bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
 	if (eigrp_prefix_limit_threshold_crossed(limit, count)
 	    && eigrp_nbr_warning_should_emit(runtime, neighbor,
 					     "maximum-prefix threshold"))
-		eigrp_log(EIGRP_LOG_WARNING,
-			  "EIGRP neighbor maximum-prefix threshold reached (%u/%u)",
-			  count + 1U, limit->maximum);
+		eigrp_log(
+			EIGRP_LOG_WARNING,
+			"EIGRP neighbor maximum-prefix threshold reached (%u/%u)",
+			count + 1U, limit->maximum);
 	if (limit->warning_only && count >= limit->maximum
-	    && eigrp_nbr_warning_should_emit(runtime, neighbor, "maximum-prefix reached"))
-		eigrp_log(EIGRP_LOG_WARNING,
+	    && eigrp_nbr_warning_should_emit(runtime, neighbor,
+					     "maximum-prefix reached"))
+		eigrp_log(
+			EIGRP_LOG_WARNING,
 			"EIGRP neighbor maximum-prefix reached (%u/%u), warning-only",
 			count + 1U, limit->maximum);
 	if (!limit->warning_only && count >= limit->maximum) {
 		eigrp_prefix_t peer_addr;
 
-		(void)eigrp_eventlog_msg_add(runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
-			prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_NEIGHBOR, count + 1U,
-			limit->maximum, 0);
+		(void)eigrp_eventlog_msg_add(
+			runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
+			prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_NEIGHBOR,
+			count + 1U, limit->maximum, 0);
 		eigrp_eventlog_addr_from_legacy(&peer_addr, &neighbor->src);
-		(void)eigrp_eventlog_msg_add(runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_PEER,
+		(void)eigrp_eventlog_msg_add(
+			runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_PEER,
 			&peer_addr, count + 1U, limit->maximum,
 			neighbor->ei ? neighbor->ei->ifindex : 0, 0);
 		if (!limit->warning_only)
@@ -1970,16 +2062,22 @@ bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
 	return true;
 }
 
-eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_address_t *address, const eigrp_prefix_limit_t *limit)
+eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation,
+					   eigrp_instance_context_t *context,
+					   const eigrp_address_t *address,
+					   const eigrp_prefix_limit_t *limit)
 {
 	eigrp_nbr_message_args_t message = {
-		.type = EIGRP_NBR_MESSAGE_MAX_PREFIX, .operation = operation,
-		.context = context, .address = address, .limit = limit,
+		.type = EIGRP_NBR_MESSAGE_MAX_PREFIX,
+		.operation = operation,
+		.context = context,
+		.address = address,
+		.limit = limit,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_nbr_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_nbr_message_process, &message);
 	eigrp_nbr_policy_state_t *state;
 	struct eigrp_nbr_policy_entry *entry;
 	eigrp_result_t result;
@@ -1997,11 +2095,13 @@ eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation, eigrp_in
 		if (!entry || !entry->maximum_prefix_configured)
 			return EIGRP_RESULT_NOT_FOUND;
 		entry->maximum_prefix_configured = false;
-		memset(&entry->maximum_prefix, 0, sizeof(entry->maximum_prefix));
+		memset(&entry->maximum_prefix, 0,
+		       sizeof(entry->maximum_prefix));
 		eigrp_nbr_policy_entry_prune(state, entry);
 		return EIGRP_RESULT_SUCCESS;
 	}
-	if (operation != EIGRP_SET || !limit || !limit->maximum || limit->threshold > 100)
+	if (operation != EIGRP_SET || !limit || !limit->maximum
+	    || limit->threshold > 100)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (context->config) {
 		entry = eigrp_nbr_policy_entry_create(context->config, address);
@@ -2016,10 +2116,8 @@ eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation, eigrp_in
 
 /*
  * Syntax:
- *   Named: `neighbor ADDRESS maximum-prefix LIMIT [...]` / `no neighbor ADDRESS maximum-prefix`
- * Supported: Named
- * Placement:
- *   Named: address-family mode
+ *   Named: `neighbor ADDRESS maximum-prefix LIMIT [...]` / `no neighbor ADDRESS
+ * maximum-prefix` Supported: Named Placement: Named: address-family mode
  * Description:
  * Sets or removes per-neighbor maximum-prefix configuration.
  * The target retains the configured limit and applies runtime limit handling.
@@ -2033,33 +2131,43 @@ eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation, eigrp_in
  * Placement:
  *   Named: address-family mode
  * Description:
- * Sets or removes the address-family default maximum-prefix configuration for neighbors.
- * The target preserves configuration and applies the AF-wide default at runtime.
+ * Sets or removes the address-family default maximum-prefix configuration for
+ * neighbors. The target preserves configuration and applies the AF-wide default
+ * at runtime.
  */
-eigrp_result_t eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_prefix_limit_t *limit)
+eigrp_result_t
+eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation,
+				eigrp_instance_context_t *context,
+				const eigrp_prefix_limit_t *limit)
 {
 	eigrp_nbr_message_args_t message = {
-		.type = EIGRP_NBR_MESSAGE_MAX_PREFIX_ALL, .operation = operation,
-		.context = context, .limit = limit,
+		.type = EIGRP_NBR_MESSAGE_MAX_PREFIX_ALL,
+		.operation = operation,
+		.context = context,
+		.limit = limit,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_nbr_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_nbr_message_process, &message);
 	eigrp_nbr_policy_state_t *state;
 
 	if (!context || (!context->config && !context->runtime))
 		return EIGRP_RESULT_NOT_FOUND;
 	if (operation == EIGRP_RESET) {
 		if (!context->config || !context->config->neighbor_policy
-		    || !context->config->neighbor_policy->maximum_prefix_all_configured)
+		    || !context->config->neighbor_policy
+				->maximum_prefix_all_configured)
 			return EIGRP_RESULT_NOT_FOUND;
-		context->config->neighbor_policy->maximum_prefix_all_configured = false;
+		context->config->neighbor_policy
+			->maximum_prefix_all_configured = false;
 		memset(&context->config->neighbor_policy->maximum_prefix_all, 0,
-		       sizeof(context->config->neighbor_policy->maximum_prefix_all));
+		       sizeof(context->config->neighbor_policy
+				      ->maximum_prefix_all));
 		return EIGRP_RESULT_SUCCESS;
 	}
-	if (operation != EIGRP_SET || !limit || !limit->maximum || limit->threshold > 100)
+	if (operation != EIGRP_SET || !limit || !limit->maximum
+	    || limit->threshold > 100)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (context->config) {
 		state = eigrp_nbr_policy_state_create(context->config);
@@ -2079,8 +2187,9 @@ eigrp_result_t eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation, eigr
  * Placement:
  *   Named: address-family mode
  * Description:
- * Sets or removes the address-family default maximum-prefix configuration for neighbors.
- * The target preserves configuration and applies the AF-wide default at runtime.
+ * Sets or removes the address-family default maximum-prefix configuration for
+ * neighbors. The target preserves configuration and applies the AF-wide default
+ * at runtime.
  */
 
 
@@ -2095,46 +2204,60 @@ eigrp_result_t eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation, eigr
  * Sets neighbor logging policy selected by type.  The selector changes the
  * logging attribute, not the semantic action exposed by the public API.
  */
-eigrp_result_t eigrp_nbr_log_update(eigrp_operation_t operation, eigrp_instance_context_t *context, eigrp_nbr_log_type_t type, bool enabled, uint16_t seconds)
+eigrp_result_t eigrp_nbr_log_update(eigrp_operation_t operation,
+				    eigrp_instance_context_t *context,
+				    eigrp_nbr_log_type_t type, bool enabled,
+				    uint16_t seconds)
 {
 	eigrp_nbr_message_args_t message = {
-		.type = EIGRP_NBR_MESSAGE_LOG, .operation = operation,
-		.context = context, .log_type = type, .enabled = enabled,
+		.type = EIGRP_NBR_MESSAGE_LOG,
+		.operation = operation,
+		.context = context,
+		.log_type = type,
+		.enabled = enabled,
 		.seconds = seconds,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_nbr_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_nbr_message_process, &message);
 	if (operation == EIGRP_RESET) {
-	if (!context || (!context->config && !context->runtime))
-		return EIGRP_RESULT_NOT_FOUND;
+		if (!context || (!context->config && !context->runtime))
+			return EIGRP_RESULT_NOT_FOUND;
 
-	switch (type) {
-	case EIGRP_NEIGHBOR_LOG_CHANGES:
-		if (context->config && context->config->neighbor_policy) {
-			context->config->neighbor_policy->log_changes_configured = false;
-			context->config->neighbor_policy->log_changes = true;
+		switch (type) {
+		case EIGRP_NEIGHBOR_LOG_CHANGES:
+			if (context->config
+			    && context->config->neighbor_policy) {
+				context->config->neighbor_policy
+					->log_changes_configured = false;
+				context->config->neighbor_policy->log_changes =
+					true;
+			}
+			if (context->runtime)
+				context->runtime->log_neighbor_changes = true;
+			return EIGRP_RESULT_SUCCESS;
+		case EIGRP_NEIGHBOR_LOG_WARNINGS:
+			if (context->config
+			    && context->config->neighbor_policy) {
+				context->config->neighbor_policy
+					->log_warnings_configured = false;
+				context->config->neighbor_policy->log_warnings =
+					true;
+				context->config->neighbor_policy
+					->log_warning_interval = 10;
+			}
+			if (context->runtime) {
+				context->runtime->log_neighbor_warnings = true;
+				context->runtime
+					->log_neighbor_warning_interval = 10;
+			}
+			if (context->runtime)
+				eigrp_nbr_warning_state_clear(context->runtime);
+			return EIGRP_RESULT_SUCCESS;
+		default:
+			return EIGRP_RESULT_INVALID_ARGUMENT;
 		}
-		if (context->runtime)
-			context->runtime->log_neighbor_changes = true;
-		return EIGRP_RESULT_SUCCESS;
-	case EIGRP_NEIGHBOR_LOG_WARNINGS:
-		if (context->config && context->config->neighbor_policy) {
-			context->config->neighbor_policy->log_warnings_configured = false;
-			context->config->neighbor_policy->log_warnings = true;
-			context->config->neighbor_policy->log_warning_interval = 10;
-		}
-		if (context->runtime) {
-			context->runtime->log_neighbor_warnings = true;
-			context->runtime->log_neighbor_warning_interval = 10;
-		}
-		if (context->runtime)
-			eigrp_nbr_warning_state_clear(context->runtime);
-		return EIGRP_RESULT_SUCCESS;
-	default:
-		return EIGRP_RESULT_INVALID_ARGUMENT;
-	}
 	}
 
 	if (operation != EIGRP_SET)
@@ -2185,7 +2308,7 @@ eigrp_result_t eigrp_nbr_log_update(eigrp_operation_t operation, eigrp_instance_
 
 
 static eigrp_result_t eigrp_nbr_message_process(eigrp_instance_t *eigrp,
-	void *arg)
+						void *arg)
 {
 	eigrp_nbr_message_args_t *message = arg;
 
@@ -2193,22 +2316,25 @@ static eigrp_result_t eigrp_nbr_message_process(eigrp_instance_t *eigrp,
 	switch (message->type) {
 	case EIGRP_NBR_MESSAGE_STATIC_CREATE:
 		return eigrp_nbr_static_create(message->af, message->address,
-			message->interface_name);
+					       message->interface_name);
 	case EIGRP_NBR_MESSAGE_STATIC_DELETE:
 		return eigrp_nbr_static_delete(message->af, message->address,
-			message->interface_name);
+					       message->interface_name);
 	case EIGRP_NBR_MESSAGE_DESCRIPTION:
-		return eigrp_nbr_description_update(message->operation,
-			message->context, message->address, message->description);
+		return eigrp_nbr_description_update(
+			message->operation, message->context, message->address,
+			message->description);
 	case EIGRP_NBR_MESSAGE_MAX_PREFIX:
-		return eigrp_nbr_max_prefix_update(message->operation,
-			message->context, message->address, message->limit);
+		return eigrp_nbr_max_prefix_update(
+			message->operation, message->context, message->address,
+			message->limit);
 	case EIGRP_NBR_MESSAGE_MAX_PREFIX_ALL:
-		return eigrp_nbr_max_prefix_all_update(message->operation,
-			message->context, message->limit);
+		return eigrp_nbr_max_prefix_all_update(
+			message->operation, message->context, message->limit);
 	case EIGRP_NBR_MESSAGE_LOG:
-		return eigrp_nbr_log_update(message->operation, message->context,
-			message->log_type, message->enabled, message->seconds);
+		return eigrp_nbr_log_update(message->operation,
+					    message->context, message->log_type,
+					    message->enabled, message->seconds);
 	}
 	return EIGRP_RESULT_INVALID_ARGUMENT;
 }

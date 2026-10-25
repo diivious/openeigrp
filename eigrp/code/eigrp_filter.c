@@ -83,16 +83,17 @@ static bool eigrp_filter_runtime_state_match(
 	for (direction = 0; direction < EIGRP_FILTER_MAX; direction++) {
 		if (!eigrp_filter_string_match(state->access_list[direction],
 					       snapshot->access_list[direction])
-		    || !eigrp_filter_string_match(state->prefix_list[direction],
-						 snapshot->prefix_list[direction]))
+		    || !eigrp_filter_string_match(
+			    state->prefix_list[direction],
+			    snapshot->prefix_list[direction]))
 			return false;
 	}
 	return true;
 }
 
-static eigrp_result_t eigrp_filter_runtime_state_copy(
-	eigrp_filter_runtime_state_t *state,
-	const eigrp_filter_runtime_snapshot_t *snapshot)
+static eigrp_result_t
+eigrp_filter_runtime_state_copy(eigrp_filter_runtime_state_t *state,
+				const eigrp_filter_runtime_snapshot_t *snapshot)
 {
 	int direction;
 
@@ -118,15 +119,16 @@ failure:
 	return EIGRP_RESULT_INTERNAL_FAILURE;
 }
 
-static bool eigrp_filter_runtime_state_active(
-	const eigrp_filter_runtime_state_t *state)
+static bool
+eigrp_filter_runtime_state_active(const eigrp_filter_runtime_state_t *state)
 {
 	int direction;
 
 	if (!state)
 		return false;
 	for (direction = 0; direction < EIGRP_FILTER_MAX; direction++)
-		if (state->access_list[direction] || state->prefix_list[direction])
+		if (state->access_list[direction]
+		    || state->prefix_list[direction])
 			return true;
 	return false;
 }
@@ -136,7 +138,7 @@ static void eigrp_filter_schedule_process(eigrp_instance_t *eigrp)
 	if (!eigrp)
 		return;
 	eigrp_timer_add(eigrp, &eigrp->t_distribute,
-				   eigrp_distribute_timer_process, eigrp, 10000U);
+			eigrp_distribute_timer_process, eigrp, 10000U);
 }
 
 static void eigrp_filter_intf_schedule(eigrp_intf_t *ei)
@@ -144,11 +146,11 @@ static void eigrp_filter_intf_schedule(eigrp_intf_t *ei)
 	if (!ei)
 		return;
 	eigrp_timer_add(ei->eigrp, &ei->t_distribute,
-				   eigrp_distribute_intf_timer, ei, 10000U);
+			eigrp_distribute_intf_timer, ei, 10000U);
 }
 
 static void eigrp_filter_soft_resync(eigrp_instance_t *eigrp,
-                                     const char *interface_name)
+				     const char *interface_name)
 {
 	eigrp_nbr_clear_request_t request;
 
@@ -214,82 +216,97 @@ void eigrp_sys_policy_runtime_update(void)
 	if (!eigrp_process.virt_router)
 		return;
 
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)) {
-	for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, instance_node, eigrp)) {
-		eigrp_af_config_t *af = eigrp_af_config_runtime_read(eigrp);
-		bool offset_active = af && af->offsets;
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router)) {
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance,
+					   instance_node, eigrp)) {
+			eigrp_af_config_t *af =
+				eigrp_af_config_runtime_read(eigrp);
+			bool offset_active = af && af->offsets;
 
-		if (eigrp_filter_runtime_state_active(&eigrp->filter) || offset_active) {
-			eigrp_filter_schedule_process(eigrp);
-			eigrp_filter_soft_resync(eigrp, NULL);
-		}
-		for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, interface_node, ei))
-			if (eigrp_filter_runtime_state_active(&ei->filter)) {
-				eigrp_filter_intf_schedule(ei);
-				eigrp_filter_soft_resync(eigrp, ei->name);
+			if (eigrp_filter_runtime_state_active(&eigrp->filter)
+			    || offset_active) {
+				eigrp_filter_schedule_process(eigrp);
+				eigrp_filter_soft_resync(eigrp, NULL);
 			}
-	}
+			for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist,
+						   interface_node, ei))
+				if (eigrp_filter_runtime_state_active(
+					    &ei->filter)) {
+					eigrp_filter_intf_schedule(ei);
+					eigrp_filter_soft_resync(eigrp,
+								 ei->name);
+				}
+		}
 	}
 }
 
-static bool eigrp_filter_reference_denies(
-	eigrp_instance_t *eigrp, eigrp_distribute_list_type_t type,
-	const char *name, const eigrp_prefix_t *prefix)
+static bool eigrp_filter_reference_denies(eigrp_instance_t *eigrp,
+					  eigrp_distribute_list_type_t type,
+					  const char *name,
+					  const eigrp_prefix_t *prefix)
 {
 	eigrp_filter_decision_t decision = EIGRP_FILTER_DECISION_PERMIT;
 	eigrp_result_t result;
 
 	if (!name)
 		return false;
-	result = eigrp_sys_filter_evaluate(eigrp, type, name, prefix,
-						 &decision);
+	result =
+		eigrp_sys_filter_evaluate(eigrp, type, name, prefix, &decision);
 	return result == EIGRP_RESULT_SUCCESS
 	       && decision == EIGRP_FILTER_DECISION_DENY;
 }
 
-static bool eigrp_filter_runtime_state_denies(
-	eigrp_instance_t *eigrp, const eigrp_filter_runtime_state_t *state,
-	int direction, const eigrp_prefix_t *prefix)
+static bool
+eigrp_filter_runtime_state_denies(eigrp_instance_t *eigrp,
+				  const eigrp_filter_runtime_state_t *state,
+				  int direction, const eigrp_prefix_t *prefix)
 {
-	if (eigrp_filter_reference_denies(
-		    eigrp, EIGRP_DISTRIBUTE_ACCESS_LIST,
-		    state->access_list[direction], prefix))
+	if (eigrp_filter_reference_denies(eigrp, EIGRP_DISTRIBUTE_ACCESS_LIST,
+					  state->access_list[direction],
+					  prefix))
 		return true;
-	if (eigrp_filter_reference_denies(
-		    eigrp, EIGRP_DISTRIBUTE_PREFIX_LIST,
-		    state->prefix_list[direction], prefix))
+	if (eigrp_filter_reference_denies(eigrp, EIGRP_DISTRIBUTE_PREFIX_LIST,
+					  state->prefix_list[direction],
+					  prefix))
 		return true;
 	return false;
 }
 
-bool eigrp_filter_prefix_update(eigrp_instance_t *eigrp,
-			       eigrp_intf_t *ei, int direction,
-			       const eigrp_prefix_t *prefix)
+bool eigrp_filter_prefix_update(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				int direction, const eigrp_prefix_t *prefix)
 {
 	if (!eigrp || !ei || !prefix || direction < 0
 	    || direction >= EIGRP_FILTER_MAX)
 		return false;
 
 	if (eigrp_topology_default_information_denies(
-		    eigrp, direction == EIGRP_FILTER_IN
-			       ? EIGRP_DEFAULT_INFORMATION_IN
-			       : EIGRP_DEFAULT_INFORMATION_OUT,
+		    eigrp,
+		    direction == EIGRP_FILTER_IN
+			    ? EIGRP_DEFAULT_INFORMATION_IN
+			    : EIGRP_DEFAULT_INFORMATION_OUT,
 		    prefix)) {
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_FILTERED,
-			prefix, direction, ei->ifindex,
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_FILTERED, prefix,
+			direction, ei->ifindex,
 			EIGRP_EVENTLOG_FILTER_REASON_DEFAULT_INFORMATION, 0);
 		return true;
 	}
 
 	if (eigrp_filter_runtime_state_denies(eigrp, &eigrp->filter, direction,
-					       prefix)) {
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_FILTERED,
-			prefix, direction, ei->ifindex, EIGRP_EVENTLOG_FILTER_REASON_PROCESS, 0);
+					      prefix)) {
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_FILTERED, prefix,
+			direction, ei->ifindex,
+			EIGRP_EVENTLOG_FILTER_REASON_PROCESS, 0);
 		return true;
 	}
-	if (eigrp_filter_runtime_state_denies(eigrp, &ei->filter, direction, prefix)) {
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_FILTERED,
-			prefix, direction, ei->ifindex, EIGRP_EVENTLOG_FILTER_REASON_INTERFACE, 0);
+	if (eigrp_filter_runtime_state_denies(eigrp, &ei->filter, direction,
+					      prefix)) {
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_FILTERED, prefix,
+			direction, ei->ifindex,
+			EIGRP_EVENTLOG_FILTER_REASON_INTERFACE, 0);
 		return true;
 	}
 	return false;
@@ -322,9 +339,10 @@ static bool eigrp_offset_intf_match(const char *a, const char *b)
 	return strcmp(a, b) == 0;
 }
 
-static eigrp_offset_config_t *eigrp_offset_config_lookup(
-	eigrp_af_config_t *af, const char *access_list,
-	eigrp_offset_direction_t direction, const char *interface_name)
+static eigrp_offset_config_t *
+eigrp_offset_config_lookup(eigrp_af_config_t *af, const char *access_list,
+			   eigrp_offset_direction_t direction,
+			   const char *interface_name)
 {
 	eigrp_offset_config_t *config;
 
@@ -334,29 +352,27 @@ static eigrp_offset_config_t *eigrp_offset_config_lookup(
 		if (config->direction == direction
 		    && strcmp(config->access_list, access_list) == 0
 		    && eigrp_offset_intf_match(config->interface_name,
-						 interface_name))
+					       interface_name))
 			return config;
 	return NULL;
 }
 
 static bool eigrp_offset_acl_permits(eigrp_instance_t *eigrp,
-                                     const char *access_list,
-                                     const eigrp_prefix_t *prefix)
+				     const char *access_list,
+				     const eigrp_prefix_t *prefix)
 {
 	eigrp_filter_decision_t decision = EIGRP_FILTER_DECISION_DENY;
 
 	return access_list && prefix
-	       && eigrp_sys_filter_evaluate(eigrp,
-					    EIGRP_DISTRIBUTE_ACCESS_LIST,
+	       && eigrp_sys_filter_evaluate(eigrp, EIGRP_DISTRIBUTE_ACCESS_LIST,
 					    access_list, prefix, &decision)
 			  == EIGRP_RESULT_SUCCESS
 	       && decision == EIGRP_FILTER_DECISION_PERMIT;
 }
 
-void eigrp_offset_metric_update(eigrp_instance_t *eigrp,
-                               eigrp_intf_t *ei, int direction,
-                               const eigrp_prefix_t *prefix,
-                               eigrp_metrics_t *metric)
+void eigrp_offset_metric_update(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				int direction, const eigrp_prefix_t *prefix,
+				eigrp_metrics_t *metric)
 {
 	eigrp_af_config_t *af;
 	eigrp_offset_config_t *config;
@@ -373,21 +389,23 @@ void eigrp_offset_metric_update(eigrp_instance_t *eigrp,
 	if (!af)
 		return;
 	ifname = ei->name;
-	wanted = direction == EIGRP_FILTER_OUT ? EIGRP_OFFSET_OUT : EIGRP_OFFSET_IN;
+	wanted = direction == EIGRP_FILTER_OUT ? EIGRP_OFFSET_OUT
+					       : EIGRP_OFFSET_IN;
 
 	/* Interface-specific policy wins over the address-family default. */
 	for (config = af->offsets; config; config = config->next) {
 		if (config->direction != wanted)
 			continue;
 		if (!config->interface_name) {
-			if (!global && eigrp_offset_acl_permits(eigrp,
-							       config->access_list,
-							       prefix))
+			if (!global
+			    && eigrp_offset_acl_permits(
+				    eigrp, config->access_list, prefix))
 				global = config;
 			continue;
 		}
 		if (ifname && strcmp(config->interface_name, ifname) == 0
-		    && eigrp_offset_acl_permits(eigrp, config->access_list, prefix))
+		    && eigrp_offset_acl_permits(eigrp, config->access_list,
+						prefix))
 			break;
 	}
 	if (!config)
@@ -396,28 +414,29 @@ void eigrp_offset_metric_update(eigrp_instance_t *eigrp,
 		return;
 
 	/* EIGRP's retained vector has no separate scalar policy-metric field.
-	 * Apply the offset to delay, which is the monotonic vector component used
-	 * by the composite metric calculation and by both classic/wide TLVs. */
+	 * Apply the offset to delay, which is the monotonic vector component
+	 * used by the composite metric calculation and by both classic/wide
+	 * TLVs. */
 	{
 		uint64_t old_delay = metric->delay;
 
 		delay = metric->delay + (uint64_t)config->offset;
-		metric->delay = delay >= EIGRP_MAX_METRIC ? EIGRP_MAX_METRIC : delay;
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_OFFSET_APPLIED,
-			prefix, direction, ei->ifindex, (eventmsg_arg_t)old_delay,
+		metric->delay =
+			delay >= EIGRP_MAX_METRIC ? EIGRP_MAX_METRIC : delay;
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_OFFSET_APPLIED, prefix,
+			direction, ei->ifindex, (eventmsg_arg_t)old_delay,
 			(eventmsg_arg_t)metric->delay);
 	}
 }
 
 /*
  * Syntax:
- *   Named: `offset-list ACCESS-LIST <in|out> OFFSET [IFNAME]` / `no offset-list ...`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
- * Description:
+ *   Named: `offset-list ACCESS-LIST <in|out> OFFSET [IFNAME]` / `no offset-list
+ * ...` Supported: Named Placement: Named: topology base mode Description:
  * Creates, updates, or removes EIGRP offset-list configuration.
- * Offset application is wired into EIGRP metric processing through the retained delay vector.
+ * Offset application is wired into EIGRP metric processing through the retained
+ * delay vector.
  */
 typedef enum eigrp_filter_message_type {
 	EIGRP_FILTER_MESSAGE_OFFSET_ADD,
@@ -437,23 +456,26 @@ typedef struct eigrp_filter_message_args {
 } eigrp_filter_message_args_t;
 
 static eigrp_result_t eigrp_filter_message_process(eigrp_instance_t *eigrp,
-	void *arg);
+						   void *arg);
 
 eigrp_result_t eigrp_offset_add(eigrp_instance_context_t *context,
-				   const char *access_list,
-				   eigrp_offset_direction_t direction,
-				   uint32_t offset,
-				   const char *interface_name)
+				const char *access_list,
+				eigrp_offset_direction_t direction,
+				uint32_t offset, const char *interface_name)
 {
 	eigrp_filter_message_args_t message = {
-		.type = EIGRP_FILTER_MESSAGE_OFFSET_ADD, .context = context,
-		.name = access_list, .direction = direction, .offset = offset,
+		.type = EIGRP_FILTER_MESSAGE_OFFSET_ADD,
+		.context = context,
+		.name = access_list,
+		.direction = direction,
+		.offset = offset,
 		.interface_name = interface_name,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_filter_message_process, &message);
+						   eigrp_filter_message_process,
+						   &message);
 	eigrp_offset_config_t *config;
 	char *access_copy;
 	char *interface_copy = NULL;
@@ -468,8 +490,9 @@ eigrp_result_t eigrp_offset_add(eigrp_instance_context_t *context,
 		return EIGRP_RESULT_NOT_FOUND;
 
 	if (context->config) {
-		config = eigrp_offset_config_lookup(context->config, access_list,
-						 direction, interface_name);
+		config =
+			eigrp_offset_config_lookup(context->config, access_list,
+						   direction, interface_name);
 		if (config) {
 			config->offset = offset;
 		} else {
@@ -508,29 +531,30 @@ eigrp_result_t eigrp_offset_add(eigrp_instance_context_t *context,
 
 /*
  * Syntax:
- *   Named: `offset-list ACCESS-LIST <in|out> OFFSET [IFNAME]` / `no offset-list ...`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
- * Description:
+ *   Named: `offset-list ACCESS-LIST <in|out> OFFSET [IFNAME]` / `no offset-list
+ * ...` Supported: Named Placement: Named: topology base mode Description:
  * Creates, updates, or removes EIGRP offset-list configuration.
- * Offset application is wired into EIGRP metric processing through the retained delay vector.
+ * Offset application is wired into EIGRP metric processing through the retained
+ * delay vector.
  */
 eigrp_result_t eigrp_offset_remove(eigrp_instance_context_t *context,
 				   const char *access_list,
 				   eigrp_offset_direction_t direction,
-				   uint32_t offset,
-				   const char *interface_name)
+				   uint32_t offset, const char *interface_name)
 {
 	eigrp_filter_message_args_t message = {
-		.type = EIGRP_FILTER_MESSAGE_OFFSET_REMOVE, .context = context,
-		.name = access_list, .direction = direction, .offset = offset,
+		.type = EIGRP_FILTER_MESSAGE_OFFSET_REMOVE,
+		.context = context,
+		.name = access_list,
+		.direction = direction,
+		.offset = offset,
 		.interface_name = interface_name,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_filter_message_process, &message);
+						   eigrp_filter_message_process,
+						   &message);
 	eigrp_offset_config_t **cursor;
 	eigrp_offset_config_t *config;
 
@@ -551,7 +575,7 @@ eigrp_result_t eigrp_offset_remove(eigrp_instance_context_t *context,
 			if (config->direction != direction
 			    || strcmp(config->access_list, access_list) != 0
 			    || !eigrp_offset_intf_match(config->interface_name,
-							     interface_name))
+							interface_name))
 				continue;
 			*cursor = config->next;
 			free(config->access_list);
@@ -627,7 +651,7 @@ static eigrp_distribute_list_config_t *eigrp_distribute_list_config_lookup(
 	for (config = af->distribute_lists; config; config = config->next) {
 		if (config->type == type && config->direction == direction
 		    && eigrp_distribute_intf_match(config->interface_name,
-							 interface_name))
+						   interface_name))
 			return config;
 	}
 	return NULL;
@@ -666,7 +690,7 @@ static eigrp_result_t eigrp_filter_runtime_reference_update(
 	eigrp_filter_runtime_state_t *state;
 	eigrp_intf_t *ei = NULL;
 	int slot = direction == EIGRP_OFFSET_OUT ? EIGRP_FILTER_OUT
-						     : EIGRP_FILTER_IN;
+						 : EIGRP_FILTER_IN;
 
 	if (!eigrp)
 		return EIGRP_RESULT_NOT_FOUND;
@@ -691,42 +715,47 @@ static eigrp_result_t eigrp_filter_runtime_reference_update(
 	else
 		snapshot.prefix_list[slot] = remove ? NULL : name;
 
-	return eigrp_sys_filter_runtime_replace(eigrp, interface_name, &snapshot);
+	return eigrp_sys_filter_runtime_replace(eigrp, interface_name,
+						&snapshot);
 }
 
 /*
  * Syntax:
- *   Classic: `distribute-list <ACL|prefix PREFIX-LIST> <in|out> [IFNAME]` / `no distribute-list ...`
- *   Named: same syntax under topology base
- * Supported: Classic / Named (separate public endpoints)
- * Placement:
- *   Classic: router mode through FRR distribute framework
- *   Named: topology base mode through this EIGRP target
- * Description:
- * Creates, updates, or removes portable distribute-list state for named mode.
- * Classic and named configuration endpoints intentionally remain separate while both feed the portable runtime filter representation below the host boundary.
+ *   Classic: `distribute-list <ACL|prefix PREFIX-LIST> <in|out> [IFNAME]` / `no
+ * distribute-list ...` Named: same syntax under topology base Supported:
+ * Classic / Named (separate public endpoints) Placement: Classic: router mode
+ * through FRR distribute framework Named: topology base mode through this EIGRP
+ * target Description: Creates, updates, or removes portable distribute-list
+ * state for named mode. Classic and named configuration endpoints intentionally
+ * remain separate while both feed the portable runtime filter representation
+ * below the host boundary.
  */
-eigrp_result_t eigrp_distribute_add(
-	eigrp_instance_context_t *context, eigrp_distribute_list_type_t type,
-	const char *name, eigrp_offset_direction_t direction,
-	const char *interface_name)
+eigrp_result_t eigrp_distribute_add(eigrp_instance_context_t *context,
+				    eigrp_distribute_list_type_t type,
+				    const char *name,
+				    eigrp_offset_direction_t direction,
+				    const char *interface_name)
 {
 	eigrp_filter_message_args_t message = {
-		.type = EIGRP_FILTER_MESSAGE_DISTRIBUTE_ADD, .context = context,
-		.name = name, .direction = direction, .interface_name = interface_name,
+		.type = EIGRP_FILTER_MESSAGE_DISTRIBUTE_ADD,
+		.context = context,
+		.name = name,
+		.direction = direction,
+		.interface_name = interface_name,
 		.distribute_type = type,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_filter_message_process, &message);
+						   eigrp_filter_message_process,
+						   &message);
 	eigrp_distribute_list_config_t *config = NULL;
 	eigrp_distribute_list_config_t *new_config = NULL;
 	char *new_name;
 	eigrp_result_t result;
 
 	result = eigrp_distribute_list_validate(context, type, name, direction,
-						 interface_name);
+						interface_name);
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
 
@@ -749,7 +778,8 @@ eigrp_result_t eigrp_distribute_add(
 			new_name = NULL;
 			if (interface_name) {
 				new_config->interface_name =
-					eigrp_distribute_string_dup(interface_name);
+					eigrp_distribute_string_dup(
+						interface_name);
 				if (!new_config->interface_name) {
 					free(new_config->name);
 					free(new_config);
@@ -762,7 +792,8 @@ eigrp_result_t eigrp_distribute_add(
 	result = EIGRP_RESULT_SUCCESS;
 	if (context->runtime)
 		result = eigrp_filter_runtime_reference_update(
-			context->runtime, type, name, direction, interface_name, false);
+			context->runtime, type, name, direction, interface_name,
+			false);
 	if (!eigrp_distribute_runtime_result_committable(result)) {
 		free(new_name);
 		if (new_config) {
@@ -791,36 +822,40 @@ eigrp_result_t eigrp_distribute_add(
 
 /*
  * Syntax:
- *   Classic: `distribute-list <ACL|prefix PREFIX-LIST> <in|out> [IFNAME]` / `no distribute-list ...`
- *   Named: same syntax under topology base
- * Supported: Classic / Named (separate public endpoints)
- * Placement:
- *   Classic: router mode through FRR distribute framework
- *   Named: topology base mode through this EIGRP target
- * Description:
- * Creates, updates, or removes portable distribute-list state for named mode.
- * Classic and named configuration endpoints intentionally remain separate while both feed the portable runtime filter representation below the host boundary.
+ *   Classic: `distribute-list <ACL|prefix PREFIX-LIST> <in|out> [IFNAME]` / `no
+ * distribute-list ...` Named: same syntax under topology base Supported:
+ * Classic / Named (separate public endpoints) Placement: Classic: router mode
+ * through FRR distribute framework Named: topology base mode through this EIGRP
+ * target Description: Creates, updates, or removes portable distribute-list
+ * state for named mode. Classic and named configuration endpoints intentionally
+ * remain separate while both feed the portable runtime filter representation
+ * below the host boundary.
  */
-eigrp_result_t eigrp_distribute_remove(
-	eigrp_instance_context_t *context, eigrp_distribute_list_type_t type,
-	const char *name, eigrp_offset_direction_t direction,
-	const char *interface_name)
+eigrp_result_t eigrp_distribute_remove(eigrp_instance_context_t *context,
+				       eigrp_distribute_list_type_t type,
+				       const char *name,
+				       eigrp_offset_direction_t direction,
+				       const char *interface_name)
 {
 	eigrp_filter_message_args_t message = {
-		.type = EIGRP_FILTER_MESSAGE_DISTRIBUTE_REMOVE, .context = context,
-		.name = name, .direction = direction, .interface_name = interface_name,
+		.type = EIGRP_FILTER_MESSAGE_DISTRIBUTE_REMOVE,
+		.context = context,
+		.name = name,
+		.direction = direction,
+		.interface_name = interface_name,
 		.distribute_type = type,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
 		return eigrp_instance_message_call(context->runtime,
-			eigrp_filter_message_process, &message);
+						   eigrp_filter_message_process,
+						   &message);
 	eigrp_distribute_list_config_t **cursor = NULL;
 	eigrp_distribute_list_config_t *config = NULL;
 	eigrp_result_t result;
 
 	result = eigrp_distribute_list_validate(context, type, name, direction,
-						 interface_name);
+						interface_name);
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
 
@@ -836,9 +871,9 @@ eigrp_result_t eigrp_distribute_remove(
 			config = *cursor;
 			break;
 		}
-		/* The retained named filter entry is the ownership marker for this
-		 * runtime reference.  Do not clear a filter installed by classic
-		 * configuration when no named entry exists.
+		/* The retained named filter entry is the ownership marker for
+		 * this runtime reference.  Do not clear a filter installed by
+		 * classic configuration when no named entry exists.
 		 */
 		if (!config)
 			return EIGRP_RESULT_NOT_FOUND;
@@ -847,7 +882,8 @@ eigrp_result_t eigrp_distribute_remove(
 	result = EIGRP_RESULT_NOT_FOUND;
 	if (context->runtime) {
 		result = eigrp_filter_runtime_reference_update(
-			context->runtime, type, name, direction, interface_name, true);
+			context->runtime, type, name, direction, interface_name,
+			true);
 		if (result != EIGRP_RESULT_SUCCESS
 		    && result != EIGRP_RESULT_NOT_FOUND)
 			return result;
@@ -865,7 +901,7 @@ eigrp_result_t eigrp_distribute_remove(
 }
 
 static eigrp_result_t eigrp_filter_message_process(eigrp_instance_t *eigrp,
-	void *arg)
+						   void *arg)
 {
 	eigrp_filter_message_args_t *message = arg;
 
@@ -873,17 +909,21 @@ static eigrp_result_t eigrp_filter_message_process(eigrp_instance_t *eigrp,
 	switch (message->type) {
 	case EIGRP_FILTER_MESSAGE_OFFSET_ADD:
 		return eigrp_offset_add(message->context, message->name,
-			message->direction, message->offset, message->interface_name);
+					message->direction, message->offset,
+					message->interface_name);
 	case EIGRP_FILTER_MESSAGE_OFFSET_REMOVE:
 		return eigrp_offset_remove(message->context, message->name,
-			message->direction, message->offset, message->interface_name);
+					   message->direction, message->offset,
+					   message->interface_name);
 	case EIGRP_FILTER_MESSAGE_DISTRIBUTE_ADD:
 		return eigrp_distribute_add(message->context,
-			message->distribute_type, message->name, message->direction,
-			message->interface_name);
+					    message->distribute_type,
+					    message->name, message->direction,
+					    message->interface_name);
 	case EIGRP_FILTER_MESSAGE_DISTRIBUTE_REMOVE:
-		return eigrp_distribute_remove(message->context,
-			message->distribute_type, message->name, message->direction,
+		return eigrp_distribute_remove(
+			message->context, message->distribute_type,
+			message->name, message->direction,
 			message->interface_name);
 	}
 	return EIGRP_RESULT_INVALID_ARGUMENT;

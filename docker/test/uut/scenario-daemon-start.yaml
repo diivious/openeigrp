@@ -1,0 +1,36 @@
+schema: docker-daemon-uut/v1
+# Exercise docker-start's actual daemon validation with simulated FRR daemon_list.
+# The Docker integration test separately verifies full container startup.
+cases:
+  - name: bundled-default
+    daemons: [mgmtd, zebra, eigrpd, staticd]
+    result: start
+    eigrp: true
+  - name: external-eigrp-disabled
+    daemons: [mgmtd, zebra, staticd]
+    result: start
+    eigrp: false
+  - name: external-ospf-with-eigrp-disabled
+    daemons: [mgmtd, zebra, staticd, ospfd]
+    result: start
+    eigrp: false
+  - name: external-ospf-with-eigrp-enabled
+    daemons: [mgmtd, zebra, eigrpd, staticd, ospfd]
+    result: start
+    eigrp: true
+  - name: missing-mgmtd
+    daemons: [zebra, eigrpd, staticd]
+    result: error
+    missing: mgmtd
+  - name: missing-zebra
+    daemons: [mgmtd, eigrpd, staticd]
+    result: error
+    missing: zebra
+  - name: missing-staticd
+    daemons: [mgmtd, zebra, eigrpd]
+    result: error
+    missing: staticd
+  - name: no-daemons
+    daemons: []
+    result: error
+    missing: mgmtd

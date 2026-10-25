@@ -540,6 +540,7 @@ static eigrp_af_config_t *test_runtime_af;
             str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
             *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ),
+            "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
             "-o",
             str(binary),
         ],

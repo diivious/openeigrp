@@ -177,28 +177,27 @@ eigrp_result_t eigrp_eventlog_resize(eigrp_instance_t *eigrp,
 				     uint32_t capacity);
 
 /* Append one self-contained event snapshot to the bounded ring. */
-eigrp_result_t eigrp_eventlog_msg_add(eigrp_instance_t *eigrp,
-				     uint16_t opcode,
-				     const eigrp_prefix_t *addr,
-				     eventmsg_arg_t arg1,
-				     eventmsg_arg_t arg2,
-				     eventmsg_arg_t arg3,
-				     eventmsg_arg_t arg4);
+eigrp_result_t eigrp_eventlog_msg_add(eigrp_instance_t *eigrp, uint16_t opcode,
+				      const eigrp_prefix_t *addr,
+				      eventmsg_arg_t arg1, eventmsg_arg_t arg2,
+				      eventmsg_arg_t arg3, eventmsg_arg_t arg4);
 void eigrp_eventlog_addr_from_legacy(eigrp_prefix_t *prefix,
 				     const eigrp_addr_t *addr);
 
 /* Operational/configuration targets. */
 eigrp_result_t eigrp_eventlog_clear(eigrp_instance_context_t *context);
 eigrp_result_t eigrp_eventlog_size_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	uint32_t size);
-eigrp_result_t eigrp_eventlog_state_read(
-	const eigrp_instance_context_t *context, eigrp_eventlog_state_t *state);
-eigrp_result_t eigrp_eventlog_msg_iterate(const eigrp_instance_context_t *context,
-				   eigrp_eventlog_msg_cb callback,
-				   void *arg);
+					  eigrp_instance_context_t *context,
+					  uint32_t size);
+eigrp_result_t
+eigrp_eventlog_state_read(const eigrp_instance_context_t *context,
+			  eigrp_eventlog_state_t *state);
+eigrp_result_t
+eigrp_eventlog_msg_iterate(const eigrp_instance_context_t *context,
+			   eigrp_eventlog_msg_cb callback, void *arg);
 
-/* Static opcode-to-format lookup and trusted formatter used by show adapters. */
+/* Static opcode-to-format lookup and trusted formatter used by show adapters.
+ */
 const char *eigrp_eventlog_format_read(unsigned long opcode);
 eigrp_result_t eigrp_eventlog_msg_format(const eigrp_eventlog_msg_t *entry,
 					 char *buffer, size_t buffer_size);

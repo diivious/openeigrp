@@ -447,8 +447,8 @@ struct variable eigrp_variables[] = {
 	 {5, 1, 1, 23}}};
 
 static eigrp_nbr_t *eigrp_snmp_nbr_lookup(eigrp_instance_t *eigrp,
-					       struct in_addr *nbr_addr,
-					       unsigned int *ifindex)
+					  struct in_addr *nbr_addr,
+					  unsigned int *ifindex)
 {
 	eigrp_list_item_t *node, *nnode, *node2, *nnode2;
 	eigrp_intf_t *ei;
@@ -465,9 +465,8 @@ static eigrp_nbr_t *eigrp_snmp_nbr_lookup(eigrp_instance_t *eigrp,
 }
 
 static eigrp_nbr_t *eigrp_snmp_nbr_lookup_next(eigrp_instance_t *eigrp,
-						    struct in_addr *nbr_addr,
-						    unsigned int *ifindex,
-						    int first)
+					       struct in_addr *nbr_addr,
+					       unsigned int *ifindex, int first)
 {
 	eigrp_list_item_t *node, *nnode, *node2, *nnode2;
 	eigrp_intf_t *ei;
@@ -501,9 +500,9 @@ static eigrp_nbr_t *eigrp_snmp_nbr_lookup_next(eigrp_instance_t *eigrp,
 }
 
 static eigrp_nbr_t *eigrpNbrLookup(eigrp_instance_t *eigrp, struct variable *v,
-					oid *name, size_t *length,
-					struct in_addr *nbr_addr,
-					unsigned int *ifindex, int exact)
+				   oid *name, size_t *length,
+				   struct in_addr *nbr_addr,
+				   unsigned int *ifindex, int exact)
 {
 	unsigned int len;
 	int first;
@@ -640,7 +639,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->hello_out;
 			}
 			return SNMP_INTEGER(counter);
@@ -651,7 +650,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->hello_in;
 			}
 			return SNMP_INTEGER(counter);
@@ -662,7 +661,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->update_out;
 			}
 			return SNMP_INTEGER(counter);
@@ -673,7 +672,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->update_in;
 			}
 			return SNMP_INTEGER(counter);
@@ -684,7 +683,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->query_out;
 			}
 			return SNMP_INTEGER(counter);
@@ -695,7 +694,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->query_in;
 			}
 			return SNMP_INTEGER(counter);
@@ -706,7 +705,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->reply_out;
 			}
 			return SNMP_INTEGER(counter);
@@ -717,7 +716,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->reply_in;
 			}
 			return SNMP_INTEGER(counter);
@@ -728,7 +727,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->ack_out;
 			}
 			return SNMP_INTEGER(counter);
@@ -739,7 +738,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->ack_in;
 			}
 			return SNMP_INTEGER(counter);
@@ -762,7 +761,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->siaQuery_out;
 			}
 			return SNMP_INTEGER(counter);
@@ -773,7 +772,7 @@ static uint8_t *eigrpTraffStatsEntry(struct variable *v, oid *name,
 		if (eigrp) {
 			counter = 0;
 			for (EIGRP_LIST_ITERATE(eigrp->eiflist, node, nnode,
-					       ei)) {
+						ei)) {
 				counter += ei->siaQuery_in;
 			}
 			return SNMP_INTEGER(counter);

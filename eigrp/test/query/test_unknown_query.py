@@ -19,5 +19,6 @@ def test_unknown_query_topology():
         subprocess.run(["cc", *flags, str(Path(__file__).with_suffix(".c")),
                         *(str(CODE / f) for f in ["eigrp_topology.c", "eigrp_neighbor.c", "eigrp_metric.c", "eigrp_table.c", "eigrp_list.c", "eigrp_prefix.c", "eigrp_eventlog.c", "eigrp_instance.c", "eigrp_log.c"]),
                         gc_flag,
+                        "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
                         "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)

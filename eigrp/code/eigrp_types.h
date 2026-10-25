@@ -43,7 +43,8 @@ struct eigrp_process {
 };
 
 
-typedef eigrp_result_t (*eigrp_message_handler_t)(eigrp_instance_t *eigrp, void *arg);
+typedef eigrp_result_t (*eigrp_message_handler_t)(eigrp_instance_t *eigrp,
+						  void *arg);
 
 struct eigrp_message_request {
 	eigrp_message_handler_t handler;
@@ -134,9 +135,10 @@ typedef eigrp_route_descriptor_t *(*eigrp_packet_decoder_t)(
 	eigrp_instance_t *eigrp, eigrp_nbr_t *nbr, eigrp_stream_t *pkt,
 	uint16_t pktlen);
 
-typedef uint16_t (*eigrp_packet_encoder_t)(
-	eigrp_instance_t *eigrp, eigrp_intf_t *ei, eigrp_nbr_t *nbr,
-	eigrp_stream_t *pkt, eigrp_route_descriptor_t *route);
+typedef uint16_t (*eigrp_packet_encoder_t)(eigrp_instance_t *eigrp,
+					   eigrp_intf_t *ei, eigrp_nbr_t *nbr,
+					   eigrp_stream_t *pkt,
+					   eigrp_route_descriptor_t *route);
 
 typedef struct eigrp_message {
 	int value;
@@ -144,7 +146,7 @@ typedef struct eigrp_message {
 } eigrp_message_t;
 
 const char *eigrp_message_lookup(const eigrp_message_t *messages, int value,
-                                 const char *fallback);
+				 const char *fallback);
 
 typedef struct eigrp_tlv_codec {
 	eigrp_packet_encoder_t encoder;
@@ -157,41 +159,43 @@ typedef struct eigrp_af_vectors {
 	/*
 	 * Network-layer packet envelope.  Common EIGRP packet processing owns
 	 * queueing, acknowledgements, checksum/authentication, and opcode
-	 * dispatch; the AF owns the IP header/socket representation and extracts
-	 * the native EIGRP source/destination addresses.  Send/receive may be
-	 * unbound only while an address-family data path is capability-gated.
-	 * Runtime creation validates the complete vector before packet processing
-	 * is started; common packet code does not probe callbacks before use.
+	 * dispatch; the AF owns the IP header/socket representation and
+	 * extracts the native EIGRP source/destination addresses.  Send/receive
+	 * may be unbound only while an address-family data path is
+	 * capability-gated. Runtime creation validates the complete vector
+	 * before packet processing is started; common packet code does not
+	 * probe callbacks before use.
 	 */
 	int (*packet_send)(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 			   eigrp_packet_t *packet);
-	bool (*packet_receive)(eigrp_instance_t *eigrp,
-			       eigrp_stream_t *stream, eigrp_intf_t **ei,
-			       eigrp_addr_t *source, eigrp_addr_t *destination,
+	bool (*packet_receive)(eigrp_instance_t *eigrp, eigrp_stream_t *stream,
+			       eigrp_intf_t **ei, eigrp_addr_t *source,
+			       eigrp_addr_t *destination,
 			       eigrp_packet_rx_meta_t *meta);
 	bool (*packet_source_on_link)(eigrp_intf_t *ei,
 				      const eigrp_addr_t *source);
 
 	/*
 	 * Address-family wire primitives.  Address encoding is for a complete
-	 * runtime address (for example, a classic-TLV next hop); prefix encoding
-	 * owns the EIGRP prefix-length/significant-byte representation.
+	 * runtime address (for example, a classic-TLV next hop); prefix
+	 * encoding owns the EIGRP prefix-length/significant-byte
+	 * representation.
 	 */
 	uint8_t packet_address_bytes;
 	uint16_t (*packet_address_decode)(eigrp_stream_t *stream,
-					eigrp_addr_t *address);
+					  eigrp_addr_t *address);
 	uint16_t (*packet_address_encode)(eigrp_stream_t *stream,
-					const eigrp_addr_t *address);
+					  const eigrp_addr_t *address);
 	uint16_t (*packet_prefix_decode)(eigrp_stream_t *stream,
-				       eigrp_prefix_t *prefix);
+					 eigrp_prefix_t *prefix);
 	uint16_t (*packet_prefix_encode)(eigrp_stream_t *stream,
-				       const eigrp_prefix_t *prefix);
+					 const eigrp_prefix_t *prefix);
 
 	/*
 	 * Route-TLV address-family selectors.  TLV1/TLV2 remain the route codec
-	 * owners because classic and multiprotocol metrics/exterior sections are
-	 * independent of address family.  The AF supplies only the family-specific
-	 * route type/AFI values and destination representation.
+	 * owners because classic and multiprotocol metrics/exterior sections
+	 * are independent of address family.  The AF supplies only the
+	 * family-specific route type/AFI values and destination representation.
 	 */
 	uint16_t classic_internal_tlv_type;
 	uint16_t classic_external_tlv_type;

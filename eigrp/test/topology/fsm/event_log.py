@@ -36,7 +36,7 @@ def test_event_log_preamble_and_dual_text_match_operational_format():
     assert '"%H:%M:%S"' in eventlog
     assert '"%s.%03u %s"' in eventlog
     assert '"DUAL state change %s Old: %s New: %s"' in eventlog
-    assert 'printf("%u  %s\\n",n,b);' in uut
+    assert re.search(r'printf\s*\(\s*"%u  %s\\n"\s*,\s*n\s*,\s*b\s*\)\s*;', uut)
     assert "EVENT|number=%u|message=%s" not in uut
 
 

@@ -63,12 +63,12 @@ def test_topology_packetizer_and_nsf_decisions_are_logged_at_operation_sites():
                       topology.index("eigrp_table_t *eigrp_topology_table_create")]
     assert delete.index("EIGRP_EVENTLOG_OPCODE_TOPOLOGY_ROUTE_DELETE") < delete.index("eigrp_list_delete_data")
 
-    add = packetizer[packetizer.index("static int eigrp_packetizer_builder_route_add") :
-                     packetizer.index("static void eigrp_packetizer_builder_init")]
+    add = packetizer[packetizer.index("eigrp_packetizer_builder_route_add(") :
+                     packetizer.index("eigrp_packetizer_builder_init(")]
     assert "encoded > 0" in add
     assert "EIGRP_EVENTLOG_OPCODE_UPDATE_PACKETIZED" in add
 
-    poison = packetizer[packetizer.index("static eigrp_route_descriptor_t *eigrp_packetizer_poison_reverse") :
+    poison = packetizer[packetizer.index("eigrp_packetizer_poison_reverse(") :
                          packetizer.index("static void eigrp_packetizer_query_rij_add")]
     assert "eigrp_nbr_split_horizon" in poison
     assert "EIGRP_EVENTLOG_OPCODE_POISON_REVERSE" in poison

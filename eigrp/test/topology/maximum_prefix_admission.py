@@ -22,7 +22,7 @@ def test_maximum_prefix_query_retention_and_replacement(tmp_path):
            str(Path(__file__).with_suffix('.c')),
            *(str(ROOT / 'eigrp' / 'code' / src) for src in sources),
            *(['-Wl,-dead_strip'] if sys.platform == 'darwin' else
-             ['-Wl,--gc-sections']), '-o', str(binary)]
+             ['-Wl,--gc-sections']), "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), '-o', str(binary)]
     build = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
     assert build.returncode == 0, build.stderr
     run = subprocess.run([str(binary)], cwd=ROOT, text=True, capture_output=True)

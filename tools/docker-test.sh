@@ -27,6 +27,7 @@ cleanup() {
             docker exec "$container" cat /etc/frr/daemons >&2 || true
         fi
     fi
+    docker rm -f "${container}-config" >/dev/null 2>&1 || true
     docker rm -f "$container" >/dev/null 2>&1 || true
     docker volume rm -f "$volume" >/dev/null 2>&1 || true
 }
@@ -38,27 +39,35 @@ docker run -d --name "$container" \
     --mount "type=volume,src=$volume,dst=/etc/frr" \
     "$image" >/dev/null
 
-ready() {
+ready_frr() {
     [[ "$(docker inspect -f '{{.State.Running}}' "$container")" == true ]] || return 1
     # Missing vtysh.conf causes vtysh to log a misleading frr.conf error
     # (CMD_ERR_NO_FILE / status 11), even when the rest of FRR is healthy.
     docker exec "$container" test -r /etc/frr/vtysh.conf >/dev/null 2>&1 || return 1
-    for daemon in watchfrr mgmtd zebra staticd eigrpd; do
+    for daemon in watchfrr mgmtd zebra staticd; do
         docker exec "$container" pidof "$daemon" >/dev/null 2>&1 || return 1
     done
     docker exec "$container" vtysh -c 'show version' >/dev/null 2>&1 || return 1
+}
+ready() {
+    ready_frr || return 1
+    docker exec "$container" pidof eigrpd >/dev/null 2>&1 || return 1
     docker exec "$container" vtysh -d eigrpd -c 'show eigrp tech-support' >/dev/null 2>&1 || return 1
 }
 wait_ready() {
-    local i
+    local mode="${1:-eigrp}" i
     for ((i = 0; i < 60; i++)); do
         if [[ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" != true ]]; then
             fail 'FRR container exited before startup completed'
         fi
-        if ready; then return 0; fi
+        if [[ "$mode" == frr ]]; then
+            if ready_frr; then return 0; fi
+        elif ready; then
+            return 0
+        fi
         sleep 2
     done
-    fail 'FRR/ eigrpd not ready after startup'
+    fail "FRR/$mode not ready after startup"
 }
 
 wait_ready
@@ -107,4 +116,38 @@ grep -Fq 'eigrp router-id 10.44.53.1' <<< "$running" || fail 'router ID lost on 
 # Runtime remains operational beyond the initial startup notification.
 sleep 5
 ready || fail 'FRR daemon exited after successful startup'
-echo "PASS: $image — FRR, OpenEIGRP, AS 4453, version $version, save and restart"
+
+# An external orchestrator can provide eigrpd=no before the image boots.
+# Preserve the saved configuration and prove that FRR runs without EIGRP.
+docker stop --time 15 "$container" >/dev/null
+# Edit the stopped container's persistent configuration through a disposable
+# helper, so the disabled setting is in place before docker start.
+config_container="${container}-config"
+docker run --rm --name "$config_container" \
+    --mount "type=volume,src=$volume,dst=/etc/frr" \
+    --entrypoint /bin/sh "$image" -ec \
+    "sed -i 's/^eigrpd=yes$/eigrpd=no/' /etc/frr/daemons; grep -qx 'eigrpd=no' /etc/frr/daemons" \
+    || fail 'could not disable eigrpd in the persistent configuration'
+docker start "$container" >/dev/null
+wait_ready frr
+if docker exec "$container" pidof eigrpd >/dev/null 2>&1; then
+    fail 'eigrpd started despite eigrpd=no'
+fi
+startup_logs="$(docker logs "$container" 2>&1)" || fail 'could not read startup logs'
+if ! grep -Fq 'warning: eigrpd is disabled' <<< "$startup_logs"; then
+    fail 'missing warning for disabled eigrpd'
+fi
+sleep 5
+ready_frr || fail 'FRR stopped while eigrpd was disabled'
+
+# Restore defaults in the same volume and verify EIGRP starts again.
+docker stop --time 15 "$container" >/dev/null
+docker run --rm --name "$config_container" \
+    --mount "type=volume,src=$volume,dst=/etc/frr" \
+    --entrypoint /bin/sh "$image" -ec \
+    "sed -i 's/^eigrpd=no$/eigrpd=yes/' /etc/frr/daemons; grep -qx 'eigrpd=yes' /etc/frr/daemons" \
+    || fail 'could not re-enable eigrpd in the persistent configuration'
+docker start "$container" >/dev/null
+wait_ready
+ready || fail 'EIGRP did not recover after being re-enabled'
+echo "PASS: $image — FRR, OpenEIGRP, AS 4453, version $version, save/restart, optional eigrpd"

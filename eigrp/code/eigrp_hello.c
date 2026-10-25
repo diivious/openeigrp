@@ -49,13 +49,14 @@ void eigrp_hello_timer(void *arg)
 
 	if (IS_DEBUG_EIGRP(0, TIMERS))
 		eigrp_log(EIGRP_LOG_DEBUG, "Start Hello Timer (%s) Expire [%u]",
-			   eigrp_intf_name_string(ei), ei->params.v_hello);
+			  eigrp_intf_name_string(ei), ei->params.v_hello);
 
 	/* Passive interfaces retain the timer so a later `no passive-interface`
 	 * resumes discovery without host-specific timer manipulation here, but
 	 * they neither multicast nor unicast Hello packets while passive.
 	 */
-	if (!eigrp_intf_is_passive(ei) && !ei->eigrp->eigrp_pfxlimits_af_state) {
+	if (!eigrp_intf_is_passive(ei)
+	    && !ei->eigrp->eigrp_pfxlimits_af_state) {
 		/* Static-neighbor interfaces use explicit unicast discovery. */
 		if (!eigrp_nbr_static_hello_send(ei))
 			eigrp_hello_send(ei, EIGRP_HELLO_NORMAL, NULL);
@@ -63,7 +64,7 @@ void eigrp_hello_timer(void *arg)
 
 	/* Hello timer set. */
 	eigrp_timer_add(ei->eigrp, &ei->t_hello, eigrp_hello_timer, ei,
-			    (uint32_t)ei->params.v_hello * 1000U);
+			(uint32_t)ei->params.v_hello * 1000U);
 
 	return;
 }
@@ -71,8 +72,7 @@ void eigrp_hello_timer(void *arg)
 static bool eigrp_hello_k_match(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
 {
 	return eigrp && nbr && eigrp->k_values[0] == nbr->K1
-	       && eigrp->k_values[1] == nbr->K2
-	       && eigrp->k_values[2] == nbr->K3
+	       && eigrp->k_values[1] == nbr->K2 && eigrp->k_values[2] == nbr->K3
 	       && eigrp->k_values[3] == nbr->K4
 	       && eigrp->k_values[4] == nbr->K5;
 }
@@ -83,9 +83,9 @@ static bool eigrp_hello_goodbye(const struct TLV_Parameter_Type *param)
 	       && param->K3 == 0xff && param->K4 == 0xff && param->K5 == 0xff;
 }
 
-static void eigrp_hello_reject_event(eigrp_instance_t *eigrp,
-				    const eigrp_addr_t *source,
-				    eigrp_eventlog_packet_reject_reason_t reason)
+static void
+eigrp_hello_reject_event(eigrp_instance_t *eigrp, const eigrp_addr_t *source,
+			 eigrp_eventlog_packet_reject_reason_t reason)
 {
 	eigrp_prefix_t peer_addr;
 
@@ -93,7 +93,7 @@ static void eigrp_hello_reject_event(eigrp_instance_t *eigrp,
 		return;
 	eigrp_eventlog_addr_from_legacy(&peer_addr, source);
 	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_PACKET_REJECT,
-		&peer_addr, EIGRP_OPC_HELLO, reason, 0, 0);
+				     &peer_addr, EIGRP_OPC_HELLO, reason, 0, 0);
 }
 
 static void eigrp_hello_k_update(eigrp_nbr_t *nbr,
@@ -124,10 +124,10 @@ static void eigrp_hello_k_update(eigrp_nbr_t *nbr,
  * Note the addition of K6 for the new extended metrics, and does not apply to
  * older TLV packet formats.
  */
-static eigrp_nbr_t *
-eigrp_hello_parameter_decode(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-			     struct eigrp_tlv_hdr_type *tlv,
-			     bool adjacency_start_allowed)
+static eigrp_nbr_t *eigrp_hello_parameter_decode(eigrp_instance_t *eigrp,
+						 eigrp_nbr_t *nbr,
+						 struct eigrp_tlv_hdr_type *tlv,
+						 bool adjacency_start_allowed)
 {
 	struct TLV_Parameter_Type *param = (struct TLV_Parameter_Type *)tlv;
 
@@ -141,24 +141,30 @@ eigrp_hello_parameter_decode(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	 * not match.  The all-255 legacy Parameter TLV is a Hello goodbye. */
 	if (eigrp_hello_goodbye(param)) {
 		if (eigrp->log_neighbor_changes)
-			eigrp_log(EIGRP_LOG_INFO,
-				  "Neighbor %s (%s) is down: Interface Goodbye received",
-				  eigrp_print_addr(&nbr->src), nbr->ei->name);
-		eigrp_nbr_state_update_reason(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
-			EIGRP_EVENTLOG_NBR_GOODBYE);
+			eigrp_log(
+				EIGRP_LOG_INFO,
+				"Neighbor %s (%s) is down: Interface Goodbye received",
+				eigrp_print_addr(&nbr->src), nbr->ei->name);
+		eigrp_nbr_state_update_reason(EIGRP_SET, nbr,
+					      EIGRP_NEIGHBOR_DOWN,
+					      EIGRP_EVENTLOG_NBR_GOODBYE);
 		eigrp_nbr_delete(nbr);
 		return NULL;
 	}
 
 	if (!eigrp_hello_k_match(eigrp, nbr)) {
-		eigrp_hello_reject_event(eigrp, &nbr->src,
+		eigrp_hello_reject_event(
+			eigrp, &nbr->src,
 			EIGRP_EVENTLOG_PACKET_REJECT_HELLO_K_MISMATCH);
 		if (eigrp_nbr_state(nbr) != EIGRP_NEIGHBOR_DOWN) {
 			if (eigrp->log_neighbor_changes)
-				eigrp_log(EIGRP_LOG_INFO,
-					  "Neighbor %s (%s) is down: K-value mismatch",
-					  eigrp_print_addr(&nbr->src), nbr->ei->name);
-			eigrp_nbr_state_update_reason(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
+				eigrp_log(
+					EIGRP_LOG_INFO,
+					"Neighbor %s (%s) is down: K-value mismatch",
+					eigrp_print_addr(&nbr->src),
+					nbr->ei->name);
+			eigrp_nbr_state_update_reason(
+				EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
 				EIGRP_EVENTLOG_NBR_K_MISMATCH);
 		}
 		return nbr;
@@ -189,8 +195,7 @@ eigrp_hello_parameter_decode(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
  * This consists of two bytes of OS version, and two bytes of EIGRP
  * revision number.
  */
-static void eigrp_sw_version_decode(eigrp_nbr_t *nbr,
-				    eigrp_intf_t *ei,
+static void eigrp_sw_version_decode(eigrp_nbr_t *nbr, eigrp_intf_t *ei,
 				    struct eigrp_tlv_hdr_type *tlv, bool new)
 {
 	struct TLV_Software_Type *version = (struct TLV_Software_Type *)tlv;
@@ -208,8 +213,8 @@ static void eigrp_sw_version_decode(eigrp_nbr_t *nbr,
 	 * compatibility and use it when talking to a Version 1 peer.  Bind the
 	 * codec to the highest route TLV format supported by both sides.
 	 */
-	eigrp_nbr_codec_select(
-		nbr, eigrp_metric_version_select(ei->eigrp, nbr->tlv_rel_major));
+	eigrp_nbr_codec_select(nbr, eigrp_metric_version_select(
+					    ei->eigrp, nbr->tlv_rel_major));
 }
 
 /**
@@ -220,8 +225,8 @@ static void eigrp_sw_version_decode(eigrp_nbr_t *nbr,
  * out address is not in the TLV, then ignore the peer termination
  */
 static bool eigrp_peer_termination_contains(const eigrp_intf_t *ei,
-                                             const uint8_t *value,
-                                             uint16_t length)
+					    const uint8_t *value,
+					    uint16_t length)
 {
 	uint16_t offset = EIGRP_TLV_HDR_SIZE;
 	uint8_t address_length;
@@ -236,7 +241,8 @@ static bool eigrp_peer_termination_contains(const eigrp_intf_t *ei,
 			return false;
 		if (encoded_length == address_length
 		    && memcmp(value + offset, ei->address.address.bytes,
-			      address_length) == 0)
+			      address_length)
+			       == 0)
 			return true;
 		offset += encoded_length;
 	}
@@ -249,14 +255,15 @@ static void eigrp_peer_termination_decode(eigrp_instance_t *eigrp,
 {
 	uint16_t length = ntohs(tlv->length);
 
-	if (!eigrp_peer_termination_contains(nbr->ei, (const uint8_t *)tlv, length))
+	if (!eigrp_peer_termination_contains(nbr->ei, (const uint8_t *)tlv,
+					     length))
 		return;
 	if (eigrp->log_neighbor_changes)
 		eigrp_log(EIGRP_LOG_INFO,
 			  "Neighbor %s (%s) is down: Peer Termination received",
 			  eigrp_print_addr(&nbr->src), nbr->ei->name);
 	eigrp_nbr_state_update_reason(EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
-		EIGRP_EVENTLOG_NBR_PEER_TERMINATION);
+				      EIGRP_EVENTLOG_NBR_PEER_TERMINATION);
 	eigrp_nbr_delete(nbr);
 }
 
@@ -270,7 +277,8 @@ static uint16_t eigrp_peer_termination_encode(eigrp_intf_t *ei,
 	if (!ei || !s || !nbr_addr)
 		return 0;
 	address_length = ei->eigrp->af_vectors.packet_address_bytes;
-	if ((nbr_addr->afi == AF_INET && address_length != EIGRP_IPV4_MAX_BYTELEN)
+	if ((nbr_addr->afi == AF_INET
+	     && address_length != EIGRP_IPV4_MAX_BYTELEN)
 	    || (nbr_addr->afi == AF_INET6 && address_length != 16U))
 		return 0;
 	length = EIGRP_TLV_HDR_SIZE + 1U + address_length;
@@ -282,9 +290,8 @@ static uint16_t eigrp_peer_termination_encode(eigrp_intf_t *ei,
 	return length;
 }
 
-bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei,
-                                      const uint8_t *cursor,
-                                      uint16_t payload_length)
+bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei, const uint8_t *cursor,
+			       uint16_t payload_length)
 {
 	uint16_t remaining = payload_length;
 	bool parameter_seen = false;
@@ -323,11 +330,13 @@ bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei,
 		case EIGRP_TLV_SEQ:
 		case EIGRP_TLV_PEER_TERMINATION: {
 			uint16_t offset = EIGRP_TLV_HDR_SIZE;
-			uint8_t expected = ei->eigrp->af_vectors.packet_address_bytes;
+			uint8_t expected =
+				ei->eigrp->af_vectors.packet_address_bytes;
 
 			while (offset < length) {
 				uint8_t encoded = cursor[offset++];
-				if (encoded != expected || offset + encoded > length)
+				if (encoded != expected
+				    || offset + encoded > length)
 					return false;
 				offset += encoded;
 			}
@@ -343,10 +352,10 @@ bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei,
 		remaining -= length;
 	}
 
-	/* A discovery Hello is not semantically useful without the Parameter TLV
-	 * carrying K-values and hold time.  Unknown TLVs remain forward-compatible
-	 * when a valid Parameter TLV is also present, but cannot allocate a peer by
-	 * themselves. */
+	/* A discovery Hello is not semantically useful without the Parameter
+	 * TLV carrying K-values and hold time.  Unknown TLVs remain
+	 * forward-compatible when a valid Parameter TLV is also present, but
+	 * cannot allocate a peer by themselves. */
 	return parameter_seen;
 }
 
@@ -372,8 +381,8 @@ bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei,
  * Not all TLVs are current decoder.  This is a work in progress..
  */
 void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
-			 eigrp_addr_t *src, eigrp_intf_t *ei,
-			 eigrp_stream_t *s, int size)
+			 eigrp_addr_t *src, eigrp_intf_t *ei, eigrp_stream_t *s,
+			 int size)
 {
 	eigrp_nbr_t *nbr;
 	struct eigrp_tlv_hdr_type *tlv_header;
@@ -398,13 +407,16 @@ void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
 
 	if (!eigrp_hello_tlvs_validate(ei, (const uint8_t *)eigrph->tlv,
 				       (uint16_t)size)) {
-		eigrp_hello_reject_event(eigrp, src, EIGRP_EVENTLOG_PACKET_REJECT_HELLO_TLV);
+		eigrp_hello_reject_event(
+			eigrp, src, EIGRP_EVENTLOG_PACKET_REJECT_HELLO_TLV);
 		return;
 	}
 
-	/* Static-neighbor interfaces accept Hellos only from configured peers. */
+	/* Static-neighbor interfaces accept Hellos only from configured peers.
+	 */
 	if (!eigrp_nbr_static_source_allowed(ei, src)) {
-		eigrp_hello_reject_event(eigrp, src,
+		eigrp_hello_reject_event(
+			eigrp, src,
 			EIGRP_EVENTLOG_PACKET_REJECT_STATIC_NEIGHBOR);
 		return;
 	}
@@ -449,35 +461,45 @@ void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
 				if (length < EIGRP_TLV_PARAMETER_LEN)
 					return;
 				parameter_seen = true;
-				nbr = eigrp_hello_parameter_decode(eigrp, nbr,
-								   tlv_header,
-								   adjacency_start_allowed);
+				nbr = eigrp_hello_parameter_decode(
+					eigrp, nbr, tlv_header,
+					adjacency_start_allowed);
 				if (!nbr)
 					return;
 				break;
 			case EIGRP_TLV_AUTH:
 				/*
-				 * Authentication policy and digest validation are packet-level
-				 * checks completed before Hello TLV processing.
+				 * Authentication policy and digest validation
+				 * are packet-level checks completed before
+				 * Hello TLV processing.
 				 */
 				break;
 			case EIGRP_TLV_SEQ:
 				sequence_seen = true;
 				sequence_listed = false;
 				if (length >= EIGRP_TLV_SEQ_BASE_LEN) {
-					const uint8_t *value = (const uint8_t *)tlv_header;
+					const uint8_t *value =
+						(const uint8_t *)tlv_header;
 					uint16_t offset = EIGRP_TLV_HDR_SIZE;
-					uint8_t expected = ei->eigrp->af_vectors.packet_address_bytes;
+					uint8_t expected =
+						ei->eigrp->af_vectors
+							.packet_address_bytes;
 
 					while (offset < length) {
-						uint8_t address_length = value[offset++];
+						uint8_t address_length =
+							value[offset++];
 
 						if (address_length == 0
-						    || offset + address_length > length)
+						    || offset + address_length
+							       > length)
 							break;
 						if (address_length == expected
 						    && memcmp(value + offset,
-							      ei->address.address.bytes, expected) == 0)
+							      ei->address
+								      .address
+								      .bytes,
+							      expected)
+							       == 0)
 							sequence_listed = true;
 						offset += address_length;
 					}
@@ -497,7 +519,8 @@ void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
 					       ((const uint8_t *)tlv_header)
 						       + EIGRP_TLV_HDR_SIZE,
 					       sizeof(wire_sequence));
-					next_multicast_sequence = ntohl(wire_sequence);
+					next_multicast_sequence =
+						ntohl(wire_sequence);
 				}
 				break;
 			case EIGRP_TLV_PEER_TERMINATION:
@@ -521,7 +544,8 @@ void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
 	} while (size > 0);
 
 	/* Discovery Hellos require the Parameter TLV that carries K-values and
-	 * hold time.  Do not retain a newly-created peer from a malformed Hello. */
+	 * hold time.  Do not retain a newly-created peer from a malformed
+	 * Hello. */
 	if (!parameter_seen) {
 		if (new_nbr)
 			eigrp_nbr_delete(nbr);
@@ -534,10 +558,11 @@ void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
 	}
 
 	/* The process receive thread refreshes an existing peer's hold timer at
-	 * ingress.  Only a newly created peer needs its initial timer started here. */
-	if (new_nbr && ntohl(eigrph->ack) == 0 && nbr && adjacency_start_allowed)
+	 * ingress.  Only a newly created peer needs its initial timer started
+	 * here. */
+	if (new_nbr && ntohl(eigrph->ack) == 0 && nbr
+	    && adjacency_start_allowed)
 		eigrp_nbr_holddown_update(nbr);
-
 }
 
 static uint8_t eigrp_host_major;
@@ -560,7 +585,8 @@ void eigrp_sw_version_init(void)
  * This consists of two bytes of OS version, and two bytes of EIGRP
  * revision number.
  */
-static uint16_t eigrp_sw_version_encode(eigrp_instance_t *eigrp, eigrp_stream_t *s)
+static uint16_t eigrp_sw_version_encode(eigrp_instance_t *eigrp,
+					eigrp_stream_t *s)
 {
 	uint16_t length = EIGRP_TLV_SW_VERSION_LEN;
 
@@ -572,7 +598,8 @@ static uint16_t eigrp_sw_version_encode(eigrp_instance_t *eigrp, eigrp_stream_t 
 	eigrp_stream_putc(s, eigrp_host_minor); //!< minor os version
 
 	/* and the core eigrp version */
-	eigrp_stream_putc(s, eigrp ? eigrp->metric_version : EIGRP_MAJOR_VERSION);
+	eigrp_stream_putc(s,
+			  eigrp ? eigrp->metric_version : EIGRP_MAJOR_VERSION);
 	eigrp_stream_putc(s, EIGRP_MINOR_VERSION);
 
 	return (length);
@@ -627,7 +654,8 @@ bool eigrp_hello_sequence_fits(eigrp_intf_t *ei, uint32_t sequence,
 		else if (ei->params.auth_type == EIGRP_AUTH_TYPE_SHA256)
 			length += EIGRP_AUTH_SHA256_TLV_SIZE;
 	}
-	address_length = (size_t)ei->eigrp->af_vectors.packet_address_bytes + 1U;
+	address_length =
+		(size_t)ei->eigrp->af_vectors.packet_address_bytes + 1U;
 	for (EIGRP_LIST_ITERATE_RO(ei->nbrs, node, nbr)) {
 		if (eigrp_packet_multicast_peer_eligible(nbr, epoch)
 		    && eigrp_packet_reliable_prior_count(nbr, sequence))
@@ -653,14 +681,16 @@ static uint16_t eigrp_sequence_encode(eigrp_intf_t *ei, eigrp_stream_t *s,
 
 	found = 0;
 	for (EIGRP_LIST_ITERATE(ei->nbrs, node, nnode, nbr)) {
-		uint8_t address_length = ei->eigrp->af_vectors.packet_address_bytes;
+		uint8_t address_length =
+			ei->eigrp->af_vectors.packet_address_bytes;
 
 		if (!eigrp_packet_multicast_peer_eligible(nbr, epoch)
 		    || !eigrp_packet_reliable_prior_count(nbr, sequence))
 			continue;
 		eigrp_stream_putc(s, address_length);
 		length++;
-		length += ei->eigrp->af_vectors.packet_address_encode(s, &nbr->src);
+		length += ei->eigrp->af_vectors.packet_address_encode(
+			s, &nbr->src);
 		found = 1;
 	}
 
@@ -731,7 +761,7 @@ static uint16_t eigrp_hello_parameter_encode(eigrp_intf_t *ei,
 		eigrp_stream_putc(s, 0xff); /* K4 */
 		eigrp_stream_putc(s, 0xff); /* K5 */
 		eigrp_stream_putc(s, 0xff); /* K6 */
-	} else			      // set k values
+	} else				    // set k values
 	{
 		eigrp_stream_putc(s, ei->eigrp->k_values[0]); /* K1 */
 		eigrp_stream_putc(s, ei->eigrp->k_values[1]); /* K2 */
@@ -763,23 +793,22 @@ static uint16_t eigrp_hello_parameter_encode(eigrp_intf_t *ei,
  * Allocate an EIGRP hello packet, and add in the the approperate TLVs
  *
  */
-static eigrp_packet_t *eigrp_hello_encode(eigrp_intf_t *ei,
-					  const eigrp_addr_t *destination,
-					  uint32_t ack, uint8_t flags,
-					  eigrp_addr_t *nbr_addr,
-					  uint32_t multicast_sequence,
-					  uint64_t multicast_epoch)
+static eigrp_packet_t *
+eigrp_hello_encode(eigrp_intf_t *ei, const eigrp_addr_t *destination,
+		   uint32_t ack, uint8_t flags, eigrp_addr_t *nbr_addr,
+		   uint32_t multicast_sequence, uint64_t multicast_epoch)
 {
 	eigrp_packet_t *packet;
 	uint16_t length = EIGRP_HEADER_LEN;
 
 	// allocate a new packet to be sent
-	packet = eigrp_packet_create(eigrp_packet_payload_limit(ei->curr_mtu), NULL);
+	packet = eigrp_packet_create(eigrp_packet_payload_limit(ei->curr_mtu),
+				     NULL);
 
 	if (packet) {
 		// encode common header feilds
-		eigrp_packet_header_init(EIGRP_OPC_HELLO, ei->eigrp, packet->s, 0,
-					 0, ack);
+		eigrp_packet_header_init(EIGRP_OPC_HELLO, ei->eigrp, packet->s,
+					 0, 0, ack);
 
 		// encode Authentication TLV
 		if ((ei->params.auth_type == EIGRP_AUTH_TYPE_MD5)
@@ -803,7 +832,8 @@ static eigrp_packet_t *eigrp_hello_encode(eigrp_intf_t *ei,
 
 		if (flags & EIGRP_HELLO_ADD_SEQUENCE) {
 			length += eigrp_sequence_encode(ei, packet->s,
-							  multicast_sequence, multicast_epoch);
+							multicast_sequence,
+							multicast_epoch);
 			length += eigrp_next_sequence_encode(multicast_sequence,
 							     packet->s);
 		}
@@ -813,7 +843,8 @@ static eigrp_packet_t *eigrp_hello_encode(eigrp_intf_t *ei,
 
 		/* encode Peer Termination TLV if needed */
 		if (flags & EIGRP_HELLO_GRACEFUL_SHUTDOWN_NBR)
-			length += eigrp_peer_termination_encode(ei, packet->s, nbr_addr);
+			length += eigrp_peer_termination_encode(ei, packet->s,
+								nbr_addr);
 
 		// Set packet length
 		packet->length = length;
@@ -824,8 +855,8 @@ static eigrp_packet_t *eigrp_hello_encode(eigrp_intf_t *ei,
 		}
 		packet->dst = *destination;
 
-		/* Authentication and checksum are finalized at the paced interface
-		 * dequeue, not when this Hello is queued. */
+		/* Authentication and checksum are finalized at the paced
+		 * interface dequeue, not when this Hello is queued. */
 	}
 
 	return (packet);
@@ -853,12 +884,12 @@ void eigrp_hello_send_ack_sequence(eigrp_nbr_t *nbr, uint32_t sequence)
 
 	/* Explicit sequence is needed to ACK an old RTP duplicate without
 	 * rolling back the neighbor's current receive sequence. */
-	packet = eigrp_hello_encode(nbr->ei, &nbr->src,
-				sequence, EIGRP_HELLO_NORMAL,
-				&nbr->src, 0, 0);
+	packet = eigrp_hello_encode(nbr->ei, &nbr->src, sequence,
+				    EIGRP_HELLO_NORMAL, &nbr->src, 0, 0);
 
 	if (packet)
-		/* ACKs release RTP backpressure and must not wait behind data. */
+		/* ACKs release RTP backpressure and must not wait behind data.
+		 */
 		eigrp_packet_output_enqueue(nbr->ei->eigrp, nbr->ei, packet);
 }
 
@@ -887,18 +918,15 @@ void eigrp_hello_send_unicast(eigrp_intf_t *ei, const eigrp_addr_t *dst)
 {
 	eigrp_packet_t *packet;
 
-	if (!ei || !dst
-	    || (dst->afi != AF_INET && dst->afi != AF_INET6))
+	if (!ei || !dst || (dst->afi != AF_INET && dst->afi != AF_INET6))
 		return;
-	packet = eigrp_hello_encode(ei, dst, 0,
-				    EIGRP_HELLO_NORMAL, NULL, 0, 0);
+	packet = eigrp_hello_encode(ei, dst, 0, EIGRP_HELLO_NORMAL, NULL, 0, 0);
 	if (!packet)
 		return;
 	eigrp_packet_output_enqueue(ei->eigrp, ei, packet);
 }
 
-void eigrp_hello_send(eigrp_intf_t *ei, uint8_t flags,
-		      eigrp_addr_t *nbr_addr)
+void eigrp_hello_send(eigrp_intf_t *ei, uint8_t flags, eigrp_addr_t *nbr_addr)
 {
 	eigrp_packet_t *packet = NULL;
 
@@ -915,20 +943,24 @@ void eigrp_hello_send(eigrp_intf_t *ei, uint8_t flags,
 
 		if (eigrp_instance_afi(ei->eigrp) == EIGRP_AFI_IPV6) {
 			destination.afi = AF_INET6;
-			if (inet_pton(AF_INET6, "ff02::a", &destination.ip.v6) != 1)
+			if (inet_pton(AF_INET6, "ff02::a", &destination.ip.v6)
+			    != 1)
 				return;
 		} else {
 			destination.afi = AF_INET;
-			destination.ip.v4.s_addr = htonl(EIGRP_MULTICAST_ADDRESS);
+			destination.ip.v4.s_addr =
+				htonl(EIGRP_MULTICAST_ADDRESS);
 		}
-		packet = eigrp_hello_encode(ei, &destination, 0, flags, nbr_addr, 0, 0);
+		packet = eigrp_hello_encode(ei, &destination, 0, flags,
+					    nbr_addr, 0, 0);
 	}
 
 	if (packet) {
 		if (flags & EIGRP_HELLO_GRACEFUL_SHUTDOWN) {
 			/* The interface may be torn down immediately after this
-			 * call.  Send the goodbye before teardown; authentication
-			 * and accounting stay in the common wire-send path. */
+			 * call.  Send the goodbye before teardown;
+			 * authentication and accounting stay in the common
+			 * wire-send path. */
 			eigrp_packet_goodbye_send(ei, packet);
 		} else {
 			/* Periodic Hellos and ACKs are never blocked by RTP
@@ -951,14 +983,17 @@ bool eigrp_hello_send_sequence(eigrp_intf_t *ei, uint32_t sequence,
 
 		if (eigrp_instance_afi(ei->eigrp) == EIGRP_AFI_IPV6) {
 			destination.afi = AF_INET6;
-			if (inet_pton(AF_INET6, "ff02::a", &destination.ip.v6) != 1)
+			if (inet_pton(AF_INET6, "ff02::a", &destination.ip.v6)
+			    != 1)
 				return false;
 		} else {
 			destination.afi = AF_INET;
-			destination.ip.v4.s_addr = htonl(EIGRP_MULTICAST_ADDRESS);
+			destination.ip.v4.s_addr =
+				htonl(EIGRP_MULTICAST_ADDRESS);
 		}
 		packet = eigrp_hello_encode(ei, &destination, 0,
-					    EIGRP_HELLO_ADD_SEQUENCE, NULL, sequence, epoch);
+					    EIGRP_HELLO_ADD_SEQUENCE, NULL,
+					    sequence, epoch);
 	}
 	if (!packet)
 		return false;
