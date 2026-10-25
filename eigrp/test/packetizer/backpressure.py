@@ -23,7 +23,7 @@ def test_initial_sync_has_bounded_queue_and_yields_without_idle_pauses():
     assert "EIGRP_UPDATE_SYNC_PREFIX_BATCH 128U" in source
     assert "nbr->retrans_queue->count >= EIGRP_UPDATE_SYNC_RELIABLE_MAX" in source
     assert "nbr->sync_cursor = rn;" in source
-    assert "eigrp_update_sync_timer, nbr, 0" in source
+    assert "eigrp_update_sync_timer,nbr,0" in "".join(source.split())
     assert "sync_packet = packet" in source
     assert "EIGRP_EOT_FLAG" in source
     assert source.index("nbr->sync_active = false;") < source.index(
@@ -73,7 +73,8 @@ def test_multicast_hellos_and_ack_bypass_data_pacing():
     assert "pending->length, now);" in writer
     assert "EIGRP_OPC_HELLO" in writer
     assert "wait = 0;" in writer
-    assert writer.index("EIGRP_OPC_HELLO") < writer.index("eigrp_packet_pacing_delay_msec(pending_ei,")
+    compact = "".join(writer.split())
+    assert compact.index("EIGRP_OPC_HELLO") < compact.index("eigrp_packet_pacing_delay_msec(pending_ei,")
     wire = packet[packet.index("static void eigrp_packet_wire_send("):
                   packet.index("void eigrp_packet_write(void *arg)")]
     assert "eigrp_packet_pacing_charge(ei, packet->length);" in wire

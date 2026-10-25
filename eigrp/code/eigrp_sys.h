@@ -10,6 +10,9 @@
 #ifndef EIGRPD_EIGRP_SYS_H_
 #define EIGRPD_EIGRP_SYS_H_
 
+#include <stdarg.h>
+#include <stddef.h>
+
 #include "eigrp.h"
 #include "eigrp_rib.h"
 
@@ -22,7 +25,7 @@ typedef enum eigrp_work_queue_result {
 typedef eigrp_work_queue_result_t (*eigrp_work_queue_func_t)(
 	eigrp_work_queue_t *queue, void *data);
 typedef void (*eigrp_work_queue_delete_func_t)(eigrp_work_queue_t *queue,
-						void *data);
+					       void *data);
 typedef void (*eigrp_event_callback_t)(void *arg);
 
 typedef struct eigrp_intf_runtime_state {
@@ -58,6 +61,14 @@ typedef struct eigrp_filter_runtime_snapshot {
 typedef void (*eigrp_sys_interface_walk_cb)(
 	const eigrp_intf_runtime_state_t *state, void *arg);
 
+/* Host formatting service: C printf syntax and snprintf return semantics.
+ * Formatting extensions are host-specific and must not appear in portable code.
+ * A positive size writes a terminating NUL; an insufficient buffer truncates.
+ * The return value is the required length, or -1 on failure.
+ */
+int eigrp_vsnprintf(char *dst, size_t size, const char *fmt, va_list args);
+int eigrp_snprintf(char *dst, size_t size, const char *fmt, ...);
+
 /* Platform lifecycle. */
 void eigrp_sys_runtime_init(void);
 void eigrp_sys_runtime_finish(void);
@@ -68,11 +79,10 @@ void eigrp_sys_runtime_finish(void);
  * that execution context; the callback itself runs in the host scheduler
  * context until AF-thread ownership is introduced. */
 void eigrp_sys_event_cancel(eigrp_event_t **event);
-void eigrp_sys_event_add(eigrp_event_t **event,
-			 eigrp_event_callback_t callback, void *arg);
-void eigrp_sys_timer_add(eigrp_event_t **event,
-			 eigrp_event_callback_t callback, void *arg,
-			 uint32_t delay_msec);
+void eigrp_sys_event_add(eigrp_event_t **event, eigrp_event_callback_t callback,
+			 void *arg);
+void eigrp_sys_timer_add(eigrp_event_t **event, eigrp_event_callback_t callback,
+			 void *arg, uint32_t delay_msec);
 void eigrp_sys_read_add(eigrp_event_t **event, eigrp_instance_t *eigrp,
 			eigrp_event_callback_t callback, void *arg);
 void eigrp_sys_write_add(eigrp_event_t **event, eigrp_instance_t *eigrp,
@@ -83,10 +93,10 @@ uint64_t eigrp_sys_wallclock_msec(void);
 void eigrp_sys_software_version(uint8_t *major, uint8_t *minor);
 
 /* Work scheduling. */
-eigrp_work_queue_t *eigrp_sys_work_queue_create(
-	eigrp_instance_t *eigrp, const char *name,
-	eigrp_work_queue_func_t workfunc,
-	eigrp_work_queue_delete_func_t deletefunc);
+eigrp_work_queue_t *
+eigrp_sys_work_queue_create(eigrp_instance_t *eigrp, const char *name,
+			    eigrp_work_queue_func_t workfunc,
+			    eigrp_work_queue_delete_func_t deletefunc);
 void eigrp_sys_work_queue_free(eigrp_work_queue_t *queue);
 void eigrp_sys_work_queue_clear(eigrp_work_queue_t *queue);
 void eigrp_sys_work_queue_enqueue(eigrp_work_queue_t *queue, void *data);
@@ -99,13 +109,13 @@ void eigrp_sys_socket_send_buffer_ensure(eigrp_instance_t *eigrp,
 					 uint32_t minimum);
 bool eigrp_sys_router_id_get(eigrp_instance_t *eigrp, uint32_t *router_id);
 eigrp_result_t eigrp_sys_vrf_resolve(const char *vrf_name,
-				      eigrp_vrf_id_t *vrf_id);
+				     eigrp_vrf_id_t *vrf_id);
 eigrp_result_t eigrp_sys_interface_walk(eigrp_instance_t *eigrp,
 					eigrp_sys_interface_walk_cb callback,
 					void *arg);
 int eigrp_sys_multicast_interface_update(eigrp_operation_t operation,
-                                      eigrp_instance_t *eigrp,
-				      eigrp_intf_t *ei);
+					 eigrp_instance_t *eigrp,
+					 eigrp_intf_t *ei);
 int eigrp_sys_multicast_join(eigrp_instance_t *eigrp, eigrp_intf_t *ei);
 int eigrp_sys_multicast_leave(eigrp_instance_t *eigrp, eigrp_intf_t *ei);
 
@@ -113,26 +123,21 @@ int eigrp_sys_multicast_leave(eigrp_instance_t *eigrp, eigrp_intf_t *ei);
  * dispatches using the runtime address family. AF-specific entry points below
  * remain part of the compatibility contract for hosts/common code that call
  * them directly. */
-int eigrp_sys_packet_send(eigrp_instance_t *eigrp,
-                          eigrp_intf_t *ei,
-                          const eigrp_address_t *destination,
-                          const uint8_t *payload, size_t length);
-bool eigrp_sys_packet_receive(eigrp_instance_t *eigrp,
-                              uint8_t *buffer, size_t capacity,
-                              size_t *received_length,
-                              eigrp_ifindex_t *ifindex,
-                              eigrp_address_t *source,
-                              eigrp_address_t *destination,
-                              eigrp_packet_rx_meta_t *meta);
+int eigrp_sys_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+			  const eigrp_address_t *destination,
+			  const uint8_t *payload, size_t length);
+bool eigrp_sys_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
+			      size_t capacity, size_t *received_length,
+			      eigrp_ifindex_t *ifindex, eigrp_address_t *source,
+			      eigrp_address_t *destination,
+			      eigrp_packet_rx_meta_t *meta);
 
 /* IPv4 packet envelope. The platform sees bytes and normalized addresses. */
-int eigrp_sys_ipv4_packet_send(eigrp_instance_t *eigrp,
-			       eigrp_intf_t *ei,
+int eigrp_sys_ipv4_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 			       const eigrp_address_t *destination,
 			       const uint8_t *payload, size_t length);
-bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp,
-				   uint8_t *buffer, size_t capacity,
-				   size_t *received_length,
+bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
+				   size_t capacity, size_t *received_length,
 				   eigrp_ifindex_t *ifindex,
 				   eigrp_address_t *source,
 				   eigrp_address_t *destination,
@@ -140,13 +145,11 @@ bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp,
 
 /* IPv6 packet envelope. Raw IPv6 sockets carry only the EIGRP payload;
  * interface and destination context are supplied through IPv6 packet info. */
-int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp,
-			       eigrp_intf_t *ei,
+int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 			       const eigrp_address_t *destination,
 			       const uint8_t *payload, size_t length);
-bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp,
-				   uint8_t *buffer, size_t capacity,
-				   size_t *received_length,
+bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
+				   size_t capacity, size_t *received_length,
 				   eigrp_ifindex_t *ifindex,
 				   eigrp_address_t *source,
 				   eigrp_address_t *destination,
@@ -157,38 +160,35 @@ void eigrp_sys_policy_init(void);
 void eigrp_sys_policy_finish(void);
 eigrp_result_t eigrp_sys_policy_instance_create(eigrp_instance_t *eigrp);
 void eigrp_sys_policy_instance_delete(eigrp_instance_t *eigrp);
-eigrp_result_t eigrp_sys_filter_evaluate(
-	eigrp_instance_t *eigrp, eigrp_distribute_list_type_t type,
-	const char *name, const eigrp_prefix_t *prefix,
-	eigrp_filter_decision_t *decision);
+eigrp_result_t eigrp_sys_filter_evaluate(eigrp_instance_t *eigrp,
+					 eigrp_distribute_list_type_t type,
+					 const char *name,
+					 const eigrp_prefix_t *prefix,
+					 eigrp_filter_decision_t *decision);
 /* Route-map evaluation is a distinct host policy service. Portable EIGRP
  * passes only normalized EIGRP values; host-native route-map objects/results
  * remain private to the host shim. */
 eigrp_result_t eigrp_sys_redistribute_route_map_evaluate(
 	eigrp_instance_t *eigrp, const char *name,
-	const eigrp_rib_route_t *route,
-	eigrp_filter_decision_t *decision);
-eigrp_result_t eigrp_sys_summary_leak_map_evaluate(
-	eigrp_instance_t *eigrp, const char *name, const eigrp_prefix_t *prefix,
-	eigrp_filter_decision_t *decision);
-bool eigrp_sys_auth_key_lookup(const char *keychain_name,
-			       uint32_t *key_id, char *key_string,
-			       size_t key_string_size);
+	const eigrp_rib_route_t *route, eigrp_filter_decision_t *decision);
+eigrp_result_t
+eigrp_sys_summary_leak_map_evaluate(eigrp_instance_t *eigrp, const char *name,
+				    const eigrp_prefix_t *prefix,
+				    eigrp_filter_decision_t *decision);
+bool eigrp_sys_auth_key_lookup(const char *keychain_name, uint32_t *key_id,
+			       char *key_string, size_t key_string_size);
 
 /* Normalized host lifecycle notifications into portable EIGRP. */
-void eigrp_sys_intf_update(
-	eigrp_vrf_id_t vrf_id, const eigrp_intf_runtime_state_t *state);
-void eigrp_sys_intf_down(eigrp_vrf_id_t vrf_id,
-				   eigrp_ifindex_t ifindex,
-				   const char *interface_name, uint8_t type,
-				   uint32_t bandwidth, uint32_t mtu);
-void eigrp_sys_intf_remove(eigrp_vrf_id_t vrf_id,
-				     eigrp_ifindex_t ifindex,
-				     eigrp_intf_remove_reason_t reason);
-void eigrp_sys_intf_addr_update(eigrp_vrf_id_t vrf_id,
-					eigrp_ifindex_t ifindex,
-					const eigrp_prefix_t *address,
-					eigrp_intf_remove_reason_t reason);
+void eigrp_sys_intf_update(eigrp_vrf_id_t vrf_id,
+			   const eigrp_intf_runtime_state_t *state);
+void eigrp_sys_intf_down(eigrp_vrf_id_t vrf_id, eigrp_ifindex_t ifindex,
+			 const char *interface_name, uint8_t type,
+			 uint32_t bandwidth, uint32_t mtu);
+void eigrp_sys_intf_remove(eigrp_vrf_id_t vrf_id, eigrp_ifindex_t ifindex,
+			   eigrp_intf_remove_reason_t reason);
+void eigrp_sys_intf_addr_update(eigrp_vrf_id_t vrf_id, eigrp_ifindex_t ifindex,
+				const eigrp_prefix_t *address,
+				eigrp_intf_remove_reason_t reason);
 void eigrp_sys_policy_runtime_update(void);
 eigrp_result_t eigrp_sys_filter_runtime_replace(
 	eigrp_instance_t *eigrp, const char *interface_name,

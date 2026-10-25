@@ -179,7 +179,7 @@ def test_common_network_owns_runtime_storage_while_frr_only_enumerates_interface
     assert "eigrp_intf_free" in runtime_delete
     assert "eigrp_sys_interface_walk(" in refresh
     assert "FOR_ALL_INTERFACES" in host_walk
-    assert "eigrp_frr_interface_state_import" in host_walk
+    assert "eigrp_frr_intf_state_import" in host_walk
     assert "route_node_" not in southbound
     assert "eigrp->networks" not in southbound
 

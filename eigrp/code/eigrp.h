@@ -103,15 +103,16 @@ typedef struct eigrp_prefix_limit {
 	uint16_t restart_count;
 } eigrp_prefix_limit_t;
 
-static inline bool eigrp_prefix_limit_runtime_supported(
-	const eigrp_prefix_limit_t *limit)
+static inline bool
+eigrp_prefix_limit_runtime_supported(const eigrp_prefix_limit_t *limit)
 {
 	return limit && !limit->dampened && !limit->reset_time_minutes
 	       && !limit->restart_minutes && !limit->restart_count;
 }
 
 static inline bool eigrp_prefix_limit_allows(const eigrp_prefix_limit_t *limit,
-	uint32_t current, bool already_present)
+					     uint32_t current,
+					     bool already_present)
 {
 	if (!limit || already_present || limit->warning_only
 	    || !eigrp_prefix_limit_runtime_supported(limit))
@@ -119,8 +120,9 @@ static inline bool eigrp_prefix_limit_allows(const eigrp_prefix_limit_t *limit,
 	return current < limit->maximum;
 }
 
-static inline bool eigrp_prefix_limit_threshold_crossed(
-	const eigrp_prefix_limit_t *limit, uint32_t current)
+static inline bool
+eigrp_prefix_limit_threshold_crossed(const eigrp_prefix_limit_t *limit,
+				     uint32_t current)
 {
 	uint64_t before;
 	uint64_t after;
@@ -176,7 +178,8 @@ typedef struct eigrp_state_request {
 	const char *vrf_name;
 	uint16_t asn; /* zero means all configured AS contexts */
 	bool all_vrfs;
-	/* Multicast address-family selector; current FRR/BIRD CLIs do not expose it. */
+	/* Multicast address-family selector; current FRR/BIRD CLIs do not
+	 * expose it. */
 	bool multicast;
 } eigrp_state_request_t;
 
@@ -215,7 +218,7 @@ typedef enum eigrp_debug_af_category {
 
 /* EIGRP library lifecycle and runtime instance access. */
 typedef eigrp_result_t (*eigrp_instance_iterate_cb)(eigrp_instance_t *instance,
-	void *arg);
+						    void *arg);
 
 void eigrp_init(void);
 /* Start the process receive worker after host daemonization and before
@@ -224,14 +227,15 @@ void eigrp_init(void);
 bool eigrp_process_receive_start(void);
 void eigrp_terminate(void);
 eigrp_instance_t *eigrp_instance_create(eigrp_virt_router_t *virt_router,
-	eigrp_afi_t afi, uint16_t as, eigrp_vrf_id_t vrf_id);
+					eigrp_afi_t afi, uint16_t as,
+					eigrp_vrf_id_t vrf_id);
 void eigrp_instance_delete(eigrp_instance_t *instance);
 eigrp_instance_t *eigrp_lookup(eigrp_vrf_id_t vrf_id);
 eigrp_instance_t *eigrp_lookup_by_as_vrf(uint16_t as, eigrp_vrf_id_t vrf_id);
 eigrp_instance_t *eigrp_lookup_by_af_as_vrf(eigrp_afi_t afi, uint16_t as,
-	eigrp_vrf_id_t vrf_id);
+					    eigrp_vrf_id_t vrf_id);
 eigrp_result_t eigrp_instance_iterate(eigrp_instance_iterate_cb callback,
-	void *arg);
+				      void *arg);
 
 /* Opaque-object identity/capability accessors used by platform adapters. */
 eigrp_vrf_id_t eigrp_instance_vrf_id(const eigrp_instance_t *eigrp);
@@ -241,6 +245,6 @@ const char *eigrp_instance_name(const eigrp_instance_t *eigrp);
 eigrp_ifindex_t eigrp_intf_ifindex(const eigrp_intf_t *ei);
 const char *eigrp_intf_name(const eigrp_intf_t *ei);
 eigrp_result_t eigrp_intf_address_read(const eigrp_intf_t *ei,
-					     eigrp_prefix_t *address);
+				       eigrp_prefix_t *address);
 
 #endif /* EIGRPD_EIGRP_H_ */

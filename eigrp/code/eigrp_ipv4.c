@@ -55,7 +55,7 @@ static uint16_t eigrp_ipv4_prefix_bytes(uint8_t prefix_length)
 }
 
 static bool eigrp_ipv4_packet_source_on_link(eigrp_intf_t *ei,
-                                             const eigrp_addr_t *source)
+					     const eigrp_addr_t *source)
 {
 	uint32_t local, remote, mask;
 
@@ -71,34 +71,35 @@ static bool eigrp_ipv4_packet_source_on_link(eigrp_intf_t *ei,
 	remote = source->ip.v4.s_addr;
 	local = ntohl(local);
 	remote = ntohl(remote);
-	mask = ei->address.prefix_length == 0 ? 0
-	       : 0xffffffffU << (32U - ei->address.prefix_length);
+	mask = ei->address.prefix_length == 0
+		       ? 0
+		       : 0xffffffffU << (32U - ei->address.prefix_length);
 	return (local & mask) == (remote & mask);
 }
 
-static int eigrp_ipv4_packet_send(eigrp_instance_t *eigrp,
-                                  eigrp_intf_t *ei,
-                                  eigrp_packet_t *packet)
+static int eigrp_ipv4_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				  eigrp_packet_t *packet)
 {
 	eigrp_address_t destination;
 
-	if (!eigrp || !ei || !packet || !packet->s || packet->dst.afi != AF_INET)
+	if (!eigrp || !ei || !packet || !packet->s
+	    || packet->dst.afi != AF_INET)
 		return -1;
 	memset(&destination, 0, sizeof(destination));
 	destination.afi = EIGRP_AFI_IPV4;
-	memcpy(destination.bytes, &packet->dst.ip.v4, sizeof(packet->dst.ip.v4));
+	memcpy(destination.bytes, &packet->dst.ip.v4,
+	       sizeof(packet->dst.ip.v4));
 
-	return eigrp_sys_packet_send(
-		eigrp, ei, &destination, eigrp_stream_data(packet->s),
-		packet->length);
+	return eigrp_sys_packet_send(eigrp, ei, &destination,
+				     eigrp_stream_data(packet->s),
+				     packet->length);
 }
 
 static bool eigrp_ipv4_packet_receive(eigrp_instance_t *eigrp,
-                                      eigrp_stream_t *stream,
-                                      eigrp_intf_t **ei,
-                                      eigrp_addr_t *source,
-                                      eigrp_addr_t *destination,
-                                      eigrp_packet_rx_meta_t *meta)
+				      eigrp_stream_t *stream, eigrp_intf_t **ei,
+				      eigrp_addr_t *source,
+				      eigrp_addr_t *destination,
+				      eigrp_packet_rx_meta_t *meta)
 {
 	eigrp_ifindex_t ifindex = 0;
 	eigrp_address_t public_source;
@@ -109,9 +110,10 @@ static bool eigrp_ipv4_packet_receive(eigrp_instance_t *eigrp,
 		return false;
 	*ei = NULL;
 	eigrp_stream_clear(stream);
-	if (!eigrp_sys_packet_receive(
-		eigrp, eigrp_stream_data(stream), stream->size, &received_length,
-		&ifindex, &public_source, &public_destination, meta))
+	if (!eigrp_sys_packet_receive(eigrp, eigrp_stream_data(stream),
+				      stream->size, &received_length, &ifindex,
+				      &public_source, &public_destination,
+				      meta))
 		return false;
 	if (meta->ingress_vrf_id != eigrp->vrf_id)
 		return false;
@@ -133,7 +135,8 @@ static bool eigrp_ipv4_packet_receive(eigrp_instance_t *eigrp,
 		eigrp_intf_t *candidate;
 		eigrp_list_item_t *node;
 		for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, node, candidate)) {
-			if (!eigrp_ipv4_packet_source_on_link(candidate, source))
+			if (!eigrp_ipv4_packet_source_on_link(candidate,
+							      source))
 				continue;
 			*ei = candidate;
 			break;
@@ -151,7 +154,7 @@ static bool eigrp_ipv4_packet_receive(eigrp_instance_t *eigrp,
 }
 
 static uint16_t eigrp_ipv4_packet_address_decode(eigrp_stream_t *stream,
-					 eigrp_addr_t *address)
+						 eigrp_addr_t *address)
 {
 	if (!stream || !address
 	    || !eigrp_ipv4_stream_has(stream, EIGRP_IPV4_ADDRESS_BYTES))
@@ -164,9 +167,10 @@ static uint16_t eigrp_ipv4_packet_address_decode(eigrp_stream_t *stream,
 }
 
 static uint16_t eigrp_ipv4_packet_address_encode(eigrp_stream_t *stream,
-					 const eigrp_addr_t *address)
+						 const eigrp_addr_t *address)
 {
-	if (!stream || !address || (address->afi != 0 && address->afi != AF_INET))
+	if (!stream || !address
+	    || (address->afi != 0 && address->afi != AF_INET))
 		return 0;
 
 	eigrp_stream_put(stream, &address->ip.v4, EIGRP_IPV4_ADDRESS_BYTES);
@@ -174,7 +178,7 @@ static uint16_t eigrp_ipv4_packet_address_encode(eigrp_stream_t *stream,
 }
 
 static uint16_t eigrp_ipv4_packet_prefix_decode(eigrp_stream_t *stream,
-					eigrp_prefix_t *prefix)
+						eigrp_prefix_t *prefix)
 {
 	size_t start;
 	uint16_t address_length;
@@ -208,13 +212,12 @@ static uint16_t eigrp_ipv4_packet_prefix_decode(eigrp_stream_t *stream,
 }
 
 static uint16_t eigrp_ipv4_packet_prefix_encode(eigrp_stream_t *stream,
-					const eigrp_prefix_t *prefix)
+						const eigrp_prefix_t *prefix)
 {
 	eigrp_prefix_t normalized;
 	uint16_t address_length;
 
-	if (!stream || !prefix
-	    || prefix->address.afi != EIGRP_AFI_IPV4
+	if (!stream || !prefix || prefix->address.afi != EIGRP_AFI_IPV4
 	    || prefix->prefix_length > EIGRP_IPV4_MAX_BITLEN)
 		return 0;
 
@@ -223,7 +226,8 @@ static uint16_t eigrp_ipv4_packet_prefix_encode(eigrp_stream_t *stream,
 	address_length = eigrp_ipv4_prefix_bytes(normalized.prefix_length);
 	eigrp_stream_putc(stream, normalized.prefix_length);
 	if (address_length)
-		eigrp_stream_put(stream, normalized.address.bytes, address_length);
+		eigrp_stream_put(stream, normalized.address.bytes,
+				 address_length);
 
 	return EIGRP_IPV4_PREFIX_LENGTH_BYTES + address_length;
 }
@@ -242,8 +246,9 @@ static int eigrp_ipv4_addr_snprintf(char *buf, size_t len,
 	return (int)strlen(buf);
 }
 
-static eigrp_result_t eigrp_ipv4_summary_auto_prefix(
-	const eigrp_prefix_t *component, eigrp_prefix_t *summary)
+static eigrp_result_t
+eigrp_ipv4_summary_auto_prefix(const eigrp_prefix_t *component,
+			       eigrp_prefix_t *summary)
 {
 	uint8_t classful_length;
 	uint8_t first_octet;

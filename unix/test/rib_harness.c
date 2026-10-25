@@ -14,11 +14,11 @@ static eigrp_rib_route_t last_source;
 eigrp_afi_t eigrp_instance_afi(const eigrp_instance_t *eigrp)
 {
 	return eigrp == (const eigrp_instance_t *)1 ? EIGRP_AFI_IPV4
-		: EIGRP_AFI_IPV6;
+						    : EIGRP_AFI_IPV6;
 }
 
 eigrp_result_t eigrp_rib_redist_add(eigrp_instance_t *eigrp,
-	const eigrp_rib_route_t *route)
+				    const eigrp_rib_route_t *route)
 {
 	assert(eigrp != NULL);
 	last_source = *route;
@@ -27,7 +27,7 @@ eigrp_result_t eigrp_rib_redist_add(eigrp_instance_t *eigrp,
 }
 
 eigrp_result_t eigrp_rib_redist_del(eigrp_instance_t *eigrp,
-	const eigrp_rib_route_t *route)
+				    const eigrp_rib_route_t *route)
 {
 	assert(eigrp != NULL);
 	last_source = *route;
@@ -57,7 +57,7 @@ static eigrp_address_t address(const char *text)
 }
 
 static void learned_check(eigrp_instance_t *eigrp,
-	const eigrp_rib_route_t *route, void *arg)
+			  const eigrp_rib_route_t *route, void *arg)
 {
 	unsigned *seen = arg;
 
@@ -138,10 +138,11 @@ int main(void)
 	assert(source_removes == 1);
 	assert(eigrp_unix_rib_source_count() == 0);
 
-	assert(eigrp_rib_route_del((eigrp_instance_t *)1,
-				      &(eigrp_prefix_t){.address = {.afi = EIGRP_AFI_IPV4,
-									.bytes = {10, 2, 0, 0}},
-							.prefix_length = 24})
+	assert(eigrp_rib_route_del(
+		       (eigrp_instance_t *)1,
+		       &(eigrp_prefix_t){.address = {.afi = EIGRP_AFI_IPV4,
+						     .bytes = {10, 2, 0, 0}},
+					 .prefix_length = 24})
 	       == EIGRP_RESULT_SUCCESS);
 	assert(eigrp_unix_rib_route_count() == 0);
 	eigrp_rib_finish();

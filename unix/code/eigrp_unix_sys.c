@@ -3,8 +3,8 @@
  * Unix implementation of EIGRP runtime scheduling services.
  *
  * This file deliberately owns only process/runtime mechanics. Protocol sockets,
- * packet I/O, interface discovery, policy, and RIB integration are separate Unix
- * adapter work and are not faked here.
+ * packet I/O, interface discovery, policy, and RIB integration are separate
+ * Unix adapter work and are not faked here.
  *
  * Copyright (C) 2026 Donnie V. Savage
  */
@@ -164,10 +164,11 @@ static int eigrp_unix_fd_get_locked(eigrp_instance_t *eigrp)
 	return -1;
 }
 
-static eigrp_event_t *eigrp_unix_event_prepare(
-	eigrp_event_t **owner, eigrp_unix_event_kind_t kind,
-	eigrp_event_callback_t callback, void *arg, uint32_t delay_msec,
-	int fd)
+static eigrp_event_t *eigrp_unix_event_prepare(eigrp_event_t **owner,
+					       eigrp_unix_event_kind_t kind,
+					       eigrp_event_callback_t callback,
+					       void *arg, uint32_t delay_msec,
+					       int fd)
 {
 	eigrp_event_t *event;
 
@@ -207,7 +208,8 @@ static int eigrp_unix_poll_timeout_locked(uint64_t now)
 	for (event = runtime.events; event; event = event->next) {
 		if (event->kind == EIGRP_UNIX_EVENT_IMMEDIATE)
 			return 0;
-		if (event->kind == EIGRP_UNIX_EVENT_TIMER && event->due_msec < nearest)
+		if (event->kind == EIGRP_UNIX_EVENT_TIMER
+		    && event->due_msec < nearest)
 			nearest = event->due_msec;
 	}
 	if (nearest == UINT64_MAX)
@@ -220,7 +222,7 @@ static int eigrp_unix_poll_timeout_locked(uint64_t now)
 }
 
 static size_t eigrp_unix_pollfds_build_locked(struct pollfd **pollfds,
-					       eigrp_event_t ***events)
+					      eigrp_event_t ***events)
 {
 	eigrp_event_t *event;
 	struct pollfd *pfds;
@@ -249,8 +251,8 @@ static size_t eigrp_unix_pollfds_build_locked(struct pollfd **pollfds,
 		    && event->kind != EIGRP_UNIX_EVENT_WRITE)
 			continue;
 		pfds[index].fd = event->fd;
-		pfds[index].events = event->kind == EIGRP_UNIX_EVENT_READ
-					 ? POLLIN : POLLOUT;
+		pfds[index].events =
+			event->kind == EIGRP_UNIX_EVENT_READ ? POLLIN : POLLOUT;
 		map[index] = event;
 		index++;
 	}
@@ -259,8 +261,9 @@ static size_t eigrp_unix_pollfds_build_locked(struct pollfd **pollfds,
 	return count;
 }
 
-static eigrp_event_t *eigrp_unix_ready_take_locked(
-	struct pollfd *pollfds, eigrp_event_t **map, size_t count, uint64_t now)
+static eigrp_event_t *eigrp_unix_ready_take_locked(struct pollfd *pollfds,
+						   eigrp_event_t **map,
+						   size_t count, uint64_t now)
 {
 	eigrp_event_t *event;
 	size_t index;
@@ -302,7 +305,8 @@ static void *eigrp_unix_runtime_loop(void *unused)
 			pthread_mutex_unlock(&runtime.lock);
 			break;
 		}
-		timeout = eigrp_unix_poll_timeout_locked(eigrp_unix_monotime_msec());
+		timeout = eigrp_unix_poll_timeout_locked(
+			eigrp_unix_monotime_msec());
 		count = eigrp_unix_pollfds_build_locked(&pollfds, &map);
 		pthread_mutex_unlock(&runtime.lock);
 		if (count == 0) {
@@ -316,16 +320,17 @@ static void *eigrp_unix_runtime_loop(void *unused)
 		if (pollfds[0].revents & POLLIN)
 			eigrp_unix_wake_drain();
 
-		/* Serialize the ready-event handoff with host-side protocol mutations.
-		 * Taking an event and only then waiting for the protocol lock leaves an
-		 * uncancellable in-flight callback: interface-down can remove the state
-		 * that callback owns before it actually runs.  Hold the protocol lock
-		 * before unlinking the event so cancellation either wins first or waits
-		 * for the callback to finish. */
+		/* Serialize the ready-event handoff with host-side protocol
+		 * mutations. Taking an event and only then waiting for the
+		 * protocol lock leaves an uncancellable in-flight callback:
+		 * interface-down can remove the state that callback owns before
+		 * it actually runs.  Hold the protocol lock before unlinking
+		 * the event so cancellation either wins first or waits for the
+		 * callback to finish. */
 		eigrp_unix_runtime_enter();
 		pthread_mutex_lock(&runtime.lock);
-		event = eigrp_unix_ready_take_locked(pollfds, map, count,
-						      eigrp_unix_monotime_msec());
+		event = eigrp_unix_ready_take_locked(
+			pollfds, map, count, eigrp_unix_monotime_msec());
 		if (event && event->owner && *event->owner == event)
 			*event->owner = NULL;
 		pthread_mutex_unlock(&runtime.lock);
@@ -370,7 +375,8 @@ void eigrp_sys_runtime_init(void)
 	runtime.initialized = true;
 	pthread_mutex_unlock(&runtime.lock);
 
-	if (pthread_create(&runtime.thread, NULL, eigrp_unix_runtime_loop, NULL) != 0) {
+	if (pthread_create(&runtime.thread, NULL, eigrp_unix_runtime_loop, NULL)
+	    != 0) {
 		pthread_mutex_lock(&runtime.lock);
 		runtime.running = false;
 		runtime.initialized = false;
@@ -434,19 +440,18 @@ void eigrp_sys_event_cancel(eigrp_event_t **owner)
 	}
 }
 
-void eigrp_sys_event_add(eigrp_event_t **owner,
-			 eigrp_event_callback_t callback, void *arg)
+void eigrp_sys_event_add(eigrp_event_t **owner, eigrp_event_callback_t callback,
+			 void *arg)
 {
 	(void)eigrp_unix_event_prepare(owner, EIGRP_UNIX_EVENT_IMMEDIATE,
 				       callback, arg, 0, -1);
 }
 
-void eigrp_sys_timer_add(eigrp_event_t **owner,
-			 eigrp_event_callback_t callback, void *arg,
-			 uint32_t delay_msec)
+void eigrp_sys_timer_add(eigrp_event_t **owner, eigrp_event_callback_t callback,
+			 void *arg, uint32_t delay_msec)
 {
-	(void)eigrp_unix_event_prepare(owner, EIGRP_UNIX_EVENT_TIMER,
-				       callback, arg, delay_msec, -1);
+	(void)eigrp_unix_event_prepare(owner, EIGRP_UNIX_EVENT_TIMER, callback,
+				       arg, delay_msec, -1);
 }
 
 static void eigrp_unix_io_add(eigrp_event_t **owner, eigrp_instance_t *eigrp,
@@ -608,13 +613,14 @@ static void eigrp_unix_work_queue_run(void *arg)
 		free(item);
 	}
 	if (queue->head)
-		eigrp_sys_event_add(&queue->event, eigrp_unix_work_queue_run, queue);
+		eigrp_sys_event_add(&queue->event, eigrp_unix_work_queue_run,
+				    queue);
 }
 
-eigrp_work_queue_t *eigrp_sys_work_queue_create(
-	eigrp_instance_t *eigrp, const char *name,
-	eigrp_work_queue_func_t workfunc,
-	eigrp_work_queue_delete_func_t deletefunc)
+eigrp_work_queue_t *
+eigrp_sys_work_queue_create(eigrp_instance_t *eigrp, const char *name,
+			    eigrp_work_queue_func_t workfunc,
+			    eigrp_work_queue_delete_func_t deletefunc)
 {
 	eigrp_work_queue_t *queue;
 
@@ -677,7 +683,8 @@ void eigrp_sys_work_queue_enqueue(eigrp_work_queue_t *queue, void *data)
 	queue->tail = item;
 	queue->blocked = false;
 	if (!queue->event)
-		eigrp_sys_event_add(&queue->event, eigrp_unix_work_queue_run, queue);
+		eigrp_sys_event_add(&queue->event, eigrp_unix_work_queue_run,
+				    queue);
 }
 
 eigrp_instance_t *eigrp_sys_work_queue_instance(eigrp_work_queue_t *queue)
@@ -686,7 +693,7 @@ eigrp_instance_t *eigrp_sys_work_queue_instance(eigrp_work_queue_t *queue)
 }
 
 eigrp_result_t eigrp_sys_vrf_resolve(const char *vrf_name,
-				      eigrp_vrf_id_t *vrf_id)
+				     eigrp_vrf_id_t *vrf_id)
 {
 	if (!vrf_id)
 		return EIGRP_RESULT_INVALID_ARGUMENT;

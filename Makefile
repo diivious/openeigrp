@@ -1,148 +1,123 @@
-# EIGRP standalone development pipeline.
-# Platform-specific integration is kept under tools/<platform>.sh.
+# Copyright (C) 2026 Donnie V. Savage
+# OpenEIGRP development entry points. Detailed selectors live with their suites.
 
-# Route Python execution through the project launcher. It selects the native
-# macOS interpreter for local Darwin development and PATH-selected python3 on
-# other Unix systems. CI or callers may override it with EIGRP_PYTHON/PYTHON.
+.DEFAULT_GOAL := build
 PYTHON ?= $(CURDIR)/tools/python
 export PYTHON
 
-.PHONY: all help build uut portable-build portable-test portable-pytest \
-	portable-scenarios ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topology test \
-	scale scale-peers scale-internal scale-external scale-line scale-kite scale-peer-routes \
-	scale-100k scale-withdraw scale-mcast scale-linkdown scale-mixed-tlv scale-churn \
-	scale-stress scale-auth-md5 scale-auth scale-all clean frr-smoke
+SCALE_VOLUME := peers internal external line kite peer-routes
+SCALE_STRESS := withdraw mcast linkdown mixed-tlv churn
+SCALE_AUTH := auth-md5
+SCALE_CASES := $(SCALE_VOLUME) $(SCALE_STRESS) $(SCALE_AUTH)
+UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topology \
+  basic-core md5-mixed-lan md5-security dual-diamond kite-topology \
+  active-topology summary-topology
 
-all: build ## Build the standalone EIGRP code and Unix platform support.
+.PHONY: all build check uut scale docker clean help portable-build frr-smoke
 
-help: ## Show available make targets and their descriptions.
-	@printf 'Usage: make [target]\n\n'
-	@printf 'Targets:\n'
-	@awk 'BEGIN {FS = ":.*## "} /^[A-Za-z0-9_.-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+help: ## Show developer commands and selectors.
+	@printf '%s\n' 'Usage: make [target] [options]' '' 'Targets:' \
+	  '  build          Build portable EIGRP and Unix support (default: make)' \
+	  '  all            Build, full check, UUT and quick scale in sequence' \
+	  '  check          Style validation and style-checker unit tests' \
+	  '  uut            Portable unit tests and YAML scenarios' \
+	  '  scale          Quick pacing and backpressure qualification' \
+	  '  docker         Build a local or GitHub-sourced Docker image' \
+	  '  clean          Remove generated build and UUT files' \
+	  '  help           Show this help' '' 'Options:' \
+	  '  check SOURCE=all                Check entire tree (default: changed)' \
+	  '  uut SUITE=ipv4-basic-core      Run a named UUT suite' \
+	  '  uut SCENARIO=path/to/file.yaml Run one YAML scenario (topology discovered)' \
+	  '  scale SUITE=100k|stress|auth|all' \
+	  '  scale CASE=peers|internal|external|line|kite|peer-routes|withdraw|mcast|linkdown|mixed-tlv|churn|auth-md5' \
+	  '  docker FRR=../frr              Local build with explicit FRR checkout' \
+	  '  docker GITHUB=latest           Latest OpenEIGRP release' \
+	  '  docker GITHUB=1.2.3           Specific OpenEIGRP release (rel-1.2.3)' '' \
+	  'Before opening a pull request to merge, run: make all'
 
-portable-build: ## Build the platform-independent EIGRP code.
+# Separate recursive invocations enforce ordering even under make -j.
+all: ## Complete pre-merge gate (build, full style, UUT, quick scale).
+	$(MAKE) build
+	$(MAKE) check SOURCE=all
+	$(MAKE) uut
+	$(MAKE) scale
+
+portable-build:
 	$(MAKE) -C eigrp/code
 
-portable-pytest: build ## Run the Python UUT test suite with pytest.
-	$(PYTHON) -m pytest eigrp/test
-
-portable-scenarios: build ## Run all portable UUT scenario tests.
-	$(MAKE) -C eigrp/test/uut all-scenarios
-
-portable-test: portable-pytest portable-scenarios ## Run all portable pytest and scenario tests.
-
-build: portable-build ## Build portable EIGRP code and Unix platform support.
+build: portable-build ## Build portable EIGRP and Unix support.
 	$(MAKE) -C unix/code
 
-uut: portable-pytest portable-scenarios ## Run the complete UUT pytest and scenario suites.
+check: ## Run style validation and its executable unit tests (SOURCE=changed|all).
+	@case '$(SOURCE)' in ''|changed|all) ;; *) echo 'error: check SOURCE must be changed or all' >&2; exit 2 ;; esac
+	$(PYTHON) tools/style-check.py $(if $(filter all,$(SOURCE)),--all,$(if $(STYLE_CHECK_BASE),--base $(STYLE_CHECK_BASE)))
+	$(PYTHON) tools/test/test_style_check.py
+	$(PYTHON) -m unittest -q tools.test.test_make_targets \
+	  tools.test.test_frr_release_selection tools.test.test_docker_source_selection
 
-ipv4-basic-core: build ## Run the IPv4 basic-core UUT scenario.
-	$(MAKE) -C eigrp/test/uut ipv4-basic-core
-
-ipv6-basic-core: build ## Run the IPv6 basic-core UUT scenario.
-	$(MAKE) -C eigrp/test/uut ipv6-basic-core
-
-rtp-core: build ## Run the RTP core UUT scenario.
-	$(MAKE) -C eigrp/test/uut rtp-core
-
-core-topology: build ## Run the four-router square and cross-connected core redundancy scenarios.
-	$(MAKE) -C eigrp/test/uut core-topology
-
-mesh-topology: build ## Run the six-router full-mesh DUAL/query-storm qualification scenarios.
-	$(MAKE) -C eigrp/test/uut mesh-topology
-
-test: uut ## Run the complete portable UUT gate once (pytest + all YAML scenarios).
-
-# The quick scale gate covers the three TRANSMIT guards. It intentionally does
-# not run all UUT cases, the 2048-peer startup test, or any 100K-route scenario.
-# The small multicast case is the real synthetic-wire backpressure test with
-# a reduced peer count; it must still withhold/release ACKs and drain RTP.
-scale: build ## Quick packet, unicast and multicast pacing/backpressure qualification.
-	@printf '\n%s\n\n' '======================== quick pacing/backpressure scale gate ========================'
+uut: build ## Run pytest + YAML scenarios; SUITE or SCENARIO selects a subset.
+	@$(if $(and $(SUITE),$(SCENARIO)),echo 'error: select either SUITE or SCENARIO' >&2; exit 2;,true)
+ifeq ($(strip $(SCENARIO)),)
+ifeq ($(strip $(SUITE)),)
+	$(PYTHON) -m pytest eigrp/test
+	$(MAKE) -C eigrp/test/uut all-scenarios
+else
+	@$(if $(filter $(SUITE),$(UUT_SUITES)),true,echo 'error: unknown UUT SUITE=$(SUITE)' >&2; exit 2)
+	$(MAKE) -C eigrp/test/uut $(SUITE)
+endif
+else
 	$(MAKE) -C eigrp/test/uut eigrp-uut-node
-	@printf '\n%s\n' '--- Packet pacing: RFC 7868 interface bandwidth budget ---'
-	$(PYTHON) -m pytest -q eigrp/test/packet/pacing.py
-	@printf '\n%s\n' '--- Unicast pacing: lost ACK and RTP retry progress ---'
-	$(PYTHON) eigrp/test/uut/run.py eigrp/test/rtp/two-router.yaml eigrp/test/rtp/lost-ack.yaml
-	@printf '\n%s\n' '--- Multicast pacing: CR/backpressure, held ACKs and recovery ---'
-	EIGRP_SCALE_PEERS=32 EIGRP_SCALE_MCAST_SLOW_PEERS=8 EIGRP_SCALE_MCAST_ROUTES=64 \
-	EIGRP_SCALE_WATCHDOG_SEC=120 \
-		$(PYTHON) eigrp/test/scale/stress_extended.py mcast
+	$(PYTHON) eigrp/test/uut/run_all.py --scenario '$(SCENARIO)'
+endif
 
-# The peer test uses one real R1 UUT and 2048 synthetic RFC-format EIGRP peers;
-# do not allocate 2048 host processes.
-scale-peers: build ## Establish 2,048 EIGRP neighbors and verify RTP quiescence.
-	@printf '\n%s\n\n' '======================== 2048-peer scale gate ========================'
+# Quick-scale is the existing packet pacing, lost-ACK, and 32-peer multicast
+# RTP qualification. Heavy tests remain delegated to eigrp/test/scale.
+scale: build ## Run quick scale, a named SUITE, or a single CASE.
+	@$(if $(and $(SUITE),$(CASE)),echo 'error: select either SUITE or CASE' >&2; exit 2;,true)
+ifeq ($(strip $(SUITE)$(CASE)),)
+	@printf '\n%s\n' '=== Quick pacing/backpressure scale gate ==='
+	$(MAKE) -C eigrp/test/uut eigrp-uut-node
+	$(PYTHON) -m pytest -q eigrp/test/packet/pacing.py
+	$(PYTHON) eigrp/test/uut/run.py eigrp/test/rtp/two-router.yaml eigrp/test/rtp/lost-ack.yaml
+	EIGRP_SCALE_PEERS=32 EIGRP_SCALE_MCAST_SLOW_PEERS=8 EIGRP_SCALE_MCAST_ROUTES=64 \
+	EIGRP_SCALE_WATCHDOG_SEC=120 $(PYTHON) eigrp/test/scale/stress_extended.py mcast
+else ifneq ($(strip $(CASE)),)
+	@$(if $(filter $(CASE),$(SCALE_CASES)),true,echo 'error: unknown scale CASE=$(CASE)' >&2; exit 2)
+ifeq ($(CASE),peers)
 	$(MAKE) -C eigrp/test/uut eigrp-uut-node
 	$(PYTHON) eigrp/test/scale/neighbor_2048.py
-
-# Individually addressable heavy tests; no numbered names or compatibility aliases.
-scale-internal: ## Inject 100K EIGRP internal routes into R1.
-	$(MAKE) -C eigrp/test/scale internal
-
-scale-external: ## Inject 100K EIGRP external routes into R1.
-	$(MAKE) -C eigrp/test/scale external
-
-scale-line: ## Flood 100K mixed routes along R1-R2-R3.
-	$(MAKE) -C eigrp/test/scale line
-
-scale-kite: ## Flood 100K mixed routes from the kite tail at R1.
-	$(MAKE) -C eigrp/test/scale kite
-
-scale-peer-routes: ## Receive 50 routes from each of 2,048 EIGRP neighbors.
-	$(MAKE) -C eigrp/test/scale peer-routes
-
-scale-withdraw: ## Install, withdraw and reinject 100K routes; verify cleanup.
-	$(MAKE) -C eigrp/test/scale withdraw
-
-scale-mcast: ## Withhold multicast peer ACKs, then verify CR MTU and RTP recovery.
-	$(MAKE) -C eigrp/test/scale mcast
-
-scale-linkdown: ## Drop the R1-R2 link during a 100K-route flood and recover.
-	$(MAKE) -C eigrp/test/scale linkdown
-
-scale-mixed-tlv: ## Test TLV1 and TLV2 peers sharing one interface.
-	$(MAKE) -C eigrp/test/scale mixed-tlv
-
-scale-churn: ## Change, withdraw and restore routes under sustained load.
-	$(MAKE) -C eigrp/test/scale churn
-
-scale-auth-md5: ## Flood 100K routes across an MD5-authenticated adjacency.
-	$(MAKE) -C eigrp/test/scale auth-md5
-
-# Each suite runs every child test, even after a failure. Print the identity of
-# each failure and return a nonzero aggregate exit status at the end. These
-# deliberately run sequentially to avoid cross-test memory pressure.
-define run_scale_suite
+else
+	$(MAKE) -C eigrp/test/scale $(CASE)
+endif
+else
+	@case '$(SUITE)' in 100k|stress|auth|all) ;; *) echo 'error: scale SUITE must be 100k, stress, auth or all' >&2; exit 2 ;; esac
 	@failed=0; \
-	for target in $(1); do \
-		printf '\n%s\n' "======================== $$target ========================"; \
-		if $(MAKE) $$target; then \
-			printf 'PASS %s\n' "$$target"; \
-		else \
-			printf 'FAIL %s\n' "$$target"; \
-			failed=1; \
-		fi; \
-	done; \
-	exit $$failed
-endef
+	case '$(SUITE)' in \
+	  100k) cases='$(SCALE_VOLUME)' ;; \
+	  stress) cases='$(SCALE_STRESS)' ;; \
+	  auth) cases='$(SCALE_AUTH)' ;; \
+	  all) cases='$(SCALE_CASES)' ;; \
+	esac; \
+	for item in $$cases; do \
+	  printf '\n=== scale %s ===\n' "$$item"; \
+	  if $(MAKE) scale SUITE= CASE="$$item"; then \
+	    printf 'PASS %s\n' "$$item"; \
+	  else \
+	    printf 'FAIL %s\n' "$$item"; failed=1; \
+	  fi; \
+	done; exit $$failed
+endif
 
-scale-100k: ## Run the 2,048-peer gate and all five heavy route-volume tests.
-	$(call run_scale_suite,scale-peers scale-internal scale-external scale-line scale-kite scale-peer-routes)
+# Keep Buildx, image/platform overrides, deploy and verify in tools/docker.sh.
+docker: ## Local sources by default; GITHUB=latest|X.Y.Z for tagged releases.
+	@$(if $(and $(GITHUB),$(FRR)),echo 'error: GITHUB and FRR cannot be combined' >&2; exit 2;,true)
+ifeq ($(strip $(GITHUB)),)
+	./tools/docker.sh --local '$(or $(USER),$(shell id -un))-test' $(if $(FRR),--frr-root '$(FRR)')
+else
+	./tools/docker.sh --build '$(GITHUB)'
+endif
 
-scale-stress: ## Run withdraw, multicast, link-down, mixed-TLV and churn tests.
-	$(call run_scale_suite,scale-withdraw scale-mcast scale-linkdown scale-mixed-tlv scale-churn)
-
-# scale-auth-sha2 is intentionally not a target yet. Add it to the suite only
-# when an executable SHA-256 authentication stress test has been implemented.
-scale-auth: ## Run implemented authenticated scale tests (MD5; SHA-256 later).
-	$(call run_scale_suite,scale-auth-md5)
-
-scale-all: ## Run all 100K, stress and authentication suites; report all failures.
-	$(call run_scale_suite,scale-100k scale-stress scale-auth)
-
-# Optional FRR-owned compile/link smoke test; not part of the portable gate.
-frr-smoke: ## Run the optional FRR compile/link smoke test.
+frr-smoke:
 	$(MAKE) -C frr/test/build
 
 clean: ## Remove generated build and UUT artifacts.

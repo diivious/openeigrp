@@ -6,6 +6,12 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+static inline ssize_t vsnprintfrr(char *buf, size_t len, const char *fmt,
+				  va_list ap)
+{
+	return vsnprintf(buf, len, fmt, ap);
+}
+
 static inline ssize_t snprintfrr(char *buf, size_t len, const char *fmt, ...)
 {
 	va_list ap;

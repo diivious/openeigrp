@@ -9,7 +9,7 @@ AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: false
 IndentCaseLabels: false
-AlignEscapedNewlinesLeft: false
+AlignEscapedNewlines: Right
 AlignTrailingComments: true
 AllowAllParametersOfDeclarationOnNextLine: false
 AlignAfterOpenBracket: true

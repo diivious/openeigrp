@@ -26,8 +26,8 @@
 #include "lib/sockopt.h"
 #include "vrf.h"
 
-bool eigrp_northbound_ipv6_neighbor_address_copy(
-	eigrp_address_t *destination, const struct in6_addr *address)
+bool eigrp_northbound_ipv6_neighbor_address_copy(eigrp_address_t *destination,
+						 const struct in6_addr *address)
 {
 	if (!destination || !address)
 		return false;
@@ -40,9 +40,9 @@ bool eigrp_northbound_ipv6_neighbor_address_copy(
 
 /* FRR IPv6 packet/socket services. */
 
-static bool eigrp_southbound_ipv6_interface_linklocal(
-	eigrp_instance_t *eigrp, const eigrp_intf_t *ei,
-	struct in6_addr *address)
+static bool eigrp_southbound_ipv6_interface_linklocal(eigrp_instance_t *eigrp,
+						      const eigrp_intf_t *ei,
+						      struct in6_addr *address)
 {
 	struct connected *co;
 	struct interface *ifp;
@@ -81,16 +81,20 @@ eigrp_result_t eigrp_southbound_ipv6_socket_configure(int fd)
 		zlog_warn("Can't set pktinfo option for fd %d", fd);
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 	}
-	if (setsockopt(fd, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &one, sizeof(one)) < 0
-	    || setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &one, sizeof(one)) < 0
-	    || setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &zero, sizeof(zero)) < 0)
+	if (setsockopt(fd, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &one, sizeof(one))
+		    < 0
+	    || setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &one,
+			  sizeof(one))
+		       < 0
+	    || setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &zero,
+			  sizeof(zero))
+		       < 0)
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 	return EIGRP_RESULT_SUCCESS;
 }
 
-int eigrp_southbound_ipv6_multicast_interface_update(eigrp_operation_t operation,
-                                                   eigrp_instance_t *eigrp,
-                                                   eigrp_intf_t *ei)
+int eigrp_southbound_ipv6_multicast_interface_update(
+	eigrp_operation_t operation, eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 {
 	if (operation != EIGRP_SET)
 		return -1;
@@ -100,7 +104,8 @@ int eigrp_southbound_ipv6_multicast_interface_update(eigrp_operation_t operation
 
 	if (fd < 0 || !ifindex)
 		return -1;
-	ret = setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &ifindex, sizeof(ifindex));
+	ret = setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &ifindex,
+			 sizeof(ifindex));
 	if (ret < 0)
 		zlog_warn("can't set IPv6 multicast interface %s[%u]: %s",
 			  eigrp_intf_name(ei) ? eigrp_intf_name(ei) : "?",
@@ -109,8 +114,8 @@ int eigrp_southbound_ipv6_multicast_interface_update(eigrp_operation_t operation
 }
 
 static int eigrp_southbound_ipv6_multicast_membership(eigrp_instance_t *eigrp,
-                                                       eigrp_intf_t *ei,
-                                                       int option)
+						      eigrp_intf_t *ei,
+						      int option)
 {
 	struct ipv6_mreq mreq = {0};
 	eigrp_ifindex_t ifindex = eigrp_intf_ifindex(ei);
@@ -125,27 +130,28 @@ static int eigrp_southbound_ipv6_multicast_membership(eigrp_instance_t *eigrp,
 	ret = setsockopt(fd, IPPROTO_IPV6, option, &mreq, sizeof(mreq));
 	if (ret < 0)
 		zlog_warn("can't %s EIGRP IPv6 multicast group on %s[%u]: %s",
-			  option == IPV6_JOIN_GROUP ? "join" : "leave", name ? name : "?",
-			  ifindex, safe_strerror(errno));
+			  option == IPV6_JOIN_GROUP ? "join" : "leave",
+			  name ? name : "?", ifindex, safe_strerror(errno));
 	return ret;
 }
 
 int eigrp_southbound_ipv6_multicast_join(eigrp_instance_t *eigrp,
-                                         eigrp_intf_t *ei)
+					 eigrp_intf_t *ei)
 {
-	return eigrp_southbound_ipv6_multicast_membership(eigrp, ei, IPV6_JOIN_GROUP);
+	return eigrp_southbound_ipv6_multicast_membership(eigrp, ei,
+							  IPV6_JOIN_GROUP);
 }
 
 int eigrp_southbound_ipv6_multicast_leave(eigrp_instance_t *eigrp,
-                                          eigrp_intf_t *ei)
+					  eigrp_intf_t *ei)
 {
-	return eigrp_southbound_ipv6_multicast_membership(eigrp, ei, IPV6_LEAVE_GROUP);
+	return eigrp_southbound_ipv6_multicast_membership(eigrp, ei,
+							  IPV6_LEAVE_GROUP);
 }
 
-int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp,
-                               eigrp_intf_t *ei,
-                               const eigrp_address_t *destination,
-                               const uint8_t *payload, size_t length)
+int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+			       const eigrp_address_t *destination,
+			       const uint8_t *payload, size_t length)
 {
 	int fd = eigrp_southbound_socket_fd_get(eigrp);
 	struct sockaddr_in6 sa = {0};
@@ -161,7 +167,8 @@ int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp,
 	    || destination->afi != EIGRP_AFI_IPV6)
 		return -1;
 	ifindex = eigrp_intf_ifindex(ei);
-	if (!ifindex || !eigrp_southbound_ipv6_interface_linklocal(eigrp, ei, &source))
+	if (!ifindex
+	    || !eigrp_southbound_ipv6_interface_linklocal(eigrp, ei, &source))
 		return -1;
 	sa.sin6_family = AF_INET6;
 	sa.sin6_scope_id = ifindex;
@@ -187,13 +194,12 @@ int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp,
 	return sendmsg(fd, &msg, 0);
 }
 
-bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp,
-                                   uint8_t *buffer, size_t capacity,
-                                   size_t *received_length,
-                                   eigrp_ifindex_t *ifindex,
-                                   eigrp_address_t *source,
-                                   eigrp_address_t *destination,
-                                   eigrp_packet_rx_meta_t *meta)
+bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
+				   size_t capacity, size_t *received_length,
+				   eigrp_ifindex_t *ifindex,
+				   eigrp_address_t *source,
+				   eigrp_address_t *destination,
+				   eigrp_packet_rx_meta_t *meta)
 {
 	int fd = eigrp_southbound_socket_fd_get(eigrp);
 	struct sockaddr_in6 sa = {0};
@@ -226,7 +232,8 @@ bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp,
 	memcpy(source->bytes, &sa.sin6_addr, sizeof(sa.sin6_addr));
 	*ifindex = 0;
 	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-		if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO
+		if (cmsg->cmsg_level == IPPROTO_IPV6
+		    && cmsg->cmsg_type == IPV6_PKTINFO
 		    && cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in6_pktinfo))) {
 			const struct in6_pktinfo *pktinfo =
 				(const struct in6_pktinfo *)CMSG_DATA(cmsg);
@@ -239,7 +246,8 @@ bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp,
 	if (!*ifindex)
 		return false;
 	{
-		struct interface *ifp = if_lookup_by_index((ifindex_t)*ifindex,
+		struct interface *ifp = if_lookup_by_index(
+			(ifindex_t)*ifindex,
 			(vrf_id_t)eigrp_instance_vrf_id(eigrp));
 		if (!ifp || !ifp->vrf)
 			return false;
@@ -252,8 +260,8 @@ bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp,
 		struct in6_addr group;
 		meta->destination_multicast =
 			inet_pton(AF_INET6, "ff02::a", &group) == 1
-			&& memcmp(destination->bytes, &group, sizeof(group)) == 0;
+			&& memcmp(destination->bytes, &group, sizeof(group))
+				   == 0;
 	}
 	return true;
 }
-

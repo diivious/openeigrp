@@ -79,7 +79,7 @@ def test_packet_identity_demux_keeps_vrf_vrid_and_tid_explicit():
     assert "meta->ingress_vrf_id != eigrp->vrf_id" in ipv6
     assert "virt_router->vrid = vrid;" in instance
     assert "eigrp->virt_router = virt_router;" in instance
-    assert "eigrp_topology_id_t topology_id;" in structs
+    assert re.search(r"\beigrp_topology_id_t\s+topology_id\s*;", structs)
     assert "tid != EIGRP_TOPOLOGY_ID_BASE" not in tlv2
     assert "route->topology_id = (eigrp_topology_id_t)tid;" in tlv2
     assert "route->topology_id != EIGRP_TOPOLOGY_ID_BASE" not in tlv2
@@ -110,4 +110,4 @@ def test_process_receive_thread_starts_after_frr_daemonization():
     assert "if (!eigrp_process_receive_start())" in frr_main
 
     assert unix_uut.index("eigrp_init();") < unix_uut.index("eigrp_process_receive_start()")
-    assert "if(!eigrp_process_receive_start())" in unix_uut
+    assert re.search(r"if\s*\(\s*!eigrp_process_receive_start\(\)\s*\)", unix_uut)

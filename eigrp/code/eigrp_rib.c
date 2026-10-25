@@ -55,8 +55,10 @@ eigrp_result_t eigrp_rib_routes_replay(void)
 	if (!eigrp_process.virt_router)
 		return EIGRP_RESULT_SUCCESS;
 
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router))
-		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, eigrp))
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router))
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
+					   eigrp))
 			(void)eigrp_rib_routes_replay_instance(eigrp);
 	return EIGRP_RESULT_SUCCESS;
 }

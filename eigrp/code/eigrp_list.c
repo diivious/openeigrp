@@ -182,7 +182,8 @@ eigrp_list_item_t *eigrp_list_lookup(eigrp_list_t *list, const void *data)
 	if (!list)
 		return NULL;
 	if (list->buckets) {
-		size_t bucket = eigrp_list_pointer_hash(data) % list->bucket_count;
+		size_t bucket =
+			eigrp_list_pointer_hash(data) % list->bucket_count;
 		for (node = list->buckets[bucket]; node; node = node->hash_next)
 			if (node->data == data)
 				return node;

@@ -59,14 +59,14 @@ static void be32dec_vect(uint32_t *dst, const unsigned char *src, size_t len)
 }
 
 /* Elementary functions used by SHA256 */
-#define Ch(x, y, z)     ((x & (y ^ z)) ^ z)
-#define Maj(x, y, z)    ((x & (y | z)) | (y & z))
-#define SHR(x, n)       (x >> n)
-#define ROTR(x, n)      ((x >> n) | (x << (32 - n)))
-#define S0(x)           (ROTR(x, 2) ^ ROTR(x, 13) ^ ROTR(x, 22))
-#define S1(x)           (ROTR(x, 6) ^ ROTR(x, 11) ^ ROTR(x, 25))
-#define s0(x)           (ROTR(x, 7) ^ ROTR(x, 18) ^ SHR(x, 3))
-#define s1(x)           (ROTR(x, 17) ^ ROTR(x, 19) ^ SHR(x, 10))
+#define Ch(x, y, z) ((x & (y ^ z)) ^ z)
+#define Maj(x, y, z) ((x & (y | z)) | (y & z))
+#define SHR(x, n) (x >> n)
+#define ROTR(x, n) ((x >> n) | (x << (32 - n)))
+#define S0(x) (ROTR(x, 2) ^ ROTR(x, 13) ^ ROTR(x, 22))
+#define S1(x) (ROTR(x, 6) ^ ROTR(x, 11) ^ ROTR(x, 25))
+#define s0(x) (ROTR(x, 7) ^ ROTR(x, 18) ^ SHR(x, 3))
+#define s1(x) (ROTR(x, 17) ^ ROTR(x, 19) ^ SHR(x, 10))
 
 /* SHA256 round function */
 #define RND(a, b, c, d, e, f, g, h, k)                                         \
@@ -281,7 +281,8 @@ void eigrp_sha256_final(unsigned char digest[32], eigrp_sha256_ctx_t *ctx)
 }
 
 /* Initialize an HMAC-SHA256 operation with the given key. */
-void eigrp_hmac_sha256_init(eigrp_hmac_sha256_ctx_t *ctx, const void *_K, size_t Klen)
+void eigrp_hmac_sha256_init(eigrp_hmac_sha256_ctx_t *ctx, const void *_K,
+			    size_t Klen)
 {
 	unsigned char pad[64];
 	unsigned char khash[32];
@@ -316,7 +317,8 @@ void eigrp_hmac_sha256_init(eigrp_hmac_sha256_ctx_t *ctx, const void *_K, size_t
 }
 
 /* Add bytes to the HMAC-SHA256 operation. */
-void eigrp_hmac_sha256_update(eigrp_hmac_sha256_ctx_t *ctx, const void *in, size_t len)
+void eigrp_hmac_sha256_update(eigrp_hmac_sha256_ctx_t *ctx, const void *in,
+			      size_t len)
 {
 
 	/* Feed data to the inner SHA256 operation. */
@@ -324,7 +326,8 @@ void eigrp_hmac_sha256_update(eigrp_hmac_sha256_ctx_t *ctx, const void *in, size
 }
 
 /* Finish an HMAC-SHA256 operation. */
-void eigrp_hmac_sha256_final(unsigned char digest[32], eigrp_hmac_sha256_ctx_t *ctx)
+void eigrp_hmac_sha256_final(unsigned char digest[32],
+			     eigrp_hmac_sha256_ctx_t *ctx)
 {
 	unsigned char ihash[32];
 
@@ -346,8 +349,9 @@ void eigrp_hmac_sha256_final(unsigned char digest[32], eigrp_hmac_sha256_ctx_t *
  * Compute PBKDF2(passwd, salt, c, dkLen) using HMAC-SHA256 as the PRF, and
  * write the output to buf.  The value dkLen must be at most 32 * (2^32 - 1).
  */
-void eigrp_pbkdf2_sha256(const uint8_t *passwd, size_t passwdlen, const uint8_t *salt,
-		   size_t saltlen, uint64_t c, uint8_t *buf, size_t dkLen)
+void eigrp_pbkdf2_sha256(const uint8_t *passwd, size_t passwdlen,
+			 const uint8_t *salt, size_t saltlen, uint64_t c,
+			 uint8_t *buf, size_t dkLen)
 {
 	eigrp_hmac_sha256_ctx_t PShctx = {}, hctx;
 	size_t i;

@@ -93,8 +93,8 @@ static void eigrp_debug_transmit_write(struct vty *vty, unsigned long state)
 	vty_out(vty, "\n");
 }
 
-static void eigrp_debug_af_slot_write(
-	struct vty *vty, const eigrp_debug_af_state_t *slot)
+static void eigrp_debug_af_slot_write(struct vty *vty,
+				      const eigrp_debug_af_state_t *slot)
 {
 	char address[INET6_ADDRSTRLEN];
 	const char *afi;
@@ -115,9 +115,8 @@ static void eigrp_debug_af_slot_write(
 	case EIGRP_DEBUG_AF_NEIGHBOR:
 		vty_out(vty, " neighbor");
 		if (slot->neighbor_set) {
-			int family = slot->afi == EIGRP_AFI_IPV6
-					     ? AF_INET6
-					     : AF_INET;
+			int family = slot->afi == EIGRP_AFI_IPV6 ? AF_INET6
+								 : AF_INET;
 			if (inet_ntop(family, slot->neighbor.bytes, address,
 				      sizeof(address)))
 				vty_out(vty, " %s", address);
@@ -142,7 +141,8 @@ static int config_write_debug(struct vty *vty)
 
 	if (conf_debug_eigrp & EIGRP_DEBUG_EVENT) {
 		vty_out(vty, "debug eigrp event%s\n",
-			(conf_debug_eigrp & EIGRP_DEBUG_DETAIL) ? " detail" : "");
+			(conf_debug_eigrp & EIGRP_DEBUG_DETAIL) ? " detail"
+								: "");
 		write = 1;
 	}
 	if (conf_debug_eigrp & EIGRP_DEBUG_TIMERS) {
@@ -174,7 +174,8 @@ static int config_write_debug(struct vty *vty)
 		vty_out(vty, "debug eigrp notifications rib\n");
 		write = 1;
 	}
-	if (conf_debug_eigrp_notifications & EIGRP_DEBUG_NOTIFICATION_INTERFACE) {
+	if (conf_debug_eigrp_notifications
+	    & EIGRP_DEBUG_NOTIFICATION_INTERFACE) {
 		vty_out(vty, "debug eigrp notifications interface\n");
 		write = 1;
 	}
@@ -186,15 +187,16 @@ static int config_write_debug(struct vty *vty)
 	for (i = 0; i < eigrp_debug_af_state_count(); i++) {
 		eigrp_debug_af_state_t state;
 
-		if (!eigrp_debug_af_state_read(
-			    EIGRP_DEBUG_SCOPE_CONFIG, i, &state)
+		if (!eigrp_debug_af_state_read(EIGRP_DEBUG_SCOPE_CONFIG, i,
+					       &state)
 		    || !state.used)
 			continue;
 		eigrp_debug_af_slot_write(vty, &state);
 		write = 1;
 	}
 
-	/* Persist packet debug categories independently so partial directions survive. */
+	/* Persist packet debug categories independently so partial directions
+	 * survive. */
 	for (i = 0; i < EIGRP_DEBUG_PACKET_CATEGORY_MAX; i++) {
 		unsigned long state = conf_debug_eigrp_packet[i];
 		const char *direction = "";
@@ -210,7 +212,8 @@ static int config_write_debug(struct vty *vty)
 			detail = " detail";
 
 		vty_out(vty, "debug eigrp packet %s%s%s\n",
-			eigrp_debug_packet_category_cli_name(i), direction, detail);
+			eigrp_debug_packet_category_cli_name(i), direction,
+			detail);
 		write = 1;
 	}
 
@@ -269,8 +272,8 @@ void show_ip_eigrp_interface_detail(struct vty *vty, eigrp_instance_t *eigrp,
 		"Out-of-sequence rcvd: ", 0);
 	vty_out(vty, "%-2s %s %s %s \n", "", "Authentication mode is ", "not",
 		"set");
-	vty_out(vty, "%-2s TLV peers: v1 %u, v2 %u\n", "",
-		ei->tlv1_peer_count, ei->tlv2_peer_count);
+	vty_out(vty, "%-2s TLV peers: v1 %u, v2 %u\n", "", ei->tlv1_peer_count,
+		ei->tlv2_peer_count);
 	vty_out(vty, "%-2s %s \n", "", "Use multicast");
 }
 
@@ -292,17 +295,18 @@ static const char *eigrp_dump_duration_string(uint64_t seconds, char *buffer,
 	uint64_t secs = seconds % 60U;
 
 	if (days)
-		snprintf(buffer, size, "%llud%02lluh", (unsigned long long)days,
-			 (unsigned long long)hours);
+		eigrp_snprintf(buffer, size, "%llud%02lluh",
+			       (unsigned long long)days,
+			       (unsigned long long)hours);
 	else
-		snprintf(buffer, size, "%02llu:%02llu:%02llu",
-			 (unsigned long long)hours, (unsigned long long)minutes,
-			 (unsigned long long)secs);
+		eigrp_snprintf(buffer, size, "%02llu:%02llu:%02llu",
+			       (unsigned long long)hours,
+			       (unsigned long long)minutes,
+			       (unsigned long long)secs);
 	return buffer;
 }
 
-void show_ip_eigrp_neighbor_sub(struct vty *vty, eigrp_nbr_t *nbr,
-				int detail)
+void show_ip_eigrp_neighbor_sub(struct vty *vty, eigrp_nbr_t *nbr, int detail)
 {
 	char hold[16];
 	char uptime[32];
@@ -311,28 +315,30 @@ void show_ip_eigrp_neighbor_sub(struct vty *vty, eigrp_nbr_t *nbr,
 	uint8_t retry_count = 0;
 
 	if (nbr->t_holddown)
-		snprintf(hold, sizeof(hold), "%u",
-			 eigrp_timer_remaining_seconds(nbr->ei->eigrp, nbr->t_holddown));
+		eigrp_snprintf(hold, sizeof(hold), "%u",
+			       eigrp_timer_remaining_seconds(nbr->ei->eigrp,
+							     nbr->t_holddown));
 	else
-		snprintf(hold, sizeof(hold), "-");
+		eigrp_snprintf(hold, sizeof(hold), "-");
 	if (nbr->up_since_msec) {
 		uint64_t now = eigrp_sys_monotime_msec();
 
 		if (now >= nbr->up_since_msec)
 			uptime_seconds = (now - nbr->up_since_msec) / 1000U;
-		eigrp_dump_duration_string(uptime_seconds, uptime, sizeof(uptime));
+		eigrp_dump_duration_string(uptime_seconds, uptime,
+					   sizeof(uptime));
 	} else
-		snprintf(uptime, sizeof(uptime), "-");
+		eigrp_snprintf(uptime, sizeof(uptime), "-");
 	if (nbr->retrans_queue && nbr->retrans_queue->tail)
 		retry_count = nbr->retrans_queue->tail->retrans_counter;
 	if (nbr->srtt_valid)
-		snprintf(srtt, sizeof(srtt), "%u", nbr->srtt_msec);
+		eigrp_snprintf(srtt, sizeof(srtt), "%u", nbr->srtt_msec);
 	else
-		snprintf(srtt, sizeof(srtt), "n/a");
+		eigrp_snprintf(srtt, sizeof(srtt), "n/a");
 
 	vty_out(vty, "%-3s %-23s %-15s %-5s %-8s %-6s %-5u %-3lu %u\n", "-",
-		eigrp_print_addr(&nbr->src), eigrp_intf_name_string(nbr->ei), hold, uptime,
-		srtt, eigrp_nbr_rto(nbr),
+		eigrp_print_addr(&nbr->src), eigrp_intf_name_string(nbr->ei),
+		hold, uptime, srtt, eigrp_nbr_rto(nbr),
 		nbr->retrans_queue ? nbr->retrans_queue->count : 0,
 		nbr->recv_sequence_number);
 
@@ -347,11 +353,16 @@ void show_ip_eigrp_neighbor_sub(struct vty *vty, eigrp_nbr_t *nbr,
 		    || eigrp_nbr_limit_status(nbr) == 'D'
 		    || nbr->limit_restart_cnt) {
 			uint64_t now = eigrp_sys_monotime_msec();
-			vty_out(vty, "   Prefix-limit: %c, restarts: %u, restart/reset: %u/%u seconds\n",
-				eigrp_nbr_limit_status(nbr) ? eigrp_nbr_limit_status(nbr) : 'A',
+			vty_out(vty,
+				"   Prefix-limit: %c, restarts: %u, restart/reset: %u/%u seconds\n",
+				eigrp_nbr_limit_status(nbr)
+					? eigrp_nbr_limit_status(nbr)
+					: 'A',
 				nbr->limit_restart_cnt,
-				eigrp_nbr_limit_remaining(nbr->limit_restart_due_msec, now),
-				eigrp_nbr_limit_remaining(nbr->limit_reset_due_msec, now));
+				eigrp_nbr_limit_remaining(
+					nbr->limit_restart_due_msec, now),
+				eigrp_nbr_limit_remaining(
+					nbr->limit_reset_due_msec, now));
 		}
 	}
 }
@@ -399,12 +410,14 @@ void show_ip_eigrp_route_descriptor(struct vty *vty, eigrp_instance_t *eigrp,
 		return;
 
 	if (*first) {
-		show_ip_eigrp_prefix_descriptor(vty, te->prefix, include_serial);
+		show_ip_eigrp_prefix_descriptor(vty, te->prefix,
+						include_serial);
 		*first = false;
 	}
 
 	if (te->adv_router == eigrp->neighbor_self)
-		vty_out(vty, "        via Connected, %s\n", eigrp_intf_name_string(te->ei));
+		vty_out(vty, "        via Connected, %s\n",
+			eigrp_intf_name_string(te->ei));
 	else
 		vty_out(vty, "        via %s (%u/%u), %s\n",
 			eigrp_print_addr(&te->adv_router->src), te->distance,
@@ -420,7 +433,7 @@ DEFUN_NOSH(show_debugging_eigrp, show_debugging_eigrp_cmd,
 	vty_out(vty, "EIGRP debugging status:\n");
 	if (IS_DEBUG_EIGRP(event, EVENT))
 		vty_out(vty, "  EIGRP event%s debugging is on\n",
-			 IS_DEBUG_EIGRP(event, DETAIL) ? " detail" : "");
+			IS_DEBUG_EIGRP(event, DETAIL) ? " detail" : "");
 	if (IS_DEBUG_EIGRP(event, TIMERS))
 		vty_out(vty, "  EIGRP timers debugging is on\n");
 	if (IS_DEBUG_EIGRP(event, FSM))
@@ -440,19 +453,21 @@ DEFUN_NOSH(show_debugging_eigrp, show_debugging_eigrp_cmd,
 	if (term_debug_eigrp_notifications & EIGRP_DEBUG_NOTIFICATION_RIB)
 		vty_out(vty, "  EIGRP RIB notification debugging is on\n");
 	if (term_debug_eigrp_notifications & EIGRP_DEBUG_NOTIFICATION_INTERFACE)
-		vty_out(vty, "  EIGRP interface notification debugging is on\n");
+		vty_out(vty,
+			"  EIGRP interface notification debugging is on\n");
 	if (term_debug_eigrp_transmit) {
 		vty_out(vty, "  EIGRP transmit debugging is on:");
-#define EIGRP_SHOW_TRANSMIT(_flag, _name)                                     \
-		do {                                                                 \
-			if (term_debug_eigrp_transmit & (_flag))                        \
-				vty_out(vty, " %s", (_name));                            \
-		} while (0)
+#define EIGRP_SHOW_TRANSMIT(_flag, _name)                                      \
+	do {                                                                   \
+		if (term_debug_eigrp_transmit & (_flag))                       \
+			vty_out(vty, " %s", (_name));                          \
+	} while (0)
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_ACK, "ACK");
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_BUILD, "BUILD");
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_DETAIL, "DETAIL");
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_LINK, "LINK");
-		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_PACKETIZE, "PACKETIZE");
+		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_PACKETIZE,
+				    "PACKETIZE");
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_PEERDOWN, "PEERDOWN");
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_SIA, "SIA");
 		EIGRP_SHOW_TRANSMIT(EIGRP_DEBUG_TRANSMIT_STARTUP, "STARTUP");
@@ -466,8 +481,8 @@ DEFUN_NOSH(show_debugging_eigrp, show_debugging_eigrp_cmd,
 		const eigrp_debug_af_state_t *slot = &state;
 		char address[INET6_ADDRSTRLEN];
 
-		if (!eigrp_debug_af_state_read(
-			    EIGRP_DEBUG_SCOPE_TERMINAL, i, &state)
+		if (!eigrp_debug_af_state_read(EIGRP_DEBUG_SCOPE_TERMINAL, i,
+					       &state)
 		    || !slot->used)
 			continue;
 		vty_out(vty, "  EIGRP address-family %s",
@@ -483,10 +498,10 @@ DEFUN_NOSH(show_debugging_eigrp, show_debugging_eigrp_cmd,
 		case EIGRP_DEBUG_AF_NEIGHBOR:
 			vty_out(vty, " neighbor");
 			if (slot->neighbor_set
-			    && inet_ntop(slot->afi == EIGRP_AFI_IPV6
-						 ? AF_INET6
-						 : AF_INET,
-					 slot->neighbor.bytes, address, sizeof(address)))
+			    && inet_ntop(slot->afi == EIGRP_AFI_IPV6 ? AF_INET6
+								     : AF_INET,
+					 slot->neighbor.bytes, address,
+					 sizeof(address)))
 				vty_out(vty, " %s", address);
 			break;
 		case EIGRP_DEBUG_AF_NOTIFICATIONS:
@@ -506,7 +521,8 @@ DEFUN_NOSH(show_debugging_eigrp, show_debugging_eigrp_cmd,
 
 		if (IS_DEBUG_EIGRP_PACKET(i, SEND)
 		    && IS_DEBUG_EIGRP_PACKET(i, RECV)) {
-			vty_out(vty, "  EIGRP packet %s%s debugging is on\n", name,
+			vty_out(vty, "  EIGRP packet %s%s debugging is on\n",
+				name,
 				IS_DEBUG_EIGRP_PACKET(i, PACKET_DETAIL)
 					? " detail"
 					: "");
@@ -535,7 +551,7 @@ DEFUN_NOSH(show_debugging_eigrp, show_debugging_eigrp_cmd,
 static eigrp_debug_scope_t eigrp_debug_cli_scope(const struct vty *vty)
 {
 	return vty->node == CONFIG_NODE ? EIGRP_DEBUG_SCOPE_CONFIG
-					       : EIGRP_DEBUG_SCOPE_TERMINAL;
+					: EIGRP_DEBUG_SCOPE_TERMINAL;
 }
 
 static int eigrp_debug_cli_result(eigrp_result_t result)
@@ -544,17 +560,19 @@ static int eigrp_debug_cli_result(eigrp_result_t result)
 					      : CMD_WARNING_CONFIG_FAILED;
 }
 
-DEFUN(debug_eigrp_event, debug_eigrp_event_cmd,
-      "debug eigrp event [detail]",
+DEFUN(debug_eigrp_event, debug_eigrp_event_cmd, "debug eigrp event [detail]",
       DEBUG_STR EIGRP_STR
       "EIGRP event debugging\n"
       "Detailed information\n")
 {
 	int idx = 0;
 
-	return eigrp_debug_cli_result(eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL,
-		EIGRP_DEBUG_EVENT | (argv_find(argv, argc, "detail", &idx)
-				     ? EIGRP_DEBUG_DETAIL : 0),
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL,
+		EIGRP_DEBUG_EVENT
+			| (argv_find(argv, argc, "detail", &idx)
+				   ? EIGRP_DEBUG_DETAIL
+				   : 0),
 		eigrp_debug_cli_scope(vty)));
 }
 
@@ -566,85 +584,77 @@ DEFUN(no_debug_eigrp_event, no_debug_eigrp_event_cmd,
 {
 	return eigrp_debug_cli_result(
 		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL,
-			 EIGRP_DEBUG_EVENT | EIGRP_DEBUG_DETAIL,
-			 eigrp_debug_cli_scope(vty)));
+				   EIGRP_DEBUG_EVENT | EIGRP_DEBUG_DETAIL,
+				   eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(debug_eigrp_timers, debug_eigrp_timers_cmd,
-      "debug eigrp timers",
+DEFUN(debug_eigrp_timers, debug_eigrp_timers_cmd, "debug eigrp timers",
       DEBUG_STR EIGRP_STR "EIGRP timer debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_TIMERS,
-			eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_TIMERS,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(no_debug_eigrp_timers, no_debug_eigrp_timers_cmd,
-      "no debug eigrp timers",
+DEFUN(no_debug_eigrp_timers, no_debug_eigrp_timers_cmd, "no debug eigrp timers",
       NO_STR UNDEBUG_STR EIGRP_STR "EIGRP timer debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_TIMERS,
-			  eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_TIMERS,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(debug_eigrp_fsm, debug_eigrp_fsm_cmd,
-      "debug eigrp fsm",
+DEFUN(debug_eigrp_fsm, debug_eigrp_fsm_cmd, "debug eigrp fsm",
       DEBUG_STR EIGRP_STR "EIGRP DUAL finite-state-machine debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_FSM,
-			eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_FSM,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(no_debug_eigrp_fsm, no_debug_eigrp_fsm_cmd,
-      "no debug eigrp fsm",
-      NO_STR UNDEBUG_STR EIGRP_STR "EIGRP DUAL finite-state-machine debugging\n")
+DEFUN(no_debug_eigrp_fsm, no_debug_eigrp_fsm_cmd, "no debug eigrp fsm",
+      NO_STR UNDEBUG_STR EIGRP_STR
+      "EIGRP DUAL finite-state-machine debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_FSM,
-			  eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_FSM,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(debug_eigrp_nsf, debug_eigrp_nsf_cmd,
-      "debug eigrp nsf",
+DEFUN(debug_eigrp_nsf, debug_eigrp_nsf_cmd, "debug eigrp nsf",
       DEBUG_STR EIGRP_STR "EIGRP NSF/graceful-restart debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_NSF,
-			eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_NSF,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(no_debug_eigrp_nsf, no_debug_eigrp_nsf_cmd,
-      "no debug eigrp nsf",
+DEFUN(no_debug_eigrp_nsf, no_debug_eigrp_nsf_cmd, "no debug eigrp nsf",
       NO_STR UNDEBUG_STR EIGRP_STR "EIGRP NSF/graceful-restart debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_NSF,
-			  eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_NSF,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(debug_eigrp_frr, debug_eigrp_frr_cmd,
-      "debug eigrp frr",
+DEFUN(debug_eigrp_frr, debug_eigrp_frr_cmd, "debug eigrp frr",
       DEBUG_STR EIGRP_STR "EIGRP fast-reroute debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_FAST_REROUTE,
-			eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_SET, EIGRP_DEBUG_TARGET_GENERAL, EIGRP_DEBUG_FAST_REROUTE,
+		eigrp_debug_cli_scope(vty)));
 }
 
-DEFUN(no_debug_eigrp_frr, no_debug_eigrp_frr_cmd,
-      "no debug eigrp frr",
+DEFUN(no_debug_eigrp_frr, no_debug_eigrp_frr_cmd, "no debug eigrp frr",
       NO_STR UNDEBUG_STR EIGRP_STR "EIGRP fast-reroute debugging\n")
 {
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL,
-			  EIGRP_DEBUG_FAST_REROUTE,
-			  eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_RESET, EIGRP_DEBUG_TARGET_GENERAL,
+		EIGRP_DEBUG_FAST_REROUTE, eigrp_debug_cli_scope(vty)));
 }
 
 static unsigned long eigrp_debug_neighbor_flags(int argc,
-						 struct cmd_token **argv)
+						struct cmd_token **argv)
 {
 	unsigned long flags = EIGRP_DEBUG_NEI;
 	int idx = 0;
@@ -663,8 +673,10 @@ DEFUN(debug_eigrp_neighbor, debug_eigrp_neighbor_cmd,
       "Stuck-in-active timer messages\n"
       "Static-neighbor messages\n")
 {
-	return eigrp_debug_cli_result(eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_NEIGHBOR,
-		eigrp_debug_neighbor_flags(argc, argv), eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(
+		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_NEIGHBOR,
+				   eigrp_debug_neighbor_flags(argc, argv),
+				   eigrp_debug_cli_scope(vty)));
 }
 
 DEFUN(no_debug_eigrp_neighbor, no_debug_eigrp_neighbor_cmd,
@@ -674,8 +686,10 @@ DEFUN(no_debug_eigrp_neighbor, no_debug_eigrp_neighbor_cmd,
       "Stuck-in-active timer messages\n"
       "Static-neighbor messages\n")
 {
-	return eigrp_debug_cli_result(eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_NEIGHBOR,
-		eigrp_debug_neighbor_flags(argc, argv), eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(
+		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_NEIGHBOR,
+				   eigrp_debug_neighbor_flags(argc, argv),
+				   eigrp_debug_cli_scope(vty)));
 }
 
 DEFUN(debug_eigrp_notifications, debug_eigrp_notifications_cmd,
@@ -691,8 +705,8 @@ DEFUN(debug_eigrp_notifications, debug_eigrp_notifications_cmd,
 				      : EIGRP_DEBUG_NOTIFICATION_INTERFACE;
 
 	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_NOTIFICATIONS, flags,
-			eigrp_debug_cli_scope(vty)));
+		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_NOTIFICATIONS,
+				   flags, eigrp_debug_cli_scope(vty)));
 }
 
 DEFUN(no_debug_eigrp_notifications, no_debug_eigrp_notifications_cmd,
@@ -707,25 +721,25 @@ DEFUN(no_debug_eigrp_notifications, no_debug_eigrp_notifications_cmd,
 				      ? EIGRP_DEBUG_NOTIFICATION_RIB
 				      : EIGRP_DEBUG_NOTIFICATION_INTERFACE;
 
-	return eigrp_debug_cli_result(
-		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_NOTIFICATIONS, flags,
-			  eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(eigrp_debug_update(
+		EIGRP_RESET, EIGRP_DEBUG_TARGET_NOTIFICATIONS, flags,
+		eigrp_debug_cli_scope(vty)));
 }
 
 static unsigned long eigrp_debug_transmit_flags(int argc,
-						 struct cmd_token **argv)
+						struct cmd_token **argv)
 {
 	unsigned long flags = 0;
 	bool category = false;
 	int idx = 0;
 
-#define EIGRP_TRANSMIT_ARG(_name, _flag)                                      \
-	do {                                                                     \
-		if (argv_find(argv, argc, (_name), &idx)) {                        \
-			flags |= (_flag);                                             \
-			if ((_flag) != EIGRP_DEBUG_TRANSMIT_DETAIL)                   \
-				category = true;                                        \
-		}                                                                \
+#define EIGRP_TRANSMIT_ARG(_name, _flag)                                       \
+	do {                                                                   \
+		if (argv_find(argv, argc, (_name), &idx)) {                    \
+			flags |= (_flag);                                      \
+			if ((_flag) != EIGRP_DEBUG_TRANSMIT_DETAIL)            \
+				category = true;                               \
+		}                                                              \
 	} while (0)
 	EIGRP_TRANSMIT_ARG("ack", EIGRP_DEBUG_TRANSMIT_ACK);
 	EIGRP_TRANSMIT_ARG("build", EIGRP_DEBUG_TRANSMIT_BUILD);
@@ -739,7 +753,8 @@ static unsigned long eigrp_debug_transmit_flags(int argc,
 #undef EIGRP_TRANSMIT_ARG
 
 	/* Cisco's unqualified command enables the full transmit-debug family.
-	 * "detail" by itself is likewise a request for detailed transmit output.
+	 * "detail" by itself is likewise a request for detailed transmit
+	 * output.
 	 */
 	if (!category)
 		flags = EIGRP_DEBUG_TRANSMIT_ALL;
@@ -760,8 +775,10 @@ DEFUN(debug_eigrp_transmit, debug_eigrp_transmit_cmd,
       "Peer startup and initialization\n"
       "Unusual packet-processing events\n")
 {
-	return eigrp_debug_cli_result(eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_TRANSMIT,
-		eigrp_debug_transmit_flags(argc, argv), eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(
+		eigrp_debug_update(EIGRP_SET, EIGRP_DEBUG_TARGET_TRANSMIT,
+				   eigrp_debug_transmit_flags(argc, argv),
+				   eigrp_debug_cli_scope(vty)));
 }
 
 DEFUN(no_debug_eigrp_transmit, no_debug_eigrp_transmit_cmd,
@@ -778,12 +795,15 @@ DEFUN(no_debug_eigrp_transmit, no_debug_eigrp_transmit_cmd,
       "Peer startup and initialization\n"
       "Unusual packet-processing events\n")
 {
-	return eigrp_debug_cli_result(eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_TRANSMIT,
-		eigrp_debug_transmit_flags(argc, argv), eigrp_debug_cli_scope(vty)));
+	return eigrp_debug_cli_result(
+		eigrp_debug_update(EIGRP_RESET, EIGRP_DEBUG_TARGET_TRANSMIT,
+				   eigrp_debug_transmit_flags(argc, argv),
+				   eigrp_debug_cli_scope(vty)));
 }
 
-static bool eigrp_debug_cli_address_family_request_build(
-	int argc, struct cmd_token **argv, eigrp_state_request_t *request)
+static bool
+eigrp_debug_cli_address_family_request_build(int argc, struct cmd_token **argv,
+					     eigrp_state_request_t *request)
 {
 	int idx = 0;
 	unsigned int i;
@@ -817,9 +837,10 @@ static bool eigrp_debug_cli_address_family_request_build(
 	return true;
 }
 
-static bool eigrp_debug_cli_neighbor_address_build(
-	const eigrp_state_request_t *request, const char *text,
-	eigrp_address_t *address)
+static bool
+eigrp_debug_cli_neighbor_address_build(const eigrp_state_request_t *request,
+				       const char *text,
+				       eigrp_address_t *address)
 {
 	int family;
 
@@ -831,9 +852,10 @@ static bool eigrp_debug_cli_neighbor_address_build(
 	return inet_pton(family, text, address->bytes) == 1;
 }
 
-static int eigrp_debug_cli_af_update(
-	struct vty *vty, int argc, struct cmd_token **argv,
-	eigrp_debug_af_category_t category, bool enable)
+static int eigrp_debug_cli_af_update(struct vty *vty, int argc,
+				     struct cmd_token **argv,
+				     eigrp_debug_af_category_t category,
+				     bool enable)
 {
 	eigrp_state_request_t request;
 	eigrp_address_t address;
@@ -850,10 +872,10 @@ static int eigrp_debug_cli_af_update(
 		if (strcmp(neighbor_text, "vrf") != 0
 		    && strcmp(neighbor_text, "notifications") != 0
 		    && strcmp(neighbor_text, "summary") != 0) {
-			if (!eigrp_debug_cli_neighbor_address_build(&request,
-							      neighbor_text,
-							      &address)) {
-				vty_out(vty, "%% Invalid EIGRP neighbor address %s\n",
+			if (!eigrp_debug_cli_neighbor_address_build(
+				    &request, neighbor_text, &address)) {
+				vty_out(vty,
+					"%% Invalid EIGRP neighbor address %s\n",
 					neighbor_text);
 				return CMD_WARNING_CONFIG_FAILED;
 			}
@@ -861,8 +883,12 @@ static int eigrp_debug_cli_af_update(
 		}
 	}
 
-	result = enable ? eigrp_debug_af_update(EIGRP_SET, &request, category, neighbor, eigrp_debug_cli_scope(vty))
-			: eigrp_debug_af_update(EIGRP_RESET, &request, category, neighbor, eigrp_debug_cli_scope(vty));
+	result = enable ? eigrp_debug_af_update(EIGRP_SET, &request, category,
+						neighbor,
+						eigrp_debug_cli_scope(vty))
+			: eigrp_debug_af_update(EIGRP_RESET, &request, category,
+						neighbor,
+						eigrp_debug_cli_scope(vty));
 	return eigrp_debug_cli_result(result);
 }
 
@@ -876,8 +902,8 @@ DEFUN(debug_eigrp_address_family, debug_eigrp_address_family_cmd,
       "VRF name\n"
       "Autonomous-system number\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_ROUTE, true);
+	return eigrp_debug_cli_af_update(vty, argc, argv, EIGRP_DEBUG_AF_ROUTE,
+					 true);
 }
 
 DEFUN(no_debug_eigrp_address_family, no_debug_eigrp_address_family_cmd,
@@ -890,8 +916,8 @@ DEFUN(no_debug_eigrp_address_family, no_debug_eigrp_address_family_cmd,
       "VRF name\n"
       "Autonomous-system number\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_ROUTE, false);
+	return eigrp_debug_cli_af_update(vty, argc, argv, EIGRP_DEBUG_AF_ROUTE,
+					 false);
 }
 
 DEFUN(debug_eigrp_address_family_neighbor,
@@ -907,8 +933,8 @@ DEFUN(debug_eigrp_address_family_neighbor,
       "EIGRP neighbor debugging\n"
       "Neighbor address\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_NEIGHBOR, true);
+	return eigrp_debug_cli_af_update(vty, argc, argv,
+					 EIGRP_DEBUG_AF_NEIGHBOR, true);
 }
 
 DEFUN(no_debug_eigrp_address_family_neighbor,
@@ -924,8 +950,8 @@ DEFUN(no_debug_eigrp_address_family_neighbor,
       "EIGRP neighbor debugging\n"
       "Neighbor address\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_NEIGHBOR, false);
+	return eigrp_debug_cli_af_update(vty, argc, argv,
+					 EIGRP_DEBUG_AF_NEIGHBOR, false);
 }
 
 DEFUN(debug_eigrp_address_family_notifications,
@@ -940,8 +966,8 @@ DEFUN(debug_eigrp_address_family_notifications,
       "Autonomous-system number\n"
       "EIGRP event notifications\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_NOTIFICATIONS, true);
+	return eigrp_debug_cli_af_update(vty, argc, argv,
+					 EIGRP_DEBUG_AF_NOTIFICATIONS, true);
 }
 
 DEFUN(no_debug_eigrp_address_family_notifications,
@@ -956,8 +982,8 @@ DEFUN(no_debug_eigrp_address_family_notifications,
       "Autonomous-system number\n"
       "EIGRP event notifications\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_NOTIFICATIONS, false);
+	return eigrp_debug_cli_af_update(vty, argc, argv,
+					 EIGRP_DEBUG_AF_NOTIFICATIONS, false);
 }
 
 DEFUN(debug_eigrp_address_family_summary,
@@ -972,8 +998,8 @@ DEFUN(debug_eigrp_address_family_summary,
       "Autonomous-system number\n"
       "EIGRP summary route processing\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_SUMMARY, true);
+	return eigrp_debug_cli_af_update(vty, argc, argv,
+					 EIGRP_DEBUG_AF_SUMMARY, true);
 }
 
 DEFUN(no_debug_eigrp_address_family_summary,
@@ -988,8 +1014,8 @@ DEFUN(no_debug_eigrp_address_family_summary,
       "Autonomous-system number\n"
       "EIGRP summary route processing\n")
 {
-	return eigrp_debug_cli_af_update(
-		vty, argc, argv, EIGRP_DEBUG_AF_SUMMARY, false);
+	return eigrp_debug_cli_af_update(vty, argc, argv,
+					 EIGRP_DEBUG_AF_SUMMARY, false);
 }
 
 DEFUN(debug_eigrp_packet, debug_eigrp_packet_cmd,
@@ -1015,8 +1041,8 @@ DEFUN(debug_eigrp_packet, debug_eigrp_packet_cmd,
 	uint32_t type = 0;
 	unsigned long flag = EIGRP_DEBUG_SEND_RECV;
 	eigrp_debug_scope_t scope = vty->node == CONFIG_NODE
-					? EIGRP_DEBUG_SCOPE_CONFIG
-					: EIGRP_DEBUG_SCOPE_TERMINAL;
+					    ? EIGRP_DEBUG_SCOPE_CONFIG
+					    : EIGRP_DEBUG_SCOPE_TERMINAL;
 	eigrp_result_t result;
 	int idx = 0;
 
@@ -1080,8 +1106,8 @@ DEFUN(no_debug_eigrp_packet, no_debug_eigrp_packet_cmd,
 	uint32_t type = 0;
 	unsigned long flag = EIGRP_DEBUG_SEND_RECV;
 	eigrp_debug_scope_t scope = vty->node == CONFIG_NODE
-					? EIGRP_DEBUG_SCOPE_CONFIG
-					: EIGRP_DEBUG_SCOPE_TERMINAL;
+					    ? EIGRP_DEBUG_SCOPE_CONFIG
+					    : EIGRP_DEBUG_SCOPE_TERMINAL;
 	eigrp_result_t result;
 	int idx = 0;
 
@@ -1136,39 +1162,43 @@ void eigrp_debug_init(void)
 {
 	install_node(&eigrp_debug_node);
 
-#define EIGRP_INSTALL_DEBUG_NODE(_node)                                       \
-	do {                                                                     \
-		install_element((_node), &show_debugging_eigrp_cmd);               \
-		install_element((_node), &debug_eigrp_event_cmd);                   \
-		install_element((_node), &no_debug_eigrp_event_cmd);                \
-		install_element((_node), &debug_eigrp_timers_cmd);                  \
-		install_element((_node), &no_debug_eigrp_timers_cmd);               \
-		install_element((_node), &debug_eigrp_fsm_cmd);                     \
-		install_element((_node), &no_debug_eigrp_fsm_cmd);                  \
-		install_element((_node), &debug_eigrp_nsf_cmd);                     \
-		install_element((_node), &no_debug_eigrp_nsf_cmd);                  \
-		install_element((_node), &debug_eigrp_frr_cmd);                     \
-		install_element((_node), &no_debug_eigrp_frr_cmd);                  \
-		install_element((_node), &debug_eigrp_neighbor_cmd);                \
-		install_element((_node), &no_debug_eigrp_neighbor_cmd);             \
-		install_element((_node), &debug_eigrp_notifications_cmd);           \
-		install_element((_node), &no_debug_eigrp_notifications_cmd);        \
-		install_element((_node), &debug_eigrp_packet_cmd);                  \
-		install_element((_node), &no_debug_eigrp_packet_cmd);               \
-		install_element((_node), &debug_eigrp_transmit_cmd);                \
-		install_element((_node), &no_debug_eigrp_transmit_cmd);             \
-		install_element((_node), &debug_eigrp_address_family_cmd);          \
-		install_element((_node), &no_debug_eigrp_address_family_cmd);       \
-		install_element((_node), &debug_eigrp_address_family_neighbor_cmd); \
-		install_element((_node),                                            \
-				&no_debug_eigrp_address_family_neighbor_cmd);          \
-		install_element((_node),                                            \
-				&debug_eigrp_address_family_notifications_cmd);        \
-		install_element((_node),                                            \
-				&no_debug_eigrp_address_family_notifications_cmd);     \
-		install_element((_node), &debug_eigrp_address_family_summary_cmd);  \
-		install_element((_node),                                            \
-				&no_debug_eigrp_address_family_summary_cmd);           \
+#define EIGRP_INSTALL_DEBUG_NODE(_node)                                        \
+	do {                                                                   \
+		install_element((_node), &show_debugging_eigrp_cmd);           \
+		install_element((_node), &debug_eigrp_event_cmd);              \
+		install_element((_node), &no_debug_eigrp_event_cmd);           \
+		install_element((_node), &debug_eigrp_timers_cmd);             \
+		install_element((_node), &no_debug_eigrp_timers_cmd);          \
+		install_element((_node), &debug_eigrp_fsm_cmd);                \
+		install_element((_node), &no_debug_eigrp_fsm_cmd);             \
+		install_element((_node), &debug_eigrp_nsf_cmd);                \
+		install_element((_node), &no_debug_eigrp_nsf_cmd);             \
+		install_element((_node), &debug_eigrp_frr_cmd);                \
+		install_element((_node), &no_debug_eigrp_frr_cmd);             \
+		install_element((_node), &debug_eigrp_neighbor_cmd);           \
+		install_element((_node), &no_debug_eigrp_neighbor_cmd);        \
+		install_element((_node), &debug_eigrp_notifications_cmd);      \
+		install_element((_node), &no_debug_eigrp_notifications_cmd);   \
+		install_element((_node), &debug_eigrp_packet_cmd);             \
+		install_element((_node), &no_debug_eigrp_packet_cmd);          \
+		install_element((_node), &debug_eigrp_transmit_cmd);           \
+		install_element((_node), &no_debug_eigrp_transmit_cmd);        \
+		install_element((_node), &debug_eigrp_address_family_cmd);     \
+		install_element((_node), &no_debug_eigrp_address_family_cmd);  \
+		install_element((_node),                                       \
+				&debug_eigrp_address_family_neighbor_cmd);     \
+		install_element((_node),                                       \
+				&no_debug_eigrp_address_family_neighbor_cmd);  \
+		install_element(                                               \
+			(_node),                                               \
+			&debug_eigrp_address_family_notifications_cmd);        \
+		install_element(                                               \
+			(_node),                                               \
+			&no_debug_eigrp_address_family_notifications_cmd);     \
+		install_element((_node),                                       \
+				&debug_eigrp_address_family_summary_cmd);      \
+		install_element((_node),                                       \
+				&no_debug_eigrp_address_family_summary_cmd);   \
 	} while (0)
 
 	EIGRP_INSTALL_DEBUG_NODE(ENABLE_NODE);
@@ -1249,7 +1279,7 @@ void eigrp_log(eigrp_log_level_t level, const char *format, ...)
 	va_list ap;
 
 	va_start(ap, format);
-	vsnprintf(message, sizeof(message), format, ap);
+	eigrp_vsnprintf(message, sizeof(message), format, ap);
 	va_end(ap);
 	eigrp_log_write(level, message);
 }

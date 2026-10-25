@@ -40,48 +40,50 @@ static inline size_t eigrp_packet_payload_limit(size_t interface_mtu)
 }
 
 /* RTP sequence numbers are monotonic modulo 2^32.  A live queue never
- * spans half the space, so a half-space unsigned comparison preserves transmit order. */
+ * spans half the space, so a half-space unsigned comparison preserves transmit
+ * order. */
 static inline bool eigrp_packet_sequence_before(uint32_t first, uint32_t second)
 {
 	return first != second
-		&& (uint32_t)(second - first) < UINT32_C(0x80000000);
+	       && (uint32_t)(second - first) < UINT32_C(0x80000000);
 }
 
 /* CR membership is determined by packets preceding the pending multicast. */
 bool eigrp_packet_multicast_peer_eligible(const eigrp_nbr_t *nbr,
-	uint64_t epoch);
+					  uint64_t epoch);
 unsigned int eigrp_packet_reliable_prior_count(const eigrp_nbr_t *nbr,
-	uint32_t sequence);
+					       uint32_t sequence);
 
 /*Prototypes*/
 extern void eigrp_packet_read(void *arg);
 extern bool eigrp_process_packet_submit(eigrp_packet_input_t *input);
-/* Receiver admission before AF queue: validates and refreshes authenticated liveness. */
+/* Receiver admission before AF queue: validates and refreshes authenticated
+ * liveness. */
 bool eigrp_packet_ingress_authenticate(eigrp_instance_t *instance,
-                                       eigrp_packet_input_t *input);
-bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei,
-                               const uint8_t *payload, uint16_t length);
+				       eigrp_packet_input_t *input);
+bool eigrp_hello_tlvs_validate(eigrp_intf_t *ei, const uint8_t *payload,
+			       uint16_t length);
 extern bool eigrp_packet_input_enqueue(eigrp_instance_t *eigrp,
 				       eigrp_packet_input_t *input);
 extern void eigrp_packet_input_queue_clear(eigrp_instance_t *eigrp);
 extern void eigrp_packet_write(void *arg);
 extern void eigrp_packet_write_ready(void *arg);
 extern void eigrp_packet_write_schedule(eigrp_instance_t *eigrp);
-/* Portable per-interface TX budget. Clock supplied by caller for deterministic tests. */
+/* Portable per-interface TX budget. Clock supplied by caller for deterministic
+ * tests. */
 uint32_t eigrp_packet_pacing_delay_msec(eigrp_intf_t *ei,
-	uint16_t packet_length, uint64_t now_msec);
+					uint16_t packet_length,
+					uint64_t now_msec);
 void eigrp_packet_pacing_charge(eigrp_intf_t *ei, uint16_t packet_length);
 
 extern eigrp_packet_t *eigrp_packet_create(size_t, eigrp_nbr_t *);
-extern eigrp_packet_t *eigrp_packet_dup(eigrp_packet_t *,
-					      eigrp_nbr_t *);
+extern eigrp_packet_t *eigrp_packet_dup(eigrp_packet_t *, eigrp_nbr_t *);
 extern void eigrp_packet_free(eigrp_packet_t *);
 extern void eigrp_packet_delete(eigrp_intf_t *);
 extern uint32_t eigrp_packet_sequence_reserve(eigrp_instance_t *);
 extern void eigrp_packet_header_init(int, eigrp_instance_t *, eigrp_stream_t *,
 				     uint32_t, uint32_t, uint32_t);
-extern void eigrp_packet_checksum(eigrp_intf_t *, eigrp_stream_t *,
-				  uint16_t);
+extern void eigrp_packet_checksum(eigrp_intf_t *, eigrp_stream_t *, uint16_t);
 
 extern eigrp_packet_queue_t *eigrp_packet_queue_create(void);
 extern eigrp_packet_t *eigrp_packet_queue_next(eigrp_packet_queue_t *);
@@ -91,37 +93,40 @@ extern void eigrp_packet_queue_free(eigrp_packet_queue_t *);
 extern void eigrp_packet_queue_clear(eigrp_packet_queue_t *);
 
 extern void eigrp_packet_output_enqueue(eigrp_instance_t *, eigrp_intf_t *,
-				       eigrp_packet_t *);
+					eigrp_packet_t *);
 /* Teardown: purge packets that still reference this neighbor. */
 void eigrp_packet_neighbor_output_clear(eigrp_nbr_t *nbr);
-/* Interface teardown invalidates every queued wire image and scheduler entry. */
+/* Interface teardown invalidates every queued wire image and scheduler entry.
+ */
 void eigrp_packet_interface_output_clear(eigrp_intf_t *ei);
 /* Synchronous final control Hello, with normal authentication and accounting.
  * Takes ownership of the packet before interface teardown. */
 void eigrp_packet_goodbye_send(eigrp_intf_t *ei, eigrp_packet_t *packet);
 extern bool eigrp_packet_multicast_reliable_enqueue(eigrp_instance_t *,
-						     eigrp_intf_t *,
-						     eigrp_packet_t *);
+						    eigrp_intf_t *,
+						    eigrp_packet_t *);
 void eigrp_packet_multicast_resume(eigrp_intf_t *ei);
 extern void eigrp_packet_retransmit_timer_start(eigrp_nbr_t *);
 extern void eigrp_packet_send_reliably(eigrp_instance_t *, eigrp_nbr_t *);
 
 extern void eigrp_packet_unack_retrans(void *arg);
 
-extern eigrp_route_descriptor_t *eigrp_packet_decoder_safe(
-	eigrp_instance_t *, eigrp_nbr_t *, eigrp_stream_t *, uint16_t);
-extern uint16_t eigrp_packet_encoder_safe(eigrp_instance_t *,
-					 eigrp_intf_t *, eigrp_nbr_t *,
-					 eigrp_stream_t *,
-					 eigrp_route_descriptor_t *);
-extern uint16_t eigrp_packet_encoder_both(eigrp_instance_t *,
-					 eigrp_intf_t *, eigrp_nbr_t *,
-					 eigrp_stream_t *,
-					 eigrp_route_descriptor_t *);
-extern int eigrp_packet_route_encode_append(eigrp_instance_t *,
-					 eigrp_intf_t *, eigrp_nbr_t *,
-					 eigrp_packet_encoder_t, eigrp_stream_t *,
-					 eigrp_route_descriptor_t *, uint16_t);
+extern eigrp_route_descriptor_t *eigrp_packet_decoder_safe(eigrp_instance_t *,
+							   eigrp_nbr_t *,
+							   eigrp_stream_t *,
+							   uint16_t);
+extern uint16_t eigrp_packet_encoder_safe(eigrp_instance_t *, eigrp_intf_t *,
+					  eigrp_nbr_t *, eigrp_stream_t *,
+					  eigrp_route_descriptor_t *);
+extern uint16_t eigrp_packet_encoder_both(eigrp_instance_t *, eigrp_intf_t *,
+					  eigrp_nbr_t *, eigrp_stream_t *,
+					  eigrp_route_descriptor_t *);
+extern int eigrp_packet_route_encode_append(eigrp_instance_t *, eigrp_intf_t *,
+					    eigrp_nbr_t *,
+					    eigrp_packet_encoder_t,
+					    eigrp_stream_t *,
+					    eigrp_route_descriptor_t *,
+					    uint16_t);
 
 /*
  * untill there is reason to have their own header, these externs are found in
@@ -135,8 +140,8 @@ extern void eigrp_hello_send_ack_sequence(eigrp_nbr_t *, uint32_t sequence);
 extern bool eigrp_hello_send_sequence(eigrp_intf_t *, uint32_t, uint64_t);
 extern bool eigrp_hello_sequence_fits(eigrp_intf_t *, uint32_t, uint64_t);
 extern void eigrp_hello_receive(eigrp_instance_t *, eigrp_header_t *,
-			 eigrp_addr_t *, eigrp_intf_t *,
-			 eigrp_stream_t *, int);
+				eigrp_addr_t *, eigrp_intf_t *,
+				eigrp_stream_t *, int);
 extern void eigrp_hello_timer(void *arg);
 
 /*
@@ -165,8 +170,8 @@ extern void eigrp_query_receive(eigrp_instance_t *, eigrp_nbr_t *,
 				eigrp_intf_t *, int);
 extern uint32_t eigrp_query_send_all(eigrp_instance_t *);
 extern void eigrp_query_send_route(eigrp_instance_t *,
-				  eigrp_prefix_descriptor_t *,
-				  eigrp_route_descriptor_t *, uint32_t);
+				   eigrp_prefix_descriptor_t *,
+				   eigrp_route_descriptor_t *, uint32_t);
 
 /*
  * These externs are found in eigrp_reply.c

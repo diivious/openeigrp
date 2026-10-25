@@ -68,7 +68,7 @@ static bool eigrp_ipv6_packet_source_on_link(eigrp_intf_t *ei,
 }
 
 static uint16_t eigrp_ipv6_packet_address_decode(eigrp_stream_t *stream,
-					 eigrp_addr_t *address)
+						 eigrp_addr_t *address)
 {
 	if (!stream || !address
 	    || !eigrp_ipv6_stream_has(stream, EIGRP_IPV6_ADDRESS_BYTES))
@@ -81,7 +81,7 @@ static uint16_t eigrp_ipv6_packet_address_decode(eigrp_stream_t *stream,
 }
 
 static uint16_t eigrp_ipv6_packet_address_encode(eigrp_stream_t *stream,
-					 const eigrp_addr_t *address)
+						 const eigrp_addr_t *address)
 {
 	if (!stream || !address
 	    || (address->afi != 0 && address->afi != AF_INET6))
@@ -92,7 +92,7 @@ static uint16_t eigrp_ipv6_packet_address_encode(eigrp_stream_t *stream,
 }
 
 static uint16_t eigrp_ipv6_packet_prefix_decode(eigrp_stream_t *stream,
-					eigrp_prefix_t *prefix)
+						eigrp_prefix_t *prefix)
 {
 	size_t start;
 	uint16_t address_length;
@@ -126,13 +126,12 @@ static uint16_t eigrp_ipv6_packet_prefix_decode(eigrp_stream_t *stream,
 }
 
 static uint16_t eigrp_ipv6_packet_prefix_encode(eigrp_stream_t *stream,
-					const eigrp_prefix_t *prefix)
+						const eigrp_prefix_t *prefix)
 {
 	eigrp_prefix_t normalized;
 	uint16_t address_length;
 
-	if (!stream || !prefix
-	    || prefix->address.afi != EIGRP_AFI_IPV6
+	if (!stream || !prefix || prefix->address.afi != EIGRP_AFI_IPV6
 	    || !eigrp_prefix_valid(prefix))
 		return 0;
 
@@ -141,32 +140,34 @@ static uint16_t eigrp_ipv6_packet_prefix_encode(eigrp_stream_t *stream,
 	address_length = eigrp_ipv6_prefix_bytes(normalized.prefix_length);
 	eigrp_stream_putc(stream, normalized.prefix_length);
 	if (address_length)
-		eigrp_stream_put(stream, normalized.address.bytes, address_length);
+		eigrp_stream_put(stream, normalized.address.bytes,
+				 address_length);
 
 	return EIGRP_IPV6_PREFIX_LENGTH_BYTES + address_length;
 }
 
-static int eigrp_ipv6_packet_send(eigrp_instance_t *eigrp,
-                                  eigrp_intf_t *ei,
-                                  eigrp_packet_t *packet)
+static int eigrp_ipv6_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				  eigrp_packet_t *packet)
 {
 	eigrp_address_t destination;
 
-	if (!eigrp || !ei || !packet || !packet->s || packet->dst.afi != AF_INET6)
+	if (!eigrp || !ei || !packet || !packet->s
+	    || packet->dst.afi != AF_INET6)
 		return -1;
 	memset(&destination, 0, sizeof(destination));
 	destination.afi = EIGRP_AFI_IPV6;
-	memcpy(destination.bytes, &packet->dst.ip.v6, sizeof(packet->dst.ip.v6));
-	return eigrp_sys_packet_send(
-		eigrp, ei, &destination, eigrp_stream_data(packet->s), packet->length);
+	memcpy(destination.bytes, &packet->dst.ip.v6,
+	       sizeof(packet->dst.ip.v6));
+	return eigrp_sys_packet_send(eigrp, ei, &destination,
+				     eigrp_stream_data(packet->s),
+				     packet->length);
 }
 
 static bool eigrp_ipv6_packet_receive(eigrp_instance_t *eigrp,
-                                      eigrp_stream_t *stream,
-                                      eigrp_intf_t **ei,
-                                      eigrp_addr_t *source,
-                                      eigrp_addr_t *destination,
-                                      eigrp_packet_rx_meta_t *meta)
+				      eigrp_stream_t *stream, eigrp_intf_t **ei,
+				      eigrp_addr_t *source,
+				      eigrp_addr_t *destination,
+				      eigrp_packet_rx_meta_t *meta)
 {
 	eigrp_ifindex_t ifindex = 0;
 	eigrp_address_t public_source, public_destination;
@@ -176,9 +177,10 @@ static bool eigrp_ipv6_packet_receive(eigrp_instance_t *eigrp,
 		return false;
 	*ei = NULL;
 	eigrp_stream_clear(stream);
-	if (!eigrp_sys_packet_receive(
-		    eigrp, eigrp_stream_data(stream), stream->size, &received_length,
-		    &ifindex, &public_source, &public_destination, meta))
+	if (!eigrp_sys_packet_receive(eigrp, eigrp_stream_data(stream),
+				      stream->size, &received_length, &ifindex,
+				      &public_source, &public_destination,
+				      meta))
 		return false;
 	if (meta->ingress_vrf_id != eigrp->vrf_id)
 		return false;
@@ -192,7 +194,8 @@ static bool eigrp_ipv6_packet_receive(eigrp_instance_t *eigrp,
 	source->afi = AF_INET6;
 	destination->afi = AF_INET6;
 	memcpy(&source->ip.v6, public_source.bytes, sizeof(source->ip.v6));
-	memcpy(&destination->ip.v6, public_destination.bytes, sizeof(destination->ip.v6));
+	memcpy(&destination->ip.v6, public_destination.bytes,
+	       sizeof(destination->ip.v6));
 	*ei = eigrp_intf_lookup_by_ifindex(eigrp, ifindex);
 	if (!*ei || !eigrp_ipv6_packet_source_on_link(*ei, source)) {
 		*ei = NULL;
@@ -215,8 +218,9 @@ static int eigrp_ipv6_addr_snprintf(char *buf, size_t len,
 	return (int)strlen(buf);
 }
 
-static eigrp_result_t eigrp_ipv6_summary_auto_prefix(
-	const eigrp_prefix_t *component, eigrp_prefix_t *summary)
+static eigrp_result_t
+eigrp_ipv6_summary_auto_prefix(const eigrp_prefix_t *component,
+			       eigrp_prefix_t *summary)
 {
 	(void)component;
 	(void)summary;
@@ -243,5 +247,4 @@ void eigrp_ipv6_init(eigrp_af_vectors_t *vectors)
 	vectors->multiprotocol_afi = EIGRP_AF_IPv6;
 	vectors->addr_snprintf = eigrp_ipv6_addr_snprintf;
 	vectors->summary_auto_prefix = eigrp_ipv6_summary_auto_prefix;
-
 }

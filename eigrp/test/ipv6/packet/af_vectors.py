@@ -157,6 +157,7 @@ def test_ipv6_af_local_vectors(tmp_path):
             str(ROOT / "eigrp" / "code" / "eigrp_ipv6.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_stream.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
+            "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
             "-o",
             str(binary),
         ],

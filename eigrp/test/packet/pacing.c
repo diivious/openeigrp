@@ -13,7 +13,7 @@ static void test_line_rate(void)
 	eigrp_intf_t ei = {0};
 	uint32_t i;
 
-	ei.params.bandwidth = 1000000;  /* 1 Gbps in kbps */
+	ei.params.bandwidth = 1000000; /* 1 Gbps in kbps */
 	ei.bandwidth_percent = 50;
 	for (i = 0; i < 41; i++) {
 		assert(eigrp_packet_pacing_delay_msec(&ei, 1500, 1000) == 0);

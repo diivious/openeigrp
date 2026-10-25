@@ -29,9 +29,9 @@ static bool eigrp_table_prefix_match(const eigrp_prefix_t *a,
 				     const eigrp_prefix_t *b)
 {
 	return a->address.afi == b->address.afi
-	    && a->prefix_length == b->prefix_length
-	    && !memcmp(a->address.bytes, b->address.bytes,
-		       a->address.afi == EIGRP_AFI_IPV4 ? 4 : 16);
+	       && a->prefix_length == b->prefix_length
+	       && !memcmp(a->address.bytes, b->address.bytes,
+			  a->address.afi == EIGRP_AFI_IPV4 ? 4 : 16);
 }
 
 /* Rehashing leaves the stable insertion-order list and all node pointers
@@ -91,15 +91,16 @@ eigrp_table_node_t *eigrp_table_node_lookup(eigrp_table_t *table,
 	key = *prefix;
 	eigrp_prefix_normalize(&key);
 	for (node = table->buckets[eigrp_table_prefix_hash(&key)
-				      % table->bucket_count];
+				   % table->bucket_count];
 	     node; node = node->hash_next)
 		if (eigrp_table_prefix_match(&node->prefix, &key))
 			return node;
 	return NULL;
 }
 
-eigrp_table_node_t *eigrp_table_node_lookup_or_create(eigrp_table_t *table,
-					 const eigrp_prefix_t *prefix)
+eigrp_table_node_t *
+eigrp_table_node_lookup_or_create(eigrp_table_t *table,
+				  const eigrp_prefix_t *prefix)
 {
 	eigrp_table_node_t *node;
 	size_t bucket;
@@ -168,7 +169,8 @@ eigrp_table_node_t *eigrp_table_node_match(eigrp_table_t *table,
 	int bitlen;
 	if (!table || !eigrp_prefix_valid(prefix))
 		return NULL;
-	/* Longest-prefix match via exact hash probes instead of a table scan. */
+	/* Longest-prefix match via exact hash probes instead of a table scan.
+	 */
 	candidate = *prefix;
 	for (bitlen = prefix->prefix_length; bitlen >= 0; bitlen--) {
 		candidate.prefix_length = (uint8_t)bitlen;

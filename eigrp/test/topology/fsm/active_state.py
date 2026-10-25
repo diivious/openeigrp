@@ -113,7 +113,7 @@ def test_active_query_origin_is_retained_for_deferred_reply_without_successor_lo
 def test_active_non_successor_query_replies_with_current_rib_metric():
     source = read(FSM)
 
-    helper_start = source.index("static void eigrp_fsm_active_non_successor_reply_send(")
+    helper_start = source.index("eigrp_fsm_active_non_successor_reply_send(")
     helper_end = source.index("int eigrp_fsm_event_keep_state(", helper_start)
     helper = source[helper_start:helper_end]
     keep_start = source.rindex("int eigrp_fsm_event_keep_state(")

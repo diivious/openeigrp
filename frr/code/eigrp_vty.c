@@ -67,7 +67,8 @@ static struct in_addr nbr_addr;
 static const char *nbr_addr_str = "0.0.0.0";
 #endif
 
-static void eigrp_vty_display_prefix_entry(struct vty *vty, eigrp_instance_t *eigrp,
+static void eigrp_vty_display_prefix_entry(struct vty *vty,
+					   eigrp_instance_t *eigrp,
 					   eigrp_prefix_descriptor_t *pe,
 					   bool all)
 {
@@ -82,7 +83,8 @@ static void eigrp_vty_display_prefix_entry(struct vty *vty, eigrp_instance_t *ei
 			 == EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
 			|| ((te->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)
 			    == EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG))) {
-			show_ip_eigrp_route_descriptor(vty, eigrp, te, &first, all);
+			show_ip_eigrp_route_descriptor(vty, eigrp, te, &first,
+						       all);
 			first = false;
 		}
 	}
@@ -107,7 +109,8 @@ static struct vrf *eigrp_vty_get_vrf(struct vty *vty, const char *vrf_name)
 	return vrf;
 }
 
-static eigrp_instance_t *eigrp_vty_get_eigrp(struct vty *vty, const char *vrf_name)
+static eigrp_instance_t *eigrp_vty_get_eigrp(struct vty *vty,
+					     const char *vrf_name)
 {
 	struct vrf *vrf = eigrp_vty_get_vrf(vty, vrf_name);
 
@@ -125,7 +128,8 @@ static void eigrp_topology_helper(struct vty *vty, eigrp_instance_t *eigrp,
 
 	show_ip_eigrp_topology_header(vty, eigrp);
 
-	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = eigrp_table_next(rn)) {
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
 		if (!rn->info)
 			continue;
 
@@ -145,8 +149,8 @@ struct eigrp_vty_topology_walk_context {
 	unsigned int matched;
 };
 
-static void eigrp_vty_topology_vrf_header(
-	struct eigrp_vty_topology_walk_context *ctx)
+static void
+eigrp_vty_topology_vrf_header(struct eigrp_vty_topology_walk_context *ctx)
 {
 	if (!ctx->print_vrf || ctx->vrf_printed)
 		return;
@@ -155,8 +159,8 @@ static void eigrp_vty_topology_vrf_header(
 	ctx->vrf_printed = true;
 }
 
-static eigrp_result_t eigrp_vty_topology_show(
-	eigrp_instance_t *eigrp, void *arg)
+static eigrp_result_t eigrp_vty_topology_show(eigrp_instance_t *eigrp,
+					      void *arg)
 {
 	struct eigrp_vty_topology_walk_context *ctx = arg;
 
@@ -166,8 +170,8 @@ static eigrp_result_t eigrp_vty_topology_show(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_vty_topology_prefix_instance_render(
-	eigrp_instance_t *eigrp, void *arg)
+static eigrp_result_t
+eigrp_vty_topology_prefix_instance_render(eigrp_instance_t *eigrp, void *arg)
 {
 	struct eigrp_vty_topology_walk_context *ctx = arg;
 	eigrp_prefix_descriptor_t *tn;
@@ -193,24 +197,20 @@ static eigrp_result_t eigrp_vty_topology_prefix_instance_render(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_vty_topology_walk_vrf(
-	struct eigrp_vty_topology_walk_context *ctx, eigrp_vrf_id_t vrf_id,
-	uint16_t asn, eigrp_topology_instance_iterate_cb callback)
+static eigrp_result_t
+eigrp_vty_topology_walk_vrf(struct eigrp_vty_topology_walk_context *ctx,
+			    eigrp_vrf_id_t vrf_id, uint16_t asn,
+			    eigrp_topology_instance_iterate_cb callback)
 {
-	return eigrp_topology_instance_iterate(EIGRP_AFI_IPV4, vrf_id,
-					    asn, callback, ctx);
+	return eigrp_topology_instance_iterate(EIGRP_AFI_IPV4, vrf_id, asn,
+					       callback, ctx);
 }
 
-DEFPY (show_ip_eigrp_topology_all,
-       show_ip_eigrp_topology_all_cmd,
-       "show ip eigrp [vrf NAME] topology [(1-65535)$as] [all-links$all]",
-       SHOW_STR
-       IP_STR
-       "IP-EIGRP show commands\n"
-       VRF_CMD_HELP_STR
-       "IP-EIGRP topology\n"
-       AS_STR
-       "Show all links in topology table\n")
+DEFPY(show_ip_eigrp_topology_all, show_ip_eigrp_topology_all_cmd,
+      "show ip eigrp [vrf NAME] topology [(1-65535)$as] [all-links$all]",
+      SHOW_STR IP_STR "IP-EIGRP show commands\n" VRF_CMD_HELP_STR
+		      "IP-EIGRP topology\n" AS_STR
+		      "Show all links in topology table\n")
 {
 	struct eigrp_vty_topology_walk_context ctx = {
 		.vty = vty,
@@ -227,16 +227,15 @@ DEFPY (show_ip_eigrp_topology_all,
 			ctx.print_vrf = true;
 			ctx.vrf_printed = false;
 			(void)eigrp_vty_topology_walk_vrf(
-				&ctx, v->vrf_id, asn,
-				eigrp_vty_topology_show);
+				&ctx, v->vrf_id, asn, eigrp_vty_topology_show);
 		}
 	} else {
 		struct vrf *v = eigrp_vty_get_vrf(vty, vrf);
 
 		if (!v)
 			return CMD_WARNING;
-		result = eigrp_vty_topology_walk_vrf(
-			&ctx, v->vrf_id, asn, eigrp_vty_topology_show);
+		result = eigrp_vty_topology_walk_vrf(&ctx, v->vrf_id, asn,
+						     eigrp_vty_topology_show);
 		if (result == EIGRP_RESULT_NOT_FOUND) {
 			vty_out(vty, " EIGRP Routing Process not enabled\n");
 			return CMD_SUCCESS;
@@ -251,17 +250,12 @@ DEFPY (show_ip_eigrp_topology_all,
 	return CMD_SUCCESS;
 }
 
-DEFPY (show_ip_eigrp_topology,
-       show_ip_eigrp_topology_cmd,
-       "show ip eigrp [vrf NAME] topology [(1-65535)$as] <A.B.C.D$address|A.B.C.D/M$prefix>",
-       SHOW_STR
-       IP_STR
-       "IP-EIGRP show commands\n"
-       VRF_CMD_HELP_STR
-       "IP-EIGRP topology\n"
-       AS_STR
-       "For a specific address\n"
-       "For a specific prefix\n")
+DEFPY(show_ip_eigrp_topology, show_ip_eigrp_topology_cmd,
+      "show ip eigrp [vrf NAME] topology [(1-65535)$as] <A.B.C.D$address|A.B.C.D/M$prefix>",
+      SHOW_STR IP_STR "IP-EIGRP show commands\n" VRF_CMD_HELP_STR
+		      "IP-EIGRP topology\n" AS_STR
+		      "For a specific address\n"
+		      "For a specific prefix\n")
 {
 	struct eigrp_vty_topology_walk_context ctx = {
 		.vty = vty,
@@ -274,7 +268,8 @@ DEFPY (show_ip_eigrp_topology,
 	uint16_t asn = as > 0 ? (uint16_t)as : 0;
 
 	if (vrf && strncmp(vrf, "all", sizeof("all")) == 0) {
-		vty_out(vty, "Specifying vrf `all` for a particular address/prefix makes no sense\n");
+		vty_out(vty,
+			"Specifying vrf `all` for a particular address/prefix makes no sense\n");
 		return CMD_SUCCESS;
 	}
 
@@ -286,7 +281,8 @@ DEFPY (show_ip_eigrp_topology,
 		return CMD_WARNING;
 	}
 
-	if (eigrp_frr_prefix_import(&cmp, &eigrp_prefix) != EIGRP_RESULT_SUCCESS) {
+	if (eigrp_frr_prefix_import(&cmp, &eigrp_prefix)
+	    != EIGRP_RESULT_SUCCESS) {
 		vty_out(vty, "%% Unsupported prefix\n");
 		return CMD_WARNING;
 	}
@@ -296,7 +292,8 @@ DEFPY (show_ip_eigrp_topology,
 	if (!v)
 		return CMD_WARNING;
 	result = eigrp_vty_topology_walk_vrf(
-		&ctx, v->vrf_id, asn, eigrp_vty_topology_prefix_instance_render);
+		&ctx, v->vrf_id, asn,
+		eigrp_vty_topology_prefix_instance_render);
 	if (result == EIGRP_RESULT_NOT_FOUND) {
 		vty_out(vty, " EIGRP Routing Process not enabled\n");
 		return CMD_SUCCESS;
@@ -324,16 +321,12 @@ static void eigrp_interface_helper(struct vty *vty, eigrp_instance_t *eigrp,
 	}
 }
 
-DEFPY (show_ip_eigrp_interfaces,
-       show_ip_eigrp_interfaces_cmd,
-       "show ip eigrp [vrf NAME] interfaces [IFNAME] [detail]$detail",
-       SHOW_STR
-       IP_STR
-       "IP-EIGRP show commands\n"
-       VRF_CMD_HELP_STR
-       "IP-EIGRP interfaces\n"
-       "Interface name to look at\n"
-       "Detailed information\n")
+DEFPY(show_ip_eigrp_interfaces, show_ip_eigrp_interfaces_cmd,
+      "show ip eigrp [vrf NAME] interfaces [IFNAME] [detail]$detail",
+      SHOW_STR IP_STR "IP-EIGRP show commands\n" VRF_CMD_HELP_STR
+		      "IP-EIGRP interfaces\n"
+		      "Interface name to look at\n"
+		      "Detailed information\n")
 {
 	eigrp_instance_t *eigrp;
 
@@ -383,16 +376,12 @@ static void eigrp_neighbors_helper(struct vty *vty, eigrp_instance_t *eigrp,
 	}
 }
 
-DEFPY (show_ip_eigrp_neighbors,
-       show_ip_eigrp_neighbors_cmd,
-       "show ip eigrp [vrf NAME] neighbors [IFNAME] [detail]$detail",
-       SHOW_STR
-       IP_STR
-       "IP-EIGRP show commands\n"
-       VRF_CMD_HELP_STR
-       "IP-EIGRP neighbors\n"
-       "Interface to show on\n"
-       "Detailed Information\n")
+DEFPY(show_ip_eigrp_neighbors, show_ip_eigrp_neighbors_cmd,
+      "show ip eigrp [vrf NAME] neighbors [IFNAME] [detail]$detail",
+      SHOW_STR IP_STR "IP-EIGRP show commands\n" VRF_CMD_HELP_STR
+		      "IP-EIGRP neighbors\n"
+		      "Interface to show on\n"
+		      "Detailed Information\n")
 {
 	eigrp_instance_t *eigrp;
 
@@ -421,17 +410,19 @@ DEFPY (show_ip_eigrp_neighbors,
 	return CMD_SUCCESS;
 }
 
-static void eigrp_vty_neighbor_clear_render(
-	const eigrp_nbr_clear_state_t *state, void *arg)
+static void
+eigrp_vty_neighbor_clear_render(const eigrp_nbr_clear_state_t *state, void *arg)
 {
 	struct vty *vty = arg;
 	char address[INET6_ADDRSTRLEN];
 	int family;
 
-	family = state->address.afi == EIGRP_AFI_IPV6 ? AF_INET6 :
-		 state->address.afi == EIGRP_AFI_IPV4 ? AF_INET : AF_UNSPEC;
+	family = state->address.afi == EIGRP_AFI_IPV6	? AF_INET6
+		 : state->address.afi == EIGRP_AFI_IPV4 ? AF_INET
+							: AF_UNSPEC;
 	if (family == AF_INET6 || family == AF_INET) {
-		if (!inet_ntop(family, state->address.bytes, address, sizeof(address)))
+		if (!inet_ntop(family, state->address.bytes, address,
+			       sizeof(address)))
 			strlcpy(address, "<invalid>", sizeof(address));
 	} else {
 		strlcpy(address, "<invalid>", sizeof(address));
@@ -450,14 +441,10 @@ static int eigrp_vty_neighbor_clear_result(eigrp_result_t result)
 /*
  * Execute hard restart for all neighbors
  */
-DEFPY (clear_ip_eigrp_neighbors,
-       clear_ip_eigrp_neighbors_cmd,
-       "clear ip eigrp [vrf NAME] neighbors",
-       CLEAR_STR
-       IP_STR
-       "Clear IP-EIGRP\n"
-       VRF_CMD_HELP_STR
-       "Clear IP-EIGRP neighbors\n")
+DEFPY(clear_ip_eigrp_neighbors, clear_ip_eigrp_neighbors_cmd,
+      "clear ip eigrp [vrf NAME] neighbors",
+      CLEAR_STR IP_STR "Clear IP-EIGRP\n" VRF_CMD_HELP_STR
+		       "Clear IP-EIGRP neighbors\n")
 {
 	eigrp_instance_t *eigrp;
 	const eigrp_nbr_clear_request_t request = {0};
@@ -471,22 +458,18 @@ DEFPY (clear_ip_eigrp_neighbors,
 	}
 
 	result = eigrp_nbr_clear(eigrp, &request,
-				      eigrp_vty_neighbor_clear_render, vty, NULL);
+				 eigrp_vty_neighbor_clear_render, vty, NULL);
 	return eigrp_vty_neighbor_clear_result(result);
 }
 
 /*
  * Execute hard restart for all neighbors on interface
  */
-DEFPY (clear_ip_eigrp_neighbors_int,
-       clear_ip_eigrp_neighbors_int_cmd,
-       "clear ip eigrp [vrf NAME] neighbors IFNAME",
-       CLEAR_STR
-       IP_STR
-       "Clear IP-EIGRP\n"
-       VRF_CMD_HELP_STR
-       "Clear IP-EIGRP neighbors\n"
-       "Interface's name\n")
+DEFPY(clear_ip_eigrp_neighbors_int, clear_ip_eigrp_neighbors_int_cmd,
+      "clear ip eigrp [vrf NAME] neighbors IFNAME",
+      CLEAR_STR IP_STR "Clear IP-EIGRP\n" VRF_CMD_HELP_STR
+		       "Clear IP-EIGRP neighbors\n"
+		       "Interface's name\n")
 {
 	eigrp_instance_t *eigrp;
 	eigrp_nbr_clear_request_t request = {
@@ -502,7 +485,7 @@ DEFPY (clear_ip_eigrp_neighbors_int,
 	}
 
 	result = eigrp_nbr_clear(eigrp, &request,
-				      eigrp_vty_neighbor_clear_render, vty, NULL);
+				 eigrp_vty_neighbor_clear_render, vty, NULL);
 	if (result == EIGRP_RESULT_NOT_FOUND) {
 		vty_out(vty, " Interface (%s) doesn't exist\n", ifname);
 		return CMD_WARNING;
@@ -513,15 +496,11 @@ DEFPY (clear_ip_eigrp_neighbors_int,
 /*
  * Execute hard restart for neighbor specified by IP
  */
-DEFPY (clear_ip_eigrp_neighbors_IP,
-       clear_ip_eigrp_neighbors_IP_cmd,
-       "clear ip eigrp [vrf NAME] neighbors A.B.C.D$nbr_addr",
-       CLEAR_STR
-       IP_STR
-       "Clear IP-EIGRP\n"
-       VRF_CMD_HELP_STR
-       "Clear IP-EIGRP neighbors\n"
-       "IP-EIGRP neighbor address\n")
+DEFPY(clear_ip_eigrp_neighbors_IP, clear_ip_eigrp_neighbors_IP_cmd,
+      "clear ip eigrp [vrf NAME] neighbors A.B.C.D$nbr_addr",
+      CLEAR_STR IP_STR "Clear IP-EIGRP\n" VRF_CMD_HELP_STR
+		       "Clear IP-EIGRP neighbors\n"
+		       "IP-EIGRP neighbor address\n")
 {
 	eigrp_instance_t *eigrp;
 	eigrp_address_t address = {
@@ -542,7 +521,7 @@ DEFPY (clear_ip_eigrp_neighbors_IP,
 	}
 
 	result = eigrp_nbr_clear(eigrp, &request,
-				      eigrp_vty_neighbor_clear_render, vty, NULL);
+				 eigrp_vty_neighbor_clear_render, vty, NULL);
 	if (result == EIGRP_RESULT_NOT_FOUND) {
 		vty_out(vty, "Neighbor with entered address doesn't exists.\n");
 		return CMD_WARNING;
@@ -553,15 +532,11 @@ DEFPY (clear_ip_eigrp_neighbors_IP,
 /*
  * Execute graceful restart for all neighbors
  */
-DEFPY (clear_ip_eigrp_neighbors_soft,
-       clear_ip_eigrp_neighbors_soft_cmd,
-       "clear ip eigrp [vrf NAME] neighbors soft",
-       CLEAR_STR
-       IP_STR
-       "Clear IP-EIGRP\n"
-       VRF_CMD_HELP_STR
-       "Clear IP-EIGRP neighbors\n"
-       "Resync with peers without adjacency reset\n")
+DEFPY(clear_ip_eigrp_neighbors_soft, clear_ip_eigrp_neighbors_soft_cmd,
+      "clear ip eigrp [vrf NAME] neighbors soft",
+      CLEAR_STR IP_STR "Clear IP-EIGRP\n" VRF_CMD_HELP_STR
+		       "Clear IP-EIGRP neighbors\n"
+		       "Resync with peers without adjacency reset\n")
 {
 	eigrp_instance_t *eigrp;
 	const eigrp_nbr_clear_request_t request = {
@@ -577,23 +552,19 @@ DEFPY (clear_ip_eigrp_neighbors_soft,
 	}
 
 	result = eigrp_nbr_clear(eigrp, &request,
-				      eigrp_vty_neighbor_clear_render, vty, NULL);
+				 eigrp_vty_neighbor_clear_render, vty, NULL);
 	return eigrp_vty_neighbor_clear_result(result);
 }
 
 /*
  * Execute graceful restart for all neighbors on interface
  */
-DEFPY (clear_ip_eigrp_neighbors_int_soft,
-       clear_ip_eigrp_neighbors_int_soft_cmd,
-       "clear ip eigrp [vrf NAME] neighbors IFNAME soft",
-       CLEAR_STR
-       IP_STR
-       "Clear IP-EIGRP\n"
-       VRF_CMD_HELP_STR
-       "Clear IP-EIGRP neighbors\n"
-       "Interface's name\n"
-       "Resync with peer without adjacency reset\n")
+DEFPY(clear_ip_eigrp_neighbors_int_soft, clear_ip_eigrp_neighbors_int_soft_cmd,
+      "clear ip eigrp [vrf NAME] neighbors IFNAME soft",
+      CLEAR_STR IP_STR "Clear IP-EIGRP\n" VRF_CMD_HELP_STR
+		       "Clear IP-EIGRP neighbors\n"
+		       "Interface's name\n"
+		       "Resync with peer without adjacency reset\n")
 {
 	eigrp_instance_t *eigrp;
 	eigrp_nbr_clear_request_t request = {
@@ -610,7 +581,7 @@ DEFPY (clear_ip_eigrp_neighbors_int_soft,
 	}
 
 	result = eigrp_nbr_clear(eigrp, &request,
-				      eigrp_vty_neighbor_clear_render, vty, NULL);
+				 eigrp_vty_neighbor_clear_render, vty, NULL);
 	if (result == EIGRP_RESULT_NOT_FOUND) {
 		vty_out(vty, " Interface (%s) doesn't exist\n", ifname);
 		return CMD_WARNING;
@@ -621,16 +592,12 @@ DEFPY (clear_ip_eigrp_neighbors_int_soft,
 /*
  * Execute graceful restart for neighbor specified by IP
  */
-DEFPY (clear_ip_eigrp_neighbors_IP_soft,
-       clear_ip_eigrp_neighbors_IP_soft_cmd,
-       "clear ip eigrp [vrf NAME] neighbors A.B.C.D$nbr_addr soft",
-       CLEAR_STR
-       IP_STR
-       "Clear IP-EIGRP\n"
-       VRF_CMD_HELP_STR
-       "Clear IP-EIGRP neighbors\n"
-       "IP-EIGRP neighbor address\n"
-       "Resync with peer without adjacency reset\n")
+DEFPY(clear_ip_eigrp_neighbors_IP_soft, clear_ip_eigrp_neighbors_IP_soft_cmd,
+      "clear ip eigrp [vrf NAME] neighbors A.B.C.D$nbr_addr soft",
+      CLEAR_STR IP_STR "Clear IP-EIGRP\n" VRF_CMD_HELP_STR
+		       "Clear IP-EIGRP neighbors\n"
+		       "IP-EIGRP neighbor address\n"
+		       "Resync with peer without adjacency reset\n")
 {
 	eigrp_instance_t *eigrp;
 	eigrp_address_t address = {
@@ -652,7 +619,7 @@ DEFPY (clear_ip_eigrp_neighbors_IP_soft,
 	}
 
 	result = eigrp_nbr_clear(eigrp, &request,
-				      eigrp_vty_neighbor_clear_render, vty, NULL);
+				 eigrp_vty_neighbor_clear_render, vty, NULL);
 	if (result == EIGRP_RESULT_NOT_FOUND) {
 		vty_out(vty, "Neighbor with entered address doesn't exists.\n");
 		return CMD_WARNING;
@@ -664,9 +631,10 @@ struct eigrp_vty_eventlog_output {
 	struct vty *vty;
 };
 
-static eigrp_result_t eigrp_vty_eventlog_output_entry(
-	uint32_t event_number, const eigrp_eventlog_msg_t *entry,
-	const char *format, void *arg)
+static eigrp_result_t
+eigrp_vty_eventlog_output_entry(uint32_t event_number,
+				const eigrp_eventlog_msg_t *entry,
+				const char *format, void *arg)
 {
 	struct eigrp_vty_eventlog_output *output = arg;
 	char text[256];
@@ -682,11 +650,10 @@ static eigrp_result_t eigrp_vty_eventlog_output_entry(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-DEFPY(show_ip_eigrp_events,
-      show_ip_eigrp_events_cmd,
+DEFPY(show_ip_eigrp_events, show_ip_eigrp_events_cmd,
       "show ip eigrp [vrf NAME$vrf] events",
       SHOW_STR IP_STR "IP-EIGRP show commands\n" VRF_CMD_HELP_STR
-      "Display EIGRP event log\n")
+		      "Display EIGRP event log\n")
 {
 	eigrp_instance_t *eigrp;
 	eigrp_instance_context_t context = {0};
@@ -714,16 +681,15 @@ DEFPY(show_ip_eigrp_events,
 		vty_out(vty, "  No events recorded\n");
 		return CMD_SUCCESS;
 	}
-	result = eigrp_eventlog_msg_iterate(&context, eigrp_vty_eventlog_output_entry,
-				     &output);
+	result = eigrp_eventlog_msg_iterate(
+		&context, eigrp_vty_eventlog_output_entry, &output);
 	return result == EIGRP_RESULT_SUCCESS ? CMD_SUCCESS : CMD_WARNING;
 }
 
-DEFPY(clear_ip_eigrp_events,
-      clear_ip_eigrp_events_cmd,
+DEFPY(clear_ip_eigrp_events, clear_ip_eigrp_events_cmd,
       "clear ip eigrp [vrf NAME$vrf] events",
       CLEAR_STR IP_STR "IP-EIGRP clear commands\n" VRF_CMD_HELP_STR
-      "Clear EIGRP event log\n")
+		       "Clear EIGRP event log\n")
 {
 	eigrp_instance_t *eigrp;
 	eigrp_instance_context_t context = {0};

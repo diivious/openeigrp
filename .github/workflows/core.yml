@@ -61,11 +61,52 @@ jobs:
     steps:
       - name: Check out EIGRP
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Complete history is needed for multi-commit push/PR diffs.
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: Install pinned clang-format 23.1.4
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-name: style
+          create-args: clang-format=23.1.4
+          init-shell: none
+
+      - name: Put pinned clang-format on PATH
+        run: |
+          echo "$MAMBA_ROOT_PREFIX/envs/style/bin" >> "$GITHUB_PATH"
+          "$MAMBA_ROOT_PREFIX/envs/style/bin/clang-format" --version
+
+      - name: Validate changed source style
+        shell: bash
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request)
+              # Checkout's synthetic merge commit: compare to target branch parent.
+              base="$(git rev-parse HEAD^1)"
+              ;;
+            push)
+              # Check the entire pushed range, not only the latest commit.
+              base="$PUSH_BEFORE"
+              if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+                base="$(git merge-base HEAD origin/master || true)"
+                if [[ -z "$base" || "$base" == "$(git rev-parse HEAD)" ]]; then
+                  base="$(git rev-parse HEAD^)"
+                fi
+              fi
+              ;;
+            *)
+              base="$(git rev-parse HEAD^)"
+              ;;
+          esac
+          make check STYLE_CHECK_BASE="$base"
 
       - name: Install fast-test dependencies
         run: python3 -m pip install pytest PyYAML
@@ -120,6 +161,7 @@ jobs:
           category: /language:${{ matrix.language }}
 
   core:
+    # Keep the check name stable: GitHub rulesets require "... / make test".
     name: ${{ matrix.os }} / make test
     needs: [codeql]
     strategy:
@@ -150,7 +192,7 @@ jobs:
           EIGRP_PYTHON: python3
         run: |
           set -o pipefail
-          make test 2>&1 | tee make-test.log
+          make uut 2>&1 | tee make-test.log
 
       - name: Preserve failure diagnostics
         if: failure()

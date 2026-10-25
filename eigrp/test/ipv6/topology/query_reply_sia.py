@@ -81,7 +81,7 @@ def test_query_packetization_owns_reply_status_and_starts_active_timer():
 def test_neighbor_loss_is_a_reply_during_active_computation():
     topology = read("eigrp/code/eigrp_topology.c")
     assert "pe->state == EIGRP_FSM_STATE_PASSIVE" in topology
-    assert "? EIGRP_OPC_UPDATE : EIGRP_OPC_REPLY" in topology
+    assert "?EIGRP_OPC_UPDATE:EIGRP_OPC_REPLY" in "".join(topology.split())
 
 
 def test_sia_timer_probes_pending_neighbors_and_bounds_busy_intervals():

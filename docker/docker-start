@@ -32,10 +32,13 @@ install -d -o frr -g frr -m 0775 /run/frr
 # shellcheck source=/dev/null
 source /usr/lib/frr/frrcommon.sh
 read -r -a running_daemons <<< "$(daemon_list)"
-for required in mgmtd zebra eigrpd staticd; do
+for required in mgmtd zebra staticd; do
   if [[ " ${running_daemons[*]} " != *" $required "* ]]; then
     echo "error: FRR daemon $required is not enabled or not installed" >&2
     exit 1
   fi
 done
+if [[ " ${running_daemons[*]} " != *" eigrpd "* ]]; then
+  echo 'warning: eigrpd is disabled; OpenEIGRP routing is unavailable (set eigrpd=yes in /etc/frr/daemons to enable it)' >&2
+fi
 exec /usr/lib/frr/watchfrr "${running_daemons[@]}"

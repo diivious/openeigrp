@@ -44,7 +44,7 @@ eigrp_unix_segment_t *eigrp_unix_segment_find(const char *name)
 }
 
 eigrp_result_t eigrp_unix_segment_create(const char *name,
-	eigrp_unix_segment_t **created)
+					 eigrp_unix_segment_t **created)
 {
 	eigrp_unix_segment_t *segment;
 
@@ -69,9 +69,9 @@ eigrp_result_t eigrp_unix_segment_create(const char *name,
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_unix_segment_endpoint_attach(
-	eigrp_unix_segment_t *segment, const char *uut_name,
-	const char *interface_name)
+eigrp_result_t eigrp_unix_segment_endpoint_attach(eigrp_unix_segment_t *segment,
+						  const char *uut_name,
+						  const char *interface_name)
 {
 	eigrp_unix_segment_endpoint_t *endpoint;
 
@@ -98,9 +98,10 @@ eigrp_result_t eigrp_unix_segment_endpoint_attach(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_unix_segment_interface_attach(
-	eigrp_unix_segment_t *segment, const char *uut_name,
-	eigrp_unix_interface_t *interface)
+eigrp_result_t
+eigrp_unix_segment_interface_attach(eigrp_unix_segment_t *segment,
+				    const char *uut_name,
+				    eigrp_unix_interface_t *interface)
 {
 	eigrp_unix_segment_t *other;
 	eigrp_unix_segment_endpoint_t *endpoint;
@@ -109,19 +110,24 @@ eigrp_result_t eigrp_unix_segment_interface_attach(
 	if (!segment || !uut_name || !uut_name[0] || !interface)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	for (other = segments; other; other = other->next)
-		for (endpoint = other->endpoints; endpoint; endpoint = endpoint->next)
+		for (endpoint = other->endpoints; endpoint;
+		     endpoint = endpoint->next)
 			if (endpoint->interface == interface)
 				return other == segment
-				       && strcmp(endpoint->uut_name, uut_name) == 0
-				       ? EIGRP_RESULT_SUCCESS : EIGRP_RESULT_CONFLICT;
-	result = eigrp_unix_segment_endpoint_attach(segment, uut_name,
-		eigrp_unix_interface_name(interface));
+						       && strcmp(endpoint->uut_name,
+								 uut_name)
+								  == 0
+					       ? EIGRP_RESULT_SUCCESS
+					       : EIGRP_RESULT_CONFLICT;
+	result = eigrp_unix_segment_endpoint_attach(
+		segment, uut_name, eigrp_unix_interface_name(interface));
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
 	for (endpoint = segment->endpoints; endpoint; endpoint = endpoint->next)
 		if (strcmp(endpoint->uut_name, uut_name) == 0
 		    && strcmp(endpoint->interface_name,
-			      eigrp_unix_interface_name(interface)) == 0) {
+			      eigrp_unix_interface_name(interface))
+			       == 0) {
 			if (endpoint->interface && endpoint->interface != interface)
 				return EIGRP_RESULT_CONFLICT;
 			endpoint->interface = interface;
@@ -130,9 +136,10 @@ eigrp_result_t eigrp_unix_segment_interface_attach(
 	return EIGRP_RESULT_INTERNAL_FAILURE;
 }
 
-eigrp_result_t eigrp_unix_segment_interface_detach(
-	eigrp_unix_segment_t *segment, const char *uut_name,
-	const char *interface_name)
+eigrp_result_t
+eigrp_unix_segment_interface_detach(eigrp_unix_segment_t *segment,
+				    const char *uut_name,
+				    const char *interface_name)
 {
 	eigrp_unix_segment_endpoint_t **cursor;
 	eigrp_unix_segment_endpoint_t *endpoint;
@@ -207,8 +214,8 @@ const char *eigrp_unix_segment_name(const eigrp_unix_segment_t *segment)
 	return segment ? segment->name : NULL;
 }
 
-eigrp_unix_segment_t *eigrp_unix_segment_interface_find(
-	const eigrp_unix_interface_t *interface)
+eigrp_unix_segment_t *
+eigrp_unix_segment_interface_find(const eigrp_unix_interface_t *interface)
 {
 	eigrp_unix_segment_t *segment;
 	eigrp_unix_segment_endpoint_t *endpoint;
@@ -216,7 +223,8 @@ eigrp_unix_segment_t *eigrp_unix_segment_interface_find(
 	if (!interface)
 		return NULL;
 	for (segment = segments; segment; segment = segment->next)
-		for (endpoint = segment->endpoints; endpoint; endpoint = endpoint->next)
+		for (endpoint = segment->endpoints; endpoint;
+		     endpoint = endpoint->next)
 			if (endpoint->interface == interface)
 				return segment;
 	return NULL;
@@ -234,7 +242,8 @@ size_t eigrp_unix_segment_endpoint_count(const eigrp_unix_segment_t *segment)
 	return count;
 }
 
-void eigrp_unix_segment_endpoint_walk(const eigrp_unix_segment_t *segment,
+void eigrp_unix_segment_endpoint_walk(
+	const eigrp_unix_segment_t *segment,
 	eigrp_unix_segment_endpoint_walk_cb callback, void *arg)
 {
 	const eigrp_unix_segment_endpoint_t *endpoint;
@@ -243,7 +252,7 @@ void eigrp_unix_segment_endpoint_walk(const eigrp_unix_segment_t *segment,
 		return;
 	for (endpoint = segment->endpoints; endpoint; endpoint = endpoint->next)
 		callback(endpoint->uut_name, endpoint->interface_name,
-		 endpoint->interface, arg);
+			 endpoint->interface, arg);
 }
 
 void eigrp_unix_segment_model_reset(void)

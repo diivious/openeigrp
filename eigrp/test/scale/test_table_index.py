@@ -16,6 +16,7 @@ def test_portable_table_index(tmp_path):
         str(Path(__file__).with_name("table_index.c")),
         str(CODE / "eigrp_table.c"),
         str(CODE / "eigrp_prefix.c"),
+        "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
         "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)

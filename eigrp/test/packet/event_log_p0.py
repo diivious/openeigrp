@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE = ROOT / "code"
@@ -66,7 +67,7 @@ def test_neighbor_transition_event_carries_nbr_event_in_arg4():
 
     assert "old_state, nbr->state, nbr->ei->ifindex, reason" in neighbor
     assert "eigrp_eventlog_nbr_event_name(entry->arg4)" in eventlog
-    assert 'case EIGRP_EVENTLOG_NBR_PREFIX_LIMIT: return "prefix limit exceeded";' in eventlog
+    assert re.search(r'case\s+EIGRP_EVENTLOG_NBR_PREFIX_LIMIT\s*:\s*return\s+"prefix limit exceeded"\s*;', eventlog)
     assert "reason %s" in eventlog
 
 

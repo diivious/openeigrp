@@ -43,7 +43,8 @@ static int state_wait(signal_state_t *state, unsigned target, unsigned msec)
 	}
 	pthread_mutex_lock(&state->lock);
 	while (state->count < target && result == 0)
-		result = pthread_cond_timedwait(&state->cond, &state->lock, &deadline);
+		result = pthread_cond_timedwait(&state->cond, &state->lock,
+						&deadline);
 	result = state->count >= target;
 	pthread_mutex_unlock(&state->lock);
 	return result;
@@ -63,7 +64,7 @@ static void callback(void *arg)
 }
 
 static eigrp_work_queue_result_t work_callback(eigrp_work_queue_t *queue,
-						void *data)
+					       void *data)
 {
 	signal_state_t *state = data;
 
@@ -97,7 +98,10 @@ static void test_events_and_timers(void)
 	eigrp_sys_timer_add(&event, callback, &state, 200);
 	eigrp_sys_event_cancel(&event);
 	assert(event == NULL);
-	{ struct timespec pause = {0, 300000000L}; nanosleep(&pause, NULL); }
+	{
+		struct timespec pause = {0, 300000000L};
+		nanosleep(&pause, NULL);
+	}
 	assert(state.count == 2);
 }
 
@@ -165,7 +169,8 @@ int main(void)
 	test_work_queue();
 	eigrp_sys_runtime_finish();
 
-	/* Lifecycle calls are idempotent and a stopped runtime accepts no events. */
+	/* Lifecycle calls are idempotent and a stopped runtime accepts no
+	 * events. */
 	eigrp_sys_runtime_finish();
 	eigrp_sys_runtime_init();
 	eigrp_sys_runtime_finish();

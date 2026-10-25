@@ -55,8 +55,8 @@ struct eigrp_frr_socket {
 
 static struct eigrp_frr_socket *eigrp_frr_sockets;
 
-static struct eigrp_frr_socket *eigrp_frr_socket_find(
-	const eigrp_instance_t *eigrp)
+static struct eigrp_frr_socket *
+eigrp_frr_socket_find(const eigrp_instance_t *eigrp)
 {
 	struct eigrp_frr_socket *socket;
 
@@ -106,15 +106,15 @@ void eigrp_rib_instance_delete(eigrp_instance_t *eigrp)
 }
 
 eigrp_result_t eigrp_rib_route_add(eigrp_instance_t *eigrp,
-					const eigrp_rib_route_t *route)
+				   const eigrp_rib_route_t *route)
 {
 	if (!route)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	return eigrp_zebra_route_add(eigrp, route);
 }
 
-eigrp_result_t eigrp_rib_route_del(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *prefix)
+eigrp_result_t eigrp_rib_route_del(eigrp_instance_t *eigrp,
+				   const eigrp_prefix_t *prefix)
 {
 	return eigrp_zebra_route_del(eigrp, prefix);
 }
@@ -136,11 +136,13 @@ static void eigrp_southbound_event_run(struct event *host_event)
 	void *arg;
 
 	if (!event) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR event callback has no EIGRP event context");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR event callback has no EIGRP event context");
 		return;
 	}
 	if (!event->callback) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR event callback has no bound EIGRP callback");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR event callback has no bound EIGRP callback");
 		if (event->owner && *event->owner == event)
 			*event->owner = NULL;
 		event->host_event = NULL;
@@ -158,17 +160,20 @@ static void eigrp_southbound_event_run(struct event *host_event)
 	callback(arg);
 }
 
-static eigrp_event_t *eigrp_southbound_event_prepare(
-	eigrp_event_t **owner, eigrp_event_callback_t callback, void *arg)
+static eigrp_event_t *
+eigrp_southbound_event_prepare(eigrp_event_t **owner,
+			       eigrp_event_callback_t callback, void *arg)
 {
 	eigrp_event_t *event;
 
 	if (!owner) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR event registration has no EIGRP event owner");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR event registration has no EIGRP event owner");
 		return NULL;
 	}
 	if (!callback) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR event registration has no EIGRP callback");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR event registration has no EIGRP callback");
 		return NULL;
 	}
 
@@ -195,25 +200,26 @@ void eigrp_sys_event_cancel(eigrp_event_t **owner)
 	XFREE(MTYPE_EIGRP_EVENT, event);
 }
 
-void eigrp_sys_event_add(eigrp_event_t **owner,
-				eigrp_event_callback_t callback, void *arg)
+void eigrp_sys_event_add(eigrp_event_t **owner, eigrp_event_callback_t callback,
+			 void *arg)
 {
-	eigrp_event_t *event = eigrp_southbound_event_prepare(owner, callback, arg);
+	eigrp_event_t *event =
+		eigrp_southbound_event_prepare(owner, callback, arg);
 
 	if (event)
-		event_add_event(eigrpd_event, eigrp_southbound_event_run, event, 0,
-				&event->host_event);
+		event_add_event(eigrpd_event, eigrp_southbound_event_run, event,
+				0, &event->host_event);
 }
 
-void eigrp_sys_timer_add(eigrp_event_t **owner,
-				eigrp_event_callback_t callback, void *arg,
-				uint32_t delay_msec)
+void eigrp_sys_timer_add(eigrp_event_t **owner, eigrp_event_callback_t callback,
+			 void *arg, uint32_t delay_msec)
 {
-	eigrp_event_t *event = eigrp_southbound_event_prepare(owner, callback, arg);
+	eigrp_event_t *event =
+		eigrp_southbound_event_prepare(owner, callback, arg);
 
 	if (event)
-		event_add_timer_msec(eigrpd_event, eigrp_southbound_event_run, event,
-				     delay_msec, &event->host_event);
+		event_add_timer_msec(eigrpd_event, eigrp_southbound_event_run,
+				     event, delay_msec, &event->host_event);
 }
 
 void eigrp_sys_read_add(eigrp_event_t **owner, eigrp_instance_t *eigrp,
@@ -226,8 +232,8 @@ void eigrp_sys_read_add(eigrp_event_t **owner, eigrp_instance_t *eigrp,
 		return;
 	event = eigrp_southbound_event_prepare(owner, callback, arg);
 	if (event)
-		event_add_read(eigrpd_event, eigrp_southbound_event_run, event, socket->fd,
-			       &event->host_event);
+		event_add_read(eigrpd_event, eigrp_southbound_event_run, event,
+			       socket->fd, &event->host_event);
 }
 
 void eigrp_sys_write_add(eigrp_event_t **owner, eigrp_instance_t *eigrp,
@@ -240,8 +246,8 @@ void eigrp_sys_write_add(eigrp_event_t **owner, eigrp_instance_t *eigrp,
 		return;
 	event = eigrp_southbound_event_prepare(owner, callback, arg);
 	if (event)
-		event_add_write(eigrpd_event, eigrp_southbound_event_run, event, socket->fd,
-				&event->host_event);
+		event_add_write(eigrpd_event, eigrp_southbound_event_run, event,
+				socket->fd, &event->host_event);
 }
 
 uint32_t eigrp_sys_timer_remaining_seconds(const eigrp_event_t *event)
@@ -282,17 +288,20 @@ static wq_item_status eigrp_work_queue_host_run(struct work_queue *host_queue,
 	eigrp_work_queue_result_t result;
 
 	if (!host_queue) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue callback has no host queue");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue callback has no host queue");
 		return WQ_SUCCESS;
 	}
 	queue = host_queue->spec.data;
 	if (!queue) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue callback has no EIGRP queue context");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue callback has no EIGRP queue context");
 		return WQ_SUCCESS;
 	}
 	if (!queue->workfunc) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work queue %s has no bound EIGRP worker",
-				queue->name ? queue->name : "<unnamed>");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work queue %s has no bound EIGRP worker",
+			  queue->name ? queue->name : "<unnamed>");
 		return WQ_SUCCESS;
 	}
 
@@ -309,7 +318,7 @@ static wq_item_status eigrp_work_queue_host_run(struct work_queue *host_queue,
 }
 
 static void eigrp_work_queue_host_delete(struct work_queue *host_queue,
-						 void *data)
+					 void *data)
 {
 	eigrp_work_queue_t *queue = host_queue->spec.data;
 
@@ -325,23 +334,26 @@ static void eigrp_work_queue_host_create(eigrp_work_queue_t *queue)
 	queue->host_queue->spec.del_item_data = eigrp_work_queue_host_delete;
 }
 
-eigrp_work_queue_t *eigrp_sys_work_queue_create(eigrp_instance_t *eigrp,
-					 const char *name,
-					 eigrp_work_queue_func_t workfunc,
-					 eigrp_work_queue_delete_func_t deletefunc)
+eigrp_work_queue_t *
+eigrp_sys_work_queue_create(eigrp_instance_t *eigrp, const char *name,
+			    eigrp_work_queue_func_t workfunc,
+			    eigrp_work_queue_delete_func_t deletefunc)
 {
 	eigrp_work_queue_t *queue;
 
 	if (!eigrp) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue registration has no EIGRP instance");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue registration has no EIGRP instance");
 		return NULL;
 	}
 	if (!name || !name[0]) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue registration has no queue name");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue registration has no queue name");
 		return NULL;
 	}
 	if (!workfunc) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue registration %s has no worker", name);
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue registration %s has no worker", name);
 		return NULL;
 	}
 
@@ -379,17 +391,20 @@ void eigrp_sys_work_queue_clear(eigrp_work_queue_t *queue)
 void eigrp_sys_work_queue_enqueue(eigrp_work_queue_t *queue, void *data)
 {
 	if (!queue) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue enqueue has no EIGRP queue");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue enqueue has no EIGRP queue");
 		return;
 	}
 	if (!queue->host_queue) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue enqueue %s has no host queue",
-				queue->name ? queue->name : "<unnamed>");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue enqueue %s has no host queue",
+			  queue->name ? queue->name : "<unnamed>");
 		return;
 	}
 	if (!data) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR work-queue enqueue %s has no work item",
-				queue->name ? queue->name : "<unnamed>");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR work-queue enqueue %s has no work item",
+			  queue->name ? queue->name : "<unnamed>");
 		return;
 	}
 
@@ -460,7 +475,7 @@ void eigrp_sys_socket_close(eigrp_instance_t *eigrp)
 }
 
 void eigrp_sys_socket_send_buffer_ensure(eigrp_instance_t *eigrp,
-					uint32_t minimum)
+					 uint32_t minimum)
 {
 	struct eigrp_frr_socket *socket = eigrp_frr_socket_find(eigrp);
 	int new_size;
@@ -486,18 +501,19 @@ bool eigrp_sys_router_id_get(eigrp_instance_t *eigrp, uint32_t *router_id)
 }
 
 
-
 int eigrp_sys_multicast_interface_update(eigrp_operation_t operation,
-                                      eigrp_instance_t *eigrp,
-                                      eigrp_intf_t *ei)
+					 eigrp_instance_t *eigrp,
+					 eigrp_intf_t *ei)
 {
 	if (operation != EIGRP_SET)
 		return -1;
 	if (!eigrp || !ei)
 		return -1;
 	if (eigrp_instance_afi(eigrp) == EIGRP_AFI_IPV6)
-		return eigrp_southbound_ipv6_multicast_interface_update(operation, eigrp, ei);
-	return eigrp_southbound_ipv4_multicast_interface_update(operation, eigrp, ei);
+		return eigrp_southbound_ipv6_multicast_interface_update(
+			operation, eigrp, ei);
+	return eigrp_southbound_ipv4_multicast_interface_update(operation,
+								eigrp, ei);
 }
 
 int eigrp_sys_multicast_join(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
@@ -519,7 +535,7 @@ int eigrp_sys_multicast_leave(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 }
 
 eigrp_result_t eigrp_sys_vrf_resolve(const char *vrf_name,
-					     eigrp_vrf_id_t *vrf_id)
+				     eigrp_vrf_id_t *vrf_id)
 {
 	struct vrf *vrf;
 
@@ -533,9 +549,9 @@ eigrp_result_t eigrp_sys_vrf_resolve(const char *vrf_name,
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_sys_interface_walk(
-	eigrp_instance_t *eigrp, eigrp_sys_interface_walk_cb callback,
-	void *arg)
+eigrp_result_t eigrp_sys_interface_walk(eigrp_instance_t *eigrp,
+					eigrp_sys_interface_walk_cb callback,
+					void *arg)
 {
 	eigrp_intf_runtime_state_t state;
 	struct connected *co;
@@ -552,16 +568,19 @@ eigrp_result_t eigrp_sys_interface_walk(
 	FOR_ALL_INTERFACES (vrf, ifp) {
 		frr_each (if_connected, ifp->connected, co) {
 			if (!co->address) {
-				eigrp_log(EIGRP_LOG_ERROR,
+				eigrp_log(
+					EIGRP_LOG_ERROR,
 					"FRR interface walk %s[%u] has a connected entry with no address",
 					ifp->name, ifp->ifindex);
 				continue;
 			}
-			if (eigrp_frr_interface_state_import(
+			if (eigrp_frr_intf_state_import(
 				    ifp, co->address,
 				    CHECK_FLAG(co->flags, ZEBRA_IFA_SECONDARY),
-				    &state) != EIGRP_RESULT_SUCCESS) {
-				eigrp_log(EIGRP_LOG_ERROR,
+				    &state)
+			    != EIGRP_RESULT_SUCCESS) {
+				eigrp_log(
+					EIGRP_LOG_ERROR,
 					"FRR interface walk could not normalize %s[%u] address family %u/%u",
 					ifp->name, ifp->ifindex,
 					(unsigned)co->address->family,
@@ -581,24 +600,27 @@ static void eigrp_southbound_interface_notify(struct interface *ifp)
 	struct connected *co;
 
 	if (!ifp) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR interface notification has no interface object");
+		eigrp_log(EIGRP_LOG_ERROR,
+			  "FRR interface notification has no interface object");
 		return;
 	}
-	vrf_id = ifp->vrf ? (eigrp_vrf_id_t)ifp->vrf->vrf_id
-			     : EIGRP_VRF_DEFAULT;
+	vrf_id =
+		ifp->vrf ? (eigrp_vrf_id_t)ifp->vrf->vrf_id : EIGRP_VRF_DEFAULT;
 
 	frr_each (if_connected, ifp->connected, co) {
 		if (!co->address) {
-			eigrp_log(EIGRP_LOG_ERROR,
+			eigrp_log(
+				EIGRP_LOG_ERROR,
 				"FRR interface notification %s[%u] has a connected entry with no address",
 				ifp->name, ifp->ifindex);
 			continue;
 		}
-		if (eigrp_frr_interface_state_import(
+		if (eigrp_frr_intf_state_import(
 			    ifp, co->address,
 			    CHECK_FLAG(co->flags, ZEBRA_IFA_SECONDARY), &state)
 		    != EIGRP_RESULT_SUCCESS) {
-			eigrp_log(EIGRP_LOG_ERROR,
+			eigrp_log(
+				EIGRP_LOG_ERROR,
 				"FRR interface notification could not normalize %s[%u] address family %u/%u",
 				ifp->name, ifp->ifindex,
 				(unsigned)co->address->family,
@@ -626,14 +648,15 @@ static int eigrp_southbound_if_down(struct interface *ifp)
 	eigrp_vrf_id_t vrf_id;
 
 	if (!ifp) {
-		eigrp_log(EIGRP_LOG_ERROR, "FRR interface-down notification has no interface object");
+		eigrp_log(
+			EIGRP_LOG_ERROR,
+			"FRR interface-down notification has no interface object");
 		return 0;
 	}
-	vrf_id = ifp->vrf ? (eigrp_vrf_id_t)ifp->vrf->vrf_id
-			     : EIGRP_VRF_DEFAULT;
-	eigrp_sys_intf_down(
-		vrf_id, ifp->ifindex, ifp->name, eigrp_frr_interface_type(ifp),
-		ifp->bandwidth, ifp->mtu);
+	vrf_id =
+		ifp->vrf ? (eigrp_vrf_id_t)ifp->vrf->vrf_id : EIGRP_VRF_DEFAULT;
+	eigrp_sys_intf_down(vrf_id, ifp->ifindex, ifp->name,
+			    eigrp_frr_intf_type(ifp), ifp->bandwidth, ifp->mtu);
 	return 0;
 }
 
@@ -642,14 +665,15 @@ static int eigrp_southbound_if_unreal(struct interface *ifp)
 	eigrp_vrf_id_t vrf_id;
 
 	if (!ifp) {
-		eigrp_log(EIGRP_LOG_ERROR,
+		eigrp_log(
+			EIGRP_LOG_ERROR,
 			"FRR interface-delete notification has no interface object");
 		return 0;
 	}
-	vrf_id = ifp->vrf ? (eigrp_vrf_id_t)ifp->vrf->vrf_id
-			     : EIGRP_VRF_DEFAULT;
-	eigrp_sys_intf_remove(
-		vrf_id, ifp->ifindex, EIGRP_INTERFACE_REMOVE_HOST);
+	vrf_id =
+		ifp->vrf ? (eigrp_vrf_id_t)ifp->vrf->vrf_id : EIGRP_VRF_DEFAULT;
+	eigrp_sys_intf_remove(vrf_id, ifp->ifindex,
+			      EIGRP_INTERFACE_REMOVE_HOST);
 	return 0;
 }
 
@@ -667,16 +691,17 @@ void eigrp_sys_runtime_finish(void)
 	frr_fini();
 }
 
-eigrp_result_t eigrp_rib_redistribute_add(
-	eigrp_instance_t *eigrp, const eigrp_redist_source_t *source)
+eigrp_result_t eigrp_rib_redistribute_add(eigrp_instance_t *eigrp,
+					  const eigrp_redist_source_t *source)
 {
 	if (!eigrp)
 		return EIGRP_RESULT_NOT_FOUND;
 	return eigrp_zebra_redistribute_update(eigrp, source);
 }
 
-eigrp_result_t eigrp_rib_redistribute_remove(
-	eigrp_instance_t *eigrp, const eigrp_redist_source_t *source)
+eigrp_result_t
+eigrp_rib_redistribute_remove(eigrp_instance_t *eigrp,
+			      const eigrp_redist_source_t *source)
 {
 	if (!eigrp)
 		return EIGRP_RESULT_NOT_FOUND;
@@ -703,79 +728,71 @@ void eigrp_sys_policy_instance_delete(eigrp_instance_t *eigrp)
 	eigrp_policy_instance_delete(eigrp);
 }
 
-eigrp_result_t eigrp_sys_filter_evaluate(
-	eigrp_instance_t *eigrp, eigrp_distribute_list_type_t type,
-	const char *name, const eigrp_prefix_t *prefix,
-	eigrp_filter_decision_t *decision)
+eigrp_result_t eigrp_sys_filter_evaluate(eigrp_instance_t *eigrp,
+					 eigrp_distribute_list_type_t type,
+					 const char *name,
+					 const eigrp_prefix_t *prefix,
+					 eigrp_filter_decision_t *decision)
 {
-	return eigrp_policy_filter_evaluate(eigrp, type, name, prefix, decision);
+	return eigrp_policy_filter_evaluate(eigrp, type, name, prefix,
+					    decision);
 }
 
-eigrp_result_t eigrp_sys_summary_leak_map_evaluate(
-	eigrp_instance_t *eigrp, const char *name, const eigrp_prefix_t *prefix,
-	eigrp_filter_decision_t *decision)
+eigrp_result_t
+eigrp_sys_summary_leak_map_evaluate(eigrp_instance_t *eigrp, const char *name,
+				    const eigrp_prefix_t *prefix,
+				    eigrp_filter_decision_t *decision)
 {
-	return eigrp_policy_summary_leak_map_evaluate(eigrp, name, prefix, decision);
+	return eigrp_policy_summary_leak_map_evaluate(eigrp, name, prefix,
+						      decision);
 }
 
 eigrp_result_t eigrp_sys_redistribute_route_map_evaluate(
 	eigrp_instance_t *eigrp, const char *name,
-	const eigrp_rib_route_t *route,
-	eigrp_filter_decision_t *decision)
+	const eigrp_rib_route_t *route, eigrp_filter_decision_t *decision)
 {
 	return eigrp_policy_redistribute_route_map_evaluate(eigrp, name, route,
-						    decision);
+							    decision);
 }
 
 
-
-
-
-
-
-
-
-int eigrp_sys_packet_send(eigrp_instance_t *eigrp,
-                          eigrp_intf_t *ei,
-                          const eigrp_address_t *destination,
-                          const uint8_t *payload, size_t length)
+int eigrp_sys_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+			  const eigrp_address_t *destination,
+			  const uint8_t *payload, size_t length)
 {
 	if (!eigrp || !destination)
 		return -1;
 	switch (destination->afi) {
 	case EIGRP_AFI_IPV4:
-		return eigrp_sys_ipv4_packet_send(eigrp, ei, destination, payload,
-					  length);
+		return eigrp_sys_ipv4_packet_send(eigrp, ei, destination,
+						  payload, length);
 	case EIGRP_AFI_IPV6:
-		return eigrp_sys_ipv6_packet_send(eigrp, ei, destination, payload,
-					  length);
+		return eigrp_sys_ipv6_packet_send(eigrp, ei, destination,
+						  payload, length);
 	default:
 		return -1;
 	}
 }
 
-bool eigrp_sys_packet_receive(eigrp_instance_t *eigrp,
-                              uint8_t *buffer, size_t capacity,
-                              size_t *received_length,
-                              eigrp_ifindex_t *ifindex,
-                              eigrp_address_t *source,
-                              eigrp_address_t *destination,
-                              eigrp_packet_rx_meta_t *meta)
+bool eigrp_sys_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
+			      size_t capacity, size_t *received_length,
+			      eigrp_ifindex_t *ifindex, eigrp_address_t *source,
+			      eigrp_address_t *destination,
+			      eigrp_packet_rx_meta_t *meta)
 {
 	if (!eigrp)
 		return false;
 	if (eigrp_instance_afi(eigrp) == EIGRP_AFI_IPV6)
-		return eigrp_sys_ipv6_packet_receive(
-			eigrp, buffer, capacity, received_length, ifindex, source,
-			destination, meta);
+		return eigrp_sys_ipv6_packet_receive(eigrp, buffer, capacity,
+						     received_length, ifindex,
+						     source, destination, meta);
 	return eigrp_sys_ipv4_packet_receive(eigrp, buffer, capacity,
 					     received_length, ifindex, source,
 					     destination, meta);
 }
 
-bool eigrp_sys_auth_key_lookup(const char *keychain_name,
-                                      uint32_t *key_id, char *key_string,
-                                      size_t key_string_size)
+bool eigrp_sys_auth_key_lookup(const char *keychain_name, uint32_t *key_id,
+			       char *key_string, size_t key_string_size)
 {
 	struct keychain *keychain;
 	struct key *key;

@@ -1,13 +1,12 @@
 /* router_eigrp => "router eigrp (1-65535)$as [vrf NAME]" */
 DEFUN_CMD_FUNC_DECL(router_eigrp)
-#define funcdecl_router_eigrp static int router_eigrp_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)),\
-	const char * vrf)
+#define funcdecl_router_eigrp                                                  \
+	static int router_eigrp_magic(                                         \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)), const char *vrf)
 funcdecl_router_eigrp;
 DEFUN_CMD_FUNC_TEXT(router_eigrp)
 {
@@ -34,12 +33,13 @@ DEFUN_CMD_FUNC_TEXT(router_eigrp)
 			_fail = (_end == argv[_i]->arg) || (*_end != '\0');
 		}
 		if (!strcmp(argv[_i]->varname, "vrf")) {
-			vrf = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			vrf = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							   : argv[_i]->arg;
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -58,14 +58,13 @@ DEFUN_CMD_FUNC_TEXT(router_eigrp)
 
 /* no_router_eigrp => "no router eigrp (1-65535)$as [vrf NAME]" */
 DEFUN_CMD_FUNC_DECL(no_router_eigrp)
-#define funcdecl_no_router_eigrp static int no_router_eigrp_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)),\
-	const char * vrf)
+#define funcdecl_no_router_eigrp                                               \
+	static int no_router_eigrp_magic(                                      \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)), const char *vrf)
 funcdecl_no_router_eigrp;
 DEFUN_CMD_FUNC_TEXT(no_router_eigrp)
 {
@@ -92,12 +91,13 @@ DEFUN_CMD_FUNC_TEXT(no_router_eigrp)
 			_fail = (_end == argv[_i]->arg) || (*_end != '\0');
 		}
 		if (!strcmp(argv[_i]->varname, "vrf")) {
-			vrf = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			vrf = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							   : argv[_i]->arg;
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -116,13 +116,14 @@ DEFUN_CMD_FUNC_TEXT(no_router_eigrp)
 
 /* eigrp_router_id => "eigrp router-id A.B.C.D$addr" */
 DEFUN_CMD_FUNC_DECL(eigrp_router_id)
-#define funcdecl_eigrp_router_id static int eigrp_router_id_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	struct in_addr addr,\
-	const char * addr_str __attribute__ ((unused)))
+#define funcdecl_eigrp_router_id                                               \
+	static int eigrp_router_id_magic(                                      \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		struct in_addr addr,                                           \
+		const char *addr_str __attribute__((unused)))
 funcdecl_eigrp_router_id;
 DEFUN_CMD_FUNC_TEXT(eigrp_router_id)
 {
@@ -131,7 +132,7 @@ DEFUN_CMD_FUNC_TEXT(eigrp_router_id)
 #if 1 /* anything that can fail? */
 	unsigned _fail = 0, _failcnt = 0;
 #endif
-	struct in_addr addr = { INADDR_ANY };
+	struct in_addr addr = {INADDR_ANY};
 	const char *addr_str = NULL;
 
 	for (_i = 0; _i < argc; _i++) {
@@ -147,8 +148,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_router_id)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -167,13 +168,14 @@ DEFUN_CMD_FUNC_TEXT(eigrp_router_id)
 
 /* no_eigrp_router_id => "no eigrp router-id [A.B.C.D]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_router_id)
-#define funcdecl_no_eigrp_router_id static int no_eigrp_router_id_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	struct in_addr router_id,\
-	const char * router_id_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_router_id                                            \
+	static int no_eigrp_router_id_magic(                                   \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		struct in_addr router_id,                                      \
+		const char *router_id_str __attribute__((unused)))
 funcdecl_no_eigrp_router_id;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_router_id)
 {
@@ -182,7 +184,7 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_router_id)
 #if 1 /* anything that can fail? */
 	unsigned _fail = 0, _failcnt = 0;
 #endif
-	struct in_addr router_id = { INADDR_ANY };
+	struct in_addr router_id = {INADDR_ANY};
 	const char *router_id_str = NULL;
 
 	for (_i = 0; _i < argc; _i++) {
@@ -198,8 +200,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_router_id)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -209,18 +211,19 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_router_id)
 #endif
 #endif
 
-	return no_eigrp_router_id_magic(self, vty, argc, argv, router_id, router_id_str);
+	return no_eigrp_router_id_magic(self, vty, argc, argv, router_id,
+					router_id_str);
 }
 
 /* eigrp_passive_interface => "[no] passive-interface IFNAME" */
 DEFUN_CMD_FUNC_DECL(eigrp_passive_interface)
-#define funcdecl_eigrp_passive_interface static int eigrp_passive_interface_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * no,\
-	const char * ifname)
+#define funcdecl_eigrp_passive_interface                                       \
+	static int eigrp_passive_interface_magic(                              \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *no, const char *ifname)
 funcdecl_eigrp_passive_interface;
 DEFUN_CMD_FUNC_TEXT(eigrp_passive_interface)
 {
@@ -240,10 +243,12 @@ DEFUN_CMD_FUNC_TEXT(eigrp_passive_interface)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "no")) {
-			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							  : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "ifname")) {
-			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							      : argv[_i]->arg;
 		}
 #if 0 /* anything that can fail? */
 		if (_fail)
@@ -265,16 +270,17 @@ DEFUN_CMD_FUNC_TEXT(eigrp_passive_interface)
 	return eigrp_passive_interface_magic(self, vty, argc, argv, no, ifname);
 }
 
-/* eigrp_timers_active => "timers active-time <(1-65535)$timer|disabled$disabled>" */
+/* eigrp_timers_active => "timers active-time
+ * <(1-65535)$timer|disabled$disabled>" */
 DEFUN_CMD_FUNC_DECL(eigrp_timers_active)
-#define funcdecl_eigrp_timers_active static int eigrp_timers_active_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t timer,\
-	const char * timer_str __attribute__ ((unused)),\
-	const char * disabled)
+#define funcdecl_eigrp_timers_active                                           \
+	static int eigrp_timers_active_magic(                                  \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t timer, const char *timer_str __attribute__((unused)),  \
+		const char *disabled)
 funcdecl_eigrp_timers_active;
 DEFUN_CMD_FUNC_TEXT(eigrp_timers_active)
 {
@@ -301,12 +307,13 @@ DEFUN_CMD_FUNC_TEXT(eigrp_timers_active)
 			_fail = (_end == argv[_i]->arg) || (*_end != '\0');
 		}
 		if (!strcmp(argv[_i]->varname, "disabled")) {
-			disabled = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			disabled = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+								: argv[_i]->arg;
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -316,16 +323,18 @@ DEFUN_CMD_FUNC_TEXT(eigrp_timers_active)
 #endif
 #endif
 
-	return eigrp_timers_active_magic(self, vty, argc, argv, timer, timer_str, disabled);
+	return eigrp_timers_active_magic(self, vty, argc, argv, timer,
+					 timer_str, disabled);
 }
 
 /* no_eigrp_timers_active => "no timers active-time" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_timers_active)
-#define funcdecl_no_eigrp_timers_active static int no_eigrp_timers_active_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)))
+#define funcdecl_no_eigrp_timers_active                                        \
+	static int no_eigrp_timers_active_magic(                               \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)))
 funcdecl_no_eigrp_timers_active;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_timers_active)
 {
@@ -360,13 +369,14 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_timers_active)
 
 /* eigrp_variance => "variance (1-128)$variance" */
 DEFUN_CMD_FUNC_DECL(eigrp_variance)
-#define funcdecl_eigrp_variance static int eigrp_variance_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t variance,\
-	const char * variance_str __attribute__ ((unused)))
+#define funcdecl_eigrp_variance                                                \
+	static int eigrp_variance_magic(                                       \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t variance,                                              \
+		const char *variance_str __attribute__((unused)))
 funcdecl_eigrp_variance;
 DEFUN_CMD_FUNC_TEXT(eigrp_variance)
 {
@@ -393,8 +403,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_variance)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -408,16 +418,18 @@ DEFUN_CMD_FUNC_TEXT(eigrp_variance)
 		return CMD_WARNING;
 	}
 
-	return eigrp_variance_magic(self, vty, argc, argv, variance, variance_str);
+	return eigrp_variance_magic(self, vty, argc, argv, variance,
+				    variance_str);
 }
 
 /* no_eigrp_variance => "no variance" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_variance)
-#define funcdecl_no_eigrp_variance static int no_eigrp_variance_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)))
+#define funcdecl_no_eigrp_variance                                             \
+	static int no_eigrp_variance_magic(                                    \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)))
 funcdecl_no_eigrp_variance;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_variance)
 {
@@ -452,13 +464,14 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_variance)
 
 /* eigrp_maximum_paths => "maximum-paths (1-32)$maximum_paths" */
 DEFUN_CMD_FUNC_DECL(eigrp_maximum_paths)
-#define funcdecl_eigrp_maximum_paths static int eigrp_maximum_paths_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t maximum_paths,\
-	const char * maximum_paths_str __attribute__ ((unused)))
+#define funcdecl_eigrp_maximum_paths                                           \
+	static int eigrp_maximum_paths_magic(                                  \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t maximum_paths,                                         \
+		const char *maximum_paths_str __attribute__((unused)))
 funcdecl_eigrp_maximum_paths;
 DEFUN_CMD_FUNC_TEXT(eigrp_maximum_paths)
 {
@@ -485,8 +498,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_maximum_paths)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -500,18 +513,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_maximum_paths)
 		return CMD_WARNING;
 	}
 
-	return eigrp_maximum_paths_magic(self, vty, argc, argv, maximum_paths, maximum_paths_str);
+	return eigrp_maximum_paths_magic(self, vty, argc, argv, maximum_paths,
+					 maximum_paths_str);
 }
 
 /* no_eigrp_maximum_paths => "no maximum-paths [(1-32)]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_maximum_paths)
-#define funcdecl_no_eigrp_maximum_paths static int no_eigrp_maximum_paths_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t maximum_paths,\
-	const char * maximum_paths_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_maximum_paths                                        \
+	static int no_eigrp_maximum_paths_magic(                               \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t maximum_paths,                                         \
+		const char *maximum_paths_str __attribute__((unused)))
 funcdecl_no_eigrp_maximum_paths;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_maximum_paths)
 {
@@ -538,8 +553,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_maximum_paths)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -549,30 +564,26 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_maximum_paths)
 #endif
 #endif
 
-	return no_eigrp_maximum_paths_magic(self, vty, argc, argv, maximum_paths, maximum_paths_str);
+	return no_eigrp_maximum_paths_magic(self, vty, argc, argv,
+					    maximum_paths, maximum_paths_str);
 }
 
-/* eigrp_metric_weights => "metric weights (0-255)$tos (0-255)$k1 (0-255)$k2 (0-255)$k3 (0-255)$k4 (0-255)$k5 [(0-255)$k6]" */
+/* eigrp_metric_weights => "metric weights (0-255)$tos (0-255)$k1 (0-255)$k2
+ * (0-255)$k3 (0-255)$k4 (0-255)$k5 [(0-255)$k6]" */
 DEFUN_CMD_FUNC_DECL(eigrp_metric_weights)
-#define funcdecl_eigrp_metric_weights static int eigrp_metric_weights_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t tos,\
-	const char * tos_str __attribute__ ((unused)),\
-	int64_t k1,\
-	const char * k1_str __attribute__ ((unused)),\
-	int64_t k2,\
-	const char * k2_str __attribute__ ((unused)),\
-	int64_t k3,\
-	const char * k3_str __attribute__ ((unused)),\
-	int64_t k4,\
-	const char * k4_str __attribute__ ((unused)),\
-	int64_t k5,\
-	const char * k5_str __attribute__ ((unused)),\
-	int64_t k6,\
-	const char * k6_str __attribute__ ((unused)))
+#define funcdecl_eigrp_metric_weights                                          \
+	static int eigrp_metric_weights_magic(                                 \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t tos, \
+		const char *tos_str __attribute__((unused)), int64_t k1,       \
+		const char *k1_str __attribute__((unused)), int64_t k2,        \
+		const char *k2_str __attribute__((unused)), int64_t k3,        \
+		const char *k3_str __attribute__((unused)), int64_t k4,        \
+		const char *k4_str __attribute__((unused)), int64_t k5,        \
+		const char *k5_str __attribute__((unused)), int64_t k6,        \
+		const char *k6_str __attribute__((unused)))
 funcdecl_eigrp_metric_weights;
 DEFUN_CMD_FUNC_TEXT(eigrp_metric_weights)
 {
@@ -647,8 +658,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_metric_weights)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -682,16 +693,19 @@ DEFUN_CMD_FUNC_TEXT(eigrp_metric_weights)
 		return CMD_WARNING;
 	}
 
-	return eigrp_metric_weights_magic(self, vty, argc, argv, tos, tos_str, k1, k1_str, k2, k2_str, k3, k3_str, k4, k4_str, k5, k5_str, k6, k6_str);
+	return eigrp_metric_weights_magic(self, vty, argc, argv, tos, tos_str,
+					  k1, k1_str, k2, k2_str, k3, k3_str,
+					  k4, k4_str, k5, k5_str, k6, k6_str);
 }
 
 /* no_eigrp_metric_weights => "no metric weights" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_metric_weights)
-#define funcdecl_no_eigrp_metric_weights static int no_eigrp_metric_weights_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)))
+#define funcdecl_no_eigrp_metric_weights                                       \
+	static int no_eigrp_metric_weights_magic(                              \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)))
 funcdecl_no_eigrp_metric_weights;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_metric_weights)
 {
@@ -726,14 +740,14 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_metric_weights)
 
 /* eigrp_network => "[no] network A.B.C.D/M$prefix" */
 DEFUN_CMD_FUNC_DECL(eigrp_network)
-#define funcdecl_eigrp_network static int eigrp_network_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * no,\
-	const struct prefix_ipv4 * prefix,\
-	const char * prefix_str __attribute__ ((unused)))
+#define funcdecl_eigrp_network                                                 \
+	static int eigrp_network_magic(                                        \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *no, const struct prefix_ipv4 *prefix,              \
+		const char *prefix_str __attribute__((unused)))
 funcdecl_eigrp_network;
 DEFUN_CMD_FUNC_TEXT(eigrp_network)
 {
@@ -743,7 +757,7 @@ DEFUN_CMD_FUNC_TEXT(eigrp_network)
 	unsigned _fail = 0, _failcnt = 0;
 #endif
 	const char *no = NULL;
-	struct prefix_ipv4 prefix = { };
+	struct prefix_ipv4 prefix = {};
 	const char *prefix_str = NULL;
 
 	for (_i = 0; _i < argc; _i++) {
@@ -754,7 +768,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_network)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "no")) {
-			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							  : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "prefix")) {
 			prefix_str = argv[_i]->arg;
@@ -762,8 +777,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_network)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -777,19 +792,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_network)
 		return CMD_WARNING;
 	}
 
-	return eigrp_network_magic(self, vty, argc, argv, no, &prefix, prefix_str);
+	return eigrp_network_magic(self, vty, argc, argv, no, &prefix,
+				   prefix_str);
 }
 
 /* eigrp_neighbor => "[no] neighbor A.B.C.D$addr" */
 DEFUN_CMD_FUNC_DECL(eigrp_neighbor)
-#define funcdecl_eigrp_neighbor static int eigrp_neighbor_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * no,\
-	struct in_addr addr,\
-	const char * addr_str __attribute__ ((unused)))
+#define funcdecl_eigrp_neighbor                                                \
+	static int eigrp_neighbor_magic(                                       \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *no, struct in_addr addr,                           \
+		const char *addr_str __attribute__((unused)))
 funcdecl_eigrp_neighbor;
 DEFUN_CMD_FUNC_TEXT(eigrp_neighbor)
 {
@@ -799,7 +815,7 @@ DEFUN_CMD_FUNC_TEXT(eigrp_neighbor)
 	unsigned _fail = 0, _failcnt = 0;
 #endif
 	const char *no = NULL;
-	struct in_addr addr = { INADDR_ANY };
+	struct in_addr addr = {INADDR_ANY};
 	const char *addr_str = NULL;
 
 	for (_i = 0; _i < argc; _i++) {
@@ -810,7 +826,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_neighbor)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "no")) {
-			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							  : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "addr")) {
 			addr_str = argv[_i]->arg;
@@ -818,8 +835,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_neighbor)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -836,16 +853,16 @@ DEFUN_CMD_FUNC_TEXT(eigrp_neighbor)
 	return eigrp_neighbor_magic(self, vty, argc, argv, no, addr, addr_str);
 }
 
-/* eigrp_distribute_list => "distribute-list ACCESSLIST4_NAME$name <in|out>$dir [WORD$ifname]" */
+/* eigrp_distribute_list => "distribute-list ACCESSLIST4_NAME$name <in|out>$dir
+ * [WORD$ifname]" */
 DEFUN_CMD_FUNC_DECL(eigrp_distribute_list)
-#define funcdecl_eigrp_distribute_list static int eigrp_distribute_list_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * name,\
-	const char * dir,\
-	const char * ifname)
+#define funcdecl_eigrp_distribute_list                                         \
+	static int eigrp_distribute_list_magic(                                \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *name, const char *dir, const char *ifname)
 funcdecl_eigrp_distribute_list;
 DEFUN_CMD_FUNC_TEXT(eigrp_distribute_list)
 {
@@ -866,13 +883,16 @@ DEFUN_CMD_FUNC_TEXT(eigrp_distribute_list)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "name")) {
-			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							    : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "dir")) {
-			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							   : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "ifname")) {
-			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							      : argv[_i]->arg;
 		}
 #if 0 /* anything that can fail? */
 		if (_fail)
@@ -895,19 +915,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_distribute_list)
 		return CMD_WARNING;
 	}
 
-	return eigrp_distribute_list_magic(self, vty, argc, argv, name, dir, ifname);
+	return eigrp_distribute_list_magic(self, vty, argc, argv, name, dir,
+					   ifname);
 }
 
-/* eigrp_distribute_list_prefix => "distribute-list prefix PREFIXLIST4_NAME$name <in|out>$dir [WORD$ifname]" */
+/* eigrp_distribute_list_prefix => "distribute-list prefix PREFIXLIST4_NAME$name
+ * <in|out>$dir [WORD$ifname]" */
 DEFUN_CMD_FUNC_DECL(eigrp_distribute_list_prefix)
-#define funcdecl_eigrp_distribute_list_prefix static int eigrp_distribute_list_prefix_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * name,\
-	const char * dir,\
-	const char * ifname)
+#define funcdecl_eigrp_distribute_list_prefix                                  \
+	static int eigrp_distribute_list_prefix_magic(                         \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *name, const char *dir, const char *ifname)
 funcdecl_eigrp_distribute_list_prefix;
 DEFUN_CMD_FUNC_TEXT(eigrp_distribute_list_prefix)
 {
@@ -928,13 +949,16 @@ DEFUN_CMD_FUNC_TEXT(eigrp_distribute_list_prefix)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "name")) {
-			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							    : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "dir")) {
-			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							   : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "ifname")) {
-			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							      : argv[_i]->arg;
 		}
 #if 0 /* anything that can fail? */
 		if (_fail)
@@ -957,19 +981,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_distribute_list_prefix)
 		return CMD_WARNING;
 	}
 
-	return eigrp_distribute_list_prefix_magic(self, vty, argc, argv, name, dir, ifname);
+	return eigrp_distribute_list_prefix_magic(self, vty, argc, argv, name,
+						  dir, ifname);
 }
 
-/* eigrp_no_distribute_list => "no distribute-list [ACCESSLIST4_NAME$name] <in|out>$dir [WORD$ifname]" */
+/* eigrp_no_distribute_list => "no distribute-list [ACCESSLIST4_NAME$name]
+ * <in|out>$dir [WORD$ifname]" */
 DEFUN_CMD_FUNC_DECL(eigrp_no_distribute_list)
-#define funcdecl_eigrp_no_distribute_list static int eigrp_no_distribute_list_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * name,\
-	const char * dir,\
-	const char * ifname)
+#define funcdecl_eigrp_no_distribute_list                                      \
+	static int eigrp_no_distribute_list_magic(                             \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *name, const char *dir, const char *ifname)
 funcdecl_eigrp_no_distribute_list;
 DEFUN_CMD_FUNC_TEXT(eigrp_no_distribute_list)
 {
@@ -990,13 +1015,16 @@ DEFUN_CMD_FUNC_TEXT(eigrp_no_distribute_list)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "name")) {
-			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							    : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "dir")) {
-			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							   : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "ifname")) {
-			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							      : argv[_i]->arg;
 		}
 #if 0 /* anything that can fail? */
 		if (_fail)
@@ -1015,19 +1043,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_no_distribute_list)
 		return CMD_WARNING;
 	}
 
-	return eigrp_no_distribute_list_magic(self, vty, argc, argv, name, dir, ifname);
+	return eigrp_no_distribute_list_magic(self, vty, argc, argv, name, dir,
+					      ifname);
 }
 
-/* eigrp_no_distribute_list_prefix => "no distribute-list prefix [PREFIXLIST4_NAME$name] <in|out>$dir [WORD$ifname]" */
+/* eigrp_no_distribute_list_prefix => "no distribute-list prefix
+ * [PREFIXLIST4_NAME$name] <in|out>$dir [WORD$ifname]" */
 DEFUN_CMD_FUNC_DECL(eigrp_no_distribute_list_prefix)
-#define funcdecl_eigrp_no_distribute_list_prefix static int eigrp_no_distribute_list_prefix_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * name,\
-	const char * dir,\
-	const char * ifname)
+#define funcdecl_eigrp_no_distribute_list_prefix                               \
+	static int eigrp_no_distribute_list_prefix_magic(                      \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *name, const char *dir, const char *ifname)
 funcdecl_eigrp_no_distribute_list_prefix;
 DEFUN_CMD_FUNC_TEXT(eigrp_no_distribute_list_prefix)
 {
@@ -1048,13 +1077,16 @@ DEFUN_CMD_FUNC_TEXT(eigrp_no_distribute_list_prefix)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "name")) {
-			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							    : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "dir")) {
-			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			dir = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							   : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "ifname")) {
-			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			ifname = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							      : argv[_i]->arg;
 		}
 #if 0 /* anything that can fail? */
 		if (_fail)
@@ -1073,31 +1105,29 @@ DEFUN_CMD_FUNC_TEXT(eigrp_no_distribute_list_prefix)
 		return CMD_WARNING;
 	}
 
-	return eigrp_no_distribute_list_prefix_magic(self, vty, argc, argv, name, dir, ifname);
+	return eigrp_no_distribute_list_prefix_magic(self, vty, argc, argv,
+						     name, dir, ifname);
 }
 
-/* eigrp_redistribute_source_metric => "[no] redistribute <kernel|connected|local|static|rip|ospf|isis|bgp|nhrp|vnc|babel|openfabric>$proto [(1-65535)$route_instance] [metric (1-4294967295)$bw (0-4294967295)$delay (0-255)$rlbt (1-255)$load (1-65535)$mtu] [route-map WORD$route_map]" */
+/* eigrp_redistribute_source_metric => "[no] redistribute
+ * <kernel|connected|local|static|rip|ospf|isis|bgp|nhrp|vnc|babel|openfabric>$proto
+ * [(1-65535)$route_instance] [metric (1-4294967295)$bw (0-4294967295)$delay
+ * (0-255)$rlbt (1-255)$load (1-65535)$mtu] [route-map WORD$route_map]" */
 DEFUN_CMD_FUNC_DECL(eigrp_redistribute_source_metric)
-#define funcdecl_eigrp_redistribute_source_metric static int eigrp_redistribute_source_metric_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	const char * no,\
-	const char * proto,\
-	int64_t route_instance,\
-	const char * route_instance_str __attribute__ ((unused)),\
-	int64_t bw,\
-	const char * bw_str __attribute__ ((unused)),\
-	int64_t delay,\
-	const char * delay_str __attribute__ ((unused)),\
-	int64_t rlbt,\
-	const char * rlbt_str __attribute__ ((unused)),\
-	int64_t load,\
-	const char * load_str __attribute__ ((unused)),\
-	int64_t mtu,\
-	const char * mtu_str __attribute__ ((unused)),\
-	const char * route_map)
+#define funcdecl_eigrp_redistribute_source_metric                              \
+	static int eigrp_redistribute_source_metric_magic(                     \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		const char *no, const char *proto, int64_t route_instance,     \
+		const char *route_instance_str __attribute__((unused)),        \
+		int64_t bw, const char *bw_str __attribute__((unused)),        \
+		int64_t delay, const char *delay_str __attribute__((unused)),  \
+		int64_t rlbt, const char *rlbt_str __attribute__((unused)),    \
+		int64_t load, const char *load_str __attribute__((unused)),    \
+		int64_t mtu, const char *mtu_str __attribute__((unused)),      \
+		const char *route_map)
 funcdecl_eigrp_redistribute_source_metric;
 DEFUN_CMD_FUNC_TEXT(eigrp_redistribute_source_metric)
 {
@@ -1130,10 +1160,12 @@ DEFUN_CMD_FUNC_TEXT(eigrp_redistribute_source_metric)
 #endif
 
 		if (!strcmp(argv[_i]->varname, "no")) {
-			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			no = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							  : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "proto")) {
-			proto = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			proto = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							     : argv[_i]->arg;
 		}
 		if (!strcmp(argv[_i]->varname, "route_instance")) {
 			route_instance_str = argv[_i]->arg;
@@ -1172,12 +1204,14 @@ DEFUN_CMD_FUNC_TEXT(eigrp_redistribute_source_metric)
 			_fail = (_end == argv[_i]->arg) || (*_end != '\0');
 		}
 		if (!strcmp(argv[_i]->varname, "route_map")) {
-			route_map = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			route_map = (argv[_i]->type == WORD_TKN)
+					    ? argv[_i]->text
+					    : argv[_i]->arg;
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1191,18 +1225,21 @@ DEFUN_CMD_FUNC_TEXT(eigrp_redistribute_source_metric)
 		return CMD_WARNING;
 	}
 
-	return eigrp_redistribute_source_metric_magic(self, vty, argc, argv, no, proto, route_instance, route_instance_str, bw, bw_str, delay, delay_str, rlbt, rlbt_str, load, load_str, mtu, mtu_str, route_map);
+	return eigrp_redistribute_source_metric_magic(
+		self, vty, argc, argv, no, proto, route_instance,
+		route_instance_str, bw, bw_str, delay, delay_str, rlbt,
+		rlbt_str, load, load_str, mtu, mtu_str, route_map);
 }
 
 /* eigrp_if_delay => "delay (1-16777215)$delay" */
 DEFUN_CMD_FUNC_DECL(eigrp_if_delay)
-#define funcdecl_eigrp_if_delay static int eigrp_if_delay_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t delay,\
-	const char * delay_str __attribute__ ((unused)))
+#define funcdecl_eigrp_if_delay                                                \
+	static int eigrp_if_delay_magic(                                       \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t delay, const char *delay_str __attribute__((unused)))
 funcdecl_eigrp_if_delay;
 DEFUN_CMD_FUNC_TEXT(eigrp_if_delay)
 {
@@ -1229,8 +1266,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_delay)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1249,13 +1286,13 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_delay)
 
 /* no_eigrp_if_delay => "no delay [(1-16777215)]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_if_delay)
-#define funcdecl_no_eigrp_if_delay static int no_eigrp_if_delay_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t delay,\
-	const char * delay_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_if_delay                                             \
+	static int no_eigrp_if_delay_magic(                                    \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t delay, const char *delay_str __attribute__((unused)))
 funcdecl_no_eigrp_if_delay;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_if_delay)
 {
@@ -1282,8 +1319,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_delay)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1298,13 +1335,13 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_delay)
 
 /* eigrp_if_bandwidth => "eigrp bandwidth (1-10000000)$bw" */
 DEFUN_CMD_FUNC_DECL(eigrp_if_bandwidth)
-#define funcdecl_eigrp_if_bandwidth static int eigrp_if_bandwidth_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t bw,\
-	const char * bw_str __attribute__ ((unused)))
+#define funcdecl_eigrp_if_bandwidth                                            \
+	static int eigrp_if_bandwidth_magic(                                   \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t bw,  \
+		const char *bw_str __attribute__((unused)))
 funcdecl_eigrp_if_bandwidth;
 DEFUN_CMD_FUNC_TEXT(eigrp_if_bandwidth)
 {
@@ -1331,8 +1368,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_bandwidth)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1351,13 +1388,14 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_bandwidth)
 
 /* no_eigrp_if_bandwidth => "no eigrp bandwidth [(1-10000000)]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_if_bandwidth)
-#define funcdecl_no_eigrp_if_bandwidth static int no_eigrp_if_bandwidth_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t bandwidth,\
-	const char * bandwidth_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_if_bandwidth                                         \
+	static int no_eigrp_if_bandwidth_magic(                                \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t bandwidth,                                             \
+		const char *bandwidth_str __attribute__((unused)))
 funcdecl_no_eigrp_if_bandwidth;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_if_bandwidth)
 {
@@ -1384,8 +1422,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_bandwidth)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1395,18 +1433,19 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_bandwidth)
 #endif
 #endif
 
-	return no_eigrp_if_bandwidth_magic(self, vty, argc, argv, bandwidth, bandwidth_str);
+	return no_eigrp_if_bandwidth_magic(self, vty, argc, argv, bandwidth,
+					   bandwidth_str);
 }
 
 /* eigrp_if_ip_hellointerval => "ip hello-interval eigrp (1-65535)$hello" */
 DEFUN_CMD_FUNC_DECL(eigrp_if_ip_hellointerval)
-#define funcdecl_eigrp_if_ip_hellointerval static int eigrp_if_ip_hellointerval_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t hello,\
-	const char * hello_str __attribute__ ((unused)))
+#define funcdecl_eigrp_if_ip_hellointerval                                     \
+	static int eigrp_if_ip_hellointerval_magic(                            \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t hello, const char *hello_str __attribute__((unused)))
 funcdecl_eigrp_if_ip_hellointerval;
 DEFUN_CMD_FUNC_TEXT(eigrp_if_ip_hellointerval)
 {
@@ -1433,8 +1472,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_ip_hellointerval)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1448,18 +1487,19 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_ip_hellointerval)
 		return CMD_WARNING;
 	}
 
-	return eigrp_if_ip_hellointerval_magic(self, vty, argc, argv, hello, hello_str);
+	return eigrp_if_ip_hellointerval_magic(self, vty, argc, argv, hello,
+					       hello_str);
 }
 
 /* no_eigrp_if_ip_hellointerval => "no ip hello-interval eigrp [(1-65535)]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_if_ip_hellointerval)
-#define funcdecl_no_eigrp_if_ip_hellointerval static int no_eigrp_if_ip_hellointerval_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t eigrp,\
-	const char * eigrp_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_if_ip_hellointerval                                  \
+	static int no_eigrp_if_ip_hellointerval_magic(                         \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t eigrp, const char *eigrp_str __attribute__((unused)))
 funcdecl_no_eigrp_if_ip_hellointerval;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_if_ip_hellointerval)
 {
@@ -1486,8 +1526,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_ip_hellointerval)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1497,18 +1537,19 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_ip_hellointerval)
 #endif
 #endif
 
-	return no_eigrp_if_ip_hellointerval_magic(self, vty, argc, argv, eigrp, eigrp_str);
+	return no_eigrp_if_ip_hellointerval_magic(self, vty, argc, argv, eigrp,
+						  eigrp_str);
 }
 
 /* eigrp_if_ip_holdinterval => "ip hold-time eigrp (1-65535)$hold" */
 DEFUN_CMD_FUNC_DECL(eigrp_if_ip_holdinterval)
-#define funcdecl_eigrp_if_ip_holdinterval static int eigrp_if_ip_holdinterval_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t hold,\
-	const char * hold_str __attribute__ ((unused)))
+#define funcdecl_eigrp_if_ip_holdinterval                                      \
+	static int eigrp_if_ip_holdinterval_magic(                             \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t hold, const char *hold_str __attribute__((unused)))
 funcdecl_eigrp_if_ip_holdinterval;
 DEFUN_CMD_FUNC_TEXT(eigrp_if_ip_holdinterval)
 {
@@ -1535,8 +1576,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_ip_holdinterval)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1550,18 +1591,19 @@ DEFUN_CMD_FUNC_TEXT(eigrp_if_ip_holdinterval)
 		return CMD_WARNING;
 	}
 
-	return eigrp_if_ip_holdinterval_magic(self, vty, argc, argv, hold, hold_str);
+	return eigrp_if_ip_holdinterval_magic(self, vty, argc, argv, hold,
+					      hold_str);
 }
 
 /* no_eigrp_if_ip_holdinterval => "no ip hold-time eigrp [(1-65535)]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_if_ip_holdinterval)
-#define funcdecl_no_eigrp_if_ip_holdinterval static int no_eigrp_if_ip_holdinterval_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t eigrp,\
-	const char * eigrp_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_if_ip_holdinterval                                   \
+	static int no_eigrp_if_ip_holdinterval_magic(                          \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)),              \
+		int64_t eigrp, const char *eigrp_str __attribute__((unused)))
 funcdecl_no_eigrp_if_ip_holdinterval;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_if_ip_holdinterval)
 {
@@ -1588,8 +1630,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_ip_holdinterval)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1599,20 +1641,22 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_if_ip_holdinterval)
 #endif
 #endif
 
-	return no_eigrp_if_ip_holdinterval_magic(self, vty, argc, argv, eigrp, eigrp_str);
+	return no_eigrp_if_ip_holdinterval_magic(self, vty, argc, argv, eigrp,
+						 eigrp_str);
 }
 
-/* eigrp_ip_summary_address => "ip summary-address eigrp (1-65535)$as A.B.C.D/M$prefix" */
+/* eigrp_ip_summary_address => "ip summary-address eigrp (1-65535)$as
+ * A.B.C.D/M$prefix" */
 DEFUN_CMD_FUNC_DECL(eigrp_ip_summary_address)
-#define funcdecl_eigrp_ip_summary_address static int eigrp_ip_summary_address_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)),\
-	const struct prefix_ipv4 * prefix,\
-	const char * prefix_str __attribute__ ((unused)))
+#define funcdecl_eigrp_ip_summary_address                                      \
+	static int eigrp_ip_summary_address_magic(                             \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)),                    \
+		const struct prefix_ipv4 *prefix,                              \
+		const char *prefix_str __attribute__((unused)))
 funcdecl_eigrp_ip_summary_address;
 DEFUN_CMD_FUNC_TEXT(eigrp_ip_summary_address)
 {
@@ -1623,7 +1667,7 @@ DEFUN_CMD_FUNC_TEXT(eigrp_ip_summary_address)
 #endif
 	int64_t as = 0;
 	const char *as_str = NULL;
-	struct prefix_ipv4 prefix = { };
+	struct prefix_ipv4 prefix = {};
 	const char *prefix_str = NULL;
 
 	for (_i = 0; _i < argc; _i++) {
@@ -1645,8 +1689,8 @@ DEFUN_CMD_FUNC_TEXT(eigrp_ip_summary_address)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1664,20 +1708,22 @@ DEFUN_CMD_FUNC_TEXT(eigrp_ip_summary_address)
 		return CMD_WARNING;
 	}
 
-	return eigrp_ip_summary_address_magic(self, vty, argc, argv, as, as_str, &prefix, prefix_str);
+	return eigrp_ip_summary_address_magic(self, vty, argc, argv, as, as_str,
+					      &prefix, prefix_str);
 }
 
-/* no_eigrp_ip_summary_address => "no ip summary-address eigrp (1-65535)$as A.B.C.D/M$prefix" */
+/* no_eigrp_ip_summary_address => "no ip summary-address eigrp (1-65535)$as
+ * A.B.C.D/M$prefix" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_ip_summary_address)
-#define funcdecl_no_eigrp_ip_summary_address static int no_eigrp_ip_summary_address_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)),\
-	const struct prefix_ipv4 * prefix,\
-	const char * prefix_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_ip_summary_address                                   \
+	static int no_eigrp_ip_summary_address_magic(                          \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)),                    \
+		const struct prefix_ipv4 *prefix,                              \
+		const char *prefix_str __attribute__((unused)))
 funcdecl_no_eigrp_ip_summary_address;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_ip_summary_address)
 {
@@ -1688,7 +1734,7 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_ip_summary_address)
 #endif
 	int64_t as = 0;
 	const char *as_str = NULL;
-	struct prefix_ipv4 prefix = { };
+	struct prefix_ipv4 prefix = {};
 	const char *prefix_str = NULL;
 
 	for (_i = 0; _i < argc; _i++) {
@@ -1710,8 +1756,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_ip_summary_address)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1729,19 +1775,21 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_ip_summary_address)
 		return CMD_WARNING;
 	}
 
-	return no_eigrp_ip_summary_address_magic(self, vty, argc, argv, as, as_str, &prefix, prefix_str);
+	return no_eigrp_ip_summary_address_magic(self, vty, argc, argv, as,
+						 as_str, &prefix, prefix_str);
 }
 
-/* eigrp_authentication_mode => "ip authentication mode eigrp (1-65535)$as <md5|hmac-sha-256>$auth_mode" */
+/* eigrp_authentication_mode => "ip authentication mode eigrp (1-65535)$as
+ * <md5|hmac-sha-256>$auth_mode" */
 DEFUN_CMD_FUNC_DECL(eigrp_authentication_mode)
-#define funcdecl_eigrp_authentication_mode static int eigrp_authentication_mode_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)),\
-	const char * auth_mode)
+#define funcdecl_eigrp_authentication_mode                                     \
+	static int eigrp_authentication_mode_magic(                            \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)),                    \
+		const char *auth_mode)
 funcdecl_eigrp_authentication_mode;
 DEFUN_CMD_FUNC_TEXT(eigrp_authentication_mode)
 {
@@ -1768,12 +1816,14 @@ DEFUN_CMD_FUNC_TEXT(eigrp_authentication_mode)
 			_fail = (_end == argv[_i]->arg) || (*_end != '\0');
 		}
 		if (!strcmp(argv[_i]->varname, "auth_mode")) {
-			auth_mode = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			auth_mode = (argv[_i]->type == WORD_TKN)
+					    ? argv[_i]->text
+					    : argv[_i]->arg;
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1791,18 +1841,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_authentication_mode)
 		return CMD_WARNING;
 	}
 
-	return eigrp_authentication_mode_magic(self, vty, argc, argv, as, as_str, auth_mode);
+	return eigrp_authentication_mode_magic(self, vty, argc, argv, as,
+					       as_str, auth_mode);
 }
 
-/* no_eigrp_authentication_mode => "no ip authentication mode eigrp (1-65535)$as [<md5|hmac-sha-256>]" */
+/* no_eigrp_authentication_mode => "no ip authentication mode eigrp (1-65535)$as
+ * [<md5|hmac-sha-256>]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_authentication_mode)
-#define funcdecl_no_eigrp_authentication_mode static int no_eigrp_authentication_mode_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_authentication_mode                                  \
+	static int no_eigrp_authentication_mode_magic(                         \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)))
 funcdecl_no_eigrp_authentication_mode;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_authentication_mode)
 {
@@ -1829,8 +1881,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_authentication_mode)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1844,19 +1896,20 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_authentication_mode)
 		return CMD_WARNING;
 	}
 
-	return no_eigrp_authentication_mode_magic(self, vty, argc, argv, as, as_str);
+	return no_eigrp_authentication_mode_magic(self, vty, argc, argv, as,
+						  as_str);
 }
 
-/* eigrp_authentication_keychain => "ip authentication key-chain eigrp (1-65535)$as WORD$name" */
+/* eigrp_authentication_keychain => "ip authentication key-chain eigrp
+ * (1-65535)$as WORD$name" */
 DEFUN_CMD_FUNC_DECL(eigrp_authentication_keychain)
-#define funcdecl_eigrp_authentication_keychain static int eigrp_authentication_keychain_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)),\
-	const char * name)
+#define funcdecl_eigrp_authentication_keychain                                 \
+	static int eigrp_authentication_keychain_magic(                        \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)), const char *name)
 funcdecl_eigrp_authentication_keychain;
 DEFUN_CMD_FUNC_TEXT(eigrp_authentication_keychain)
 {
@@ -1883,12 +1936,13 @@ DEFUN_CMD_FUNC_TEXT(eigrp_authentication_keychain)
 			_fail = (_end == argv[_i]->arg) || (*_end != '\0');
 		}
 		if (!strcmp(argv[_i]->varname, "name")) {
-			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text : argv[_i]->arg;
+			name = (argv[_i]->type == WORD_TKN) ? argv[_i]->text
+							    : argv[_i]->arg;
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1906,18 +1960,20 @@ DEFUN_CMD_FUNC_TEXT(eigrp_authentication_keychain)
 		return CMD_WARNING;
 	}
 
-	return eigrp_authentication_keychain_magic(self, vty, argc, argv, as, as_str, name);
+	return eigrp_authentication_keychain_magic(self, vty, argc, argv, as,
+						   as_str, name);
 }
 
-/* no_eigrp_authentication_keychain => "no ip authentication key-chain eigrp (1-65535)$as [WORD]" */
+/* no_eigrp_authentication_keychain => "no ip authentication key-chain eigrp
+ * (1-65535)$as [WORD]" */
 DEFUN_CMD_FUNC_DECL(no_eigrp_authentication_keychain)
-#define funcdecl_no_eigrp_authentication_keychain static int no_eigrp_authentication_keychain_magic(\
-	const struct cmd_element *self __attribute__ ((unused)),\
-	struct vty *vty __attribute__ ((unused)),\
-	int argc __attribute__ ((unused)),\
-	struct cmd_token *argv[] __attribute__ ((unused)),\
-	int64_t as,\
-	const char * as_str __attribute__ ((unused)))
+#define funcdecl_no_eigrp_authentication_keychain                              \
+	static int no_eigrp_authentication_keychain_magic(                     \
+		const struct cmd_element *self __attribute__((unused)),        \
+		struct vty *vty __attribute__((unused)),                       \
+		int argc __attribute__((unused)),                              \
+		struct cmd_token *argv[] __attribute__((unused)), int64_t as,  \
+		const char *as_str __attribute__((unused)))
 funcdecl_no_eigrp_authentication_keychain;
 DEFUN_CMD_FUNC_TEXT(no_eigrp_authentication_keychain)
 {
@@ -1944,8 +2000,8 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_authentication_keychain)
 		}
 #if 1 /* anything that can fail? */
 		if (_fail)
-			vty_out (vty, "%% invalid input for %s: %s\n",
-				   argv[_i]->varname, argv[_i]->arg);
+			vty_out(vty, "%% invalid input for %s: %s\n",
+				argv[_i]->varname, argv[_i]->arg);
 		_failcnt += _fail;
 #endif
 	}
@@ -1959,6 +2015,6 @@ DEFUN_CMD_FUNC_TEXT(no_eigrp_authentication_keychain)
 		return CMD_WARNING;
 	}
 
-	return no_eigrp_authentication_keychain_magic(self, vty, argc, argv, as, as_str);
+	return no_eigrp_authentication_keychain_magic(self, vty, argc, argv, as,
+						      as_str);
 }
-

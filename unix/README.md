@@ -48,9 +48,10 @@ From the repository root:
 
 ```sh
 make build       # Portable engine and Unix host support
-make test        # Portable and Unix tests
+make uut         # Portable pytest and YAML UUT tests
 make uut         # UUT pytest and scenario suites
-make help        # Available targets and descriptions
+make all         # Required full pre-merge gate
+make help        # Available commands and selectors
 ```
 
 To run the broker directly, use:

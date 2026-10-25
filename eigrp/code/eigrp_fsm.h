@@ -22,15 +22,16 @@ typedef enum {
 } msg_data_t;
 
 typedef struct eigrp_fsm_action_message {
-	uint8_t packet_type;			// UPDATE, QUERY, SIAQUERY, SIAREPLY
-	eigrp_instance_t *eigrp;		// which event sent mesg
-	eigrp_nbr_t *adv_router;		// advertising neighbor
-	eigrp_route_descriptor_t *route;	//
-	eigrp_prefix_descriptor_t *prefix;	//
-	msg_data_t data_type;			// internal or external tlv type
-	eigrp_metrics_t metrics;		//
-	enum metric_change change;		//
-	/* DUAL must process a QUERY/REPLY even if a new peer path cannot be retained. */
+	uint8_t packet_type;		   // UPDATE, QUERY, SIAQUERY, SIAREPLY
+	eigrp_instance_t *eigrp;	   // which event sent mesg
+	eigrp_nbr_t *adv_router;	   // advertising neighbor
+	eigrp_route_descriptor_t *route;   //
+	eigrp_prefix_descriptor_t *prefix; //
+	msg_data_t data_type;		   // internal or external tlv type
+	eigrp_metrics_t metrics;	   //
+	enum metric_change change;	   //
+	/* DUAL must process a QUERY/REPLY even if a new peer path cannot be
+	 * retained. */
 	bool transient_route;
 } eigrp_fsm_action_message_t;
 
@@ -43,7 +44,8 @@ bool eigrp_fsm_reply_status_pending(const eigrp_prefix_descriptor_t *prefix,
 				    const eigrp_nbr_t *nbr);
 /* A lost peer may have an outstanding QUERY reply even when it has no RDB. */
 void eigrp_fsm_neighbor_down(eigrp_instance_t *eigrp,
-			    eigrp_prefix_descriptor_t *prefix, eigrp_nbr_t *nbr);
+			     eigrp_prefix_descriptor_t *prefix,
+			     eigrp_nbr_t *nbr);
 void eigrp_fsm_sia_reply_received(eigrp_prefix_descriptor_t *prefix,
 				  eigrp_nbr_t *nbr);
 void eigrp_fsm_active_timer_start(eigrp_instance_t *eigrp,

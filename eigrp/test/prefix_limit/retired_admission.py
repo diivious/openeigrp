@@ -668,7 +668,7 @@ static eigrp_af_config_t *test_runtime_af;
              "eigrp_topology.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
              "eigrp_table.c", "eigrp_prefix.c")],
          *(["-Wl,-dead_strip"] if sys.platform == "darwin" else
-           ["-Wl,--gc-sections"]), "-o", str(binary)],
+           ["-Wl,--gc-sections"]), "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), "-o", str(binary)],
         cwd=ROOT, text=True, capture_output=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr

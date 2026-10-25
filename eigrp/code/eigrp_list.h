@@ -55,18 +55,16 @@ static inline int eigrp_list_isempty(const eigrp_list_t *list)
 	return !list || list->count == 0;
 }
 
-#define EIGRP_LIST_ITERATE(L, N, NN, D) \
-	(N) = ((L) ? (L)->head : NULL), \
-	(NN) = ((N) ? (N)->next : NULL), \
-	(D) = ((N) ? (N)->data : NULL); \
-	(N) != NULL; \
-	(N) = (NN), (NN) = ((N) ? (N)->next : NULL), \
+#define EIGRP_LIST_ITERATE(L, N, NN, D)                                        \
+	(N) = ((L) ? (L)->head : NULL), (NN) = ((N) ? (N)->next : NULL),       \
+	(D) = ((N) ? (N)->data : NULL);                                        \
+	(N) != NULL;                                                           \
+	(N) = (NN), (NN) = ((N) ? (N)->next : NULL),                           \
 	(D) = ((N) ? (N)->data : NULL)
 
-#define EIGRP_LIST_ITERATE_RO(L, N, D) \
-	(N) = ((L) ? (L)->head : NULL), \
-	(D) = ((N) ? (N)->data : NULL); \
-	(N) != NULL; \
+#define EIGRP_LIST_ITERATE_RO(L, N, D)                                         \
+	(N) = ((L) ? (L)->head : NULL), (D) = ((N) ? (N)->data : NULL);        \
+	(N) != NULL;                                                           \
 	(N) = (N)->next, (D) = ((N) ? (N)->data : NULL)
 
 #endif /* _EIGRP_LIST_H_ */

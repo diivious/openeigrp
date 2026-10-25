@@ -18,7 +18,7 @@ help:
 	  '  mixed-tlv    TLV1/TLV2 peers on the same interface' \
 	  '  churn        Repeated route changes, deletes and reinjection' \
 	  '  auth-md5     Authenticated 100K-route redistribution' \
-	  'For suites, run make scale-100k, scale-stress, scale-auth or scale-all at root.'
+	  'For suites, run make scale SUITE=100k|stress|auth|all at root.'
 
 build:
 	$(MAKE) -C ../../.. build

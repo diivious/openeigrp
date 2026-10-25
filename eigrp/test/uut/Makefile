@@ -5,7 +5,7 @@ CPPFLAGS += -DEIGRP_UUT_TEST -DEIGRP_DISABLE_SNMP  -I../../../eigrp/code -I../..
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -pthread
 
 CORE := $(filter-out ../../../eigrp/code/eigrp_log.c ../../../eigrp/code/eigrp_dump.c,$(wildcard ../../../eigrp/code/*.c))
-UNIX := ../../../unix/code/eigrp_unix_sys.c ../../../unix/code/eigrp_unix_rib.c \
+UNIX := ../../../unix/code/eigrp_unix_format.c ../../../unix/code/eigrp_unix_sys.c ../../../unix/code/eigrp_unix_rib.c \
         ../../../unix/code/eigrp_unix_interface.c ../../../unix/code/eigrp_unix_segment.c \
         ../../../unix/code/eigrp_unix_wire.c ../../../unix/code/eigrp_unix_policy.c \
         ../../../unix/code/eigrp_unix_keychain.c ../../../eigrp/code/eigrp_log.c

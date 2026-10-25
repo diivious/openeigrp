@@ -39,8 +39,8 @@ struct eigrp_policy_instance {
 
 static struct eigrp_policy_instance *eigrp_policy_instances;
 
-static struct eigrp_policy_instance *eigrp_policy_instance_find(
-	eigrp_instance_t *eigrp)
+static struct eigrp_policy_instance *
+eigrp_policy_instance_find(eigrp_instance_t *eigrp)
 {
 	struct eigrp_policy_instance *state;
 
@@ -50,8 +50,8 @@ static struct eigrp_policy_instance *eigrp_policy_instance_find(
 	return NULL;
 }
 
-static struct eigrp_policy_instance *eigrp_policy_context_find(
-	struct distribute_ctx *ctx)
+static struct eigrp_policy_instance *
+eigrp_policy_context_find(struct distribute_ctx *ctx)
 {
 	struct eigrp_policy_instance *state;
 
@@ -75,17 +75,26 @@ static void eigrp_policy_distribute_update(struct distribute_ctx *ctx,
 
 	memset(&snapshot, 0, sizeof(snapshot));
 	if (eigrp_instance_afi(state->eigrp) == EIGRP_AFI_IPV6) {
-		snapshot.access_list[EIGRP_FILTER_IN] = dist->list[DISTRIBUTE_V6_IN];
-		snapshot.access_list[EIGRP_FILTER_OUT] = dist->list[DISTRIBUTE_V6_OUT];
-		snapshot.prefix_list[EIGRP_FILTER_IN] = dist->prefix[DISTRIBUTE_V6_IN];
-		snapshot.prefix_list[EIGRP_FILTER_OUT] = dist->prefix[DISTRIBUTE_V6_OUT];
+		snapshot.access_list[EIGRP_FILTER_IN] =
+			dist->list[DISTRIBUTE_V6_IN];
+		snapshot.access_list[EIGRP_FILTER_OUT] =
+			dist->list[DISTRIBUTE_V6_OUT];
+		snapshot.prefix_list[EIGRP_FILTER_IN] =
+			dist->prefix[DISTRIBUTE_V6_IN];
+		snapshot.prefix_list[EIGRP_FILTER_OUT] =
+			dist->prefix[DISTRIBUTE_V6_OUT];
 	} else {
-		snapshot.access_list[EIGRP_FILTER_IN] = dist->list[DISTRIBUTE_V4_IN];
-		snapshot.access_list[EIGRP_FILTER_OUT] = dist->list[DISTRIBUTE_V4_OUT];
-		snapshot.prefix_list[EIGRP_FILTER_IN] = dist->prefix[DISTRIBUTE_V4_IN];
-		snapshot.prefix_list[EIGRP_FILTER_OUT] = dist->prefix[DISTRIBUTE_V4_OUT];
+		snapshot.access_list[EIGRP_FILTER_IN] =
+			dist->list[DISTRIBUTE_V4_IN];
+		snapshot.access_list[EIGRP_FILTER_OUT] =
+			dist->list[DISTRIBUTE_V4_OUT];
+		snapshot.prefix_list[EIGRP_FILTER_IN] =
+			dist->prefix[DISTRIBUTE_V4_IN];
+		snapshot.prefix_list[EIGRP_FILTER_OUT] =
+			dist->prefix[DISTRIBUTE_V4_OUT];
 	}
-	(void)eigrp_sys_filter_runtime_replace(state->eigrp, dist->ifname, &snapshot);
+	(void)eigrp_sys_filter_runtime_replace(state->eigrp, dist->ifname,
+					       &snapshot);
 }
 
 static void eigrp_policy_access_list_changed(struct access_list *access)
@@ -196,10 +205,11 @@ struct distribute_ctx *eigrp_policy_distribute_context(eigrp_instance_t *eigrp)
 	return state ? state->distribute_ctx : NULL;
 }
 
-eigrp_result_t eigrp_policy_filter_evaluate(
-	eigrp_instance_t *eigrp, eigrp_distribute_list_type_t type,
-	const char *name, const eigrp_prefix_t *prefix,
-	eigrp_filter_decision_t *decision)
+eigrp_result_t eigrp_policy_filter_evaluate(eigrp_instance_t *eigrp,
+					    eigrp_distribute_list_type_t type,
+					    const char *name,
+					    const eigrp_prefix_t *prefix,
+					    eigrp_filter_decision_t *decision)
 {
 	struct access_list *access;
 	struct prefix_list *plist;
@@ -252,7 +262,8 @@ eigrp_result_t eigrp_policy_summary_leak_map_evaluate(
 	if (!name || !name[0] || !prefix || !decision)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	*decision = EIGRP_FILTER_DECISION_DENY;
-	if (eigrp_frr_prefix_export(prefix, &host_prefix) != EIGRP_RESULT_SUCCESS)
+	if (eigrp_frr_prefix_export(prefix, &host_prefix)
+	    != EIGRP_RESULT_SUCCESS)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	route_map = route_map_lookup_by_name(name);
 	if (!route_map)
@@ -267,8 +278,7 @@ eigrp_result_t eigrp_policy_summary_leak_map_evaluate(
  * No FRR route-map type crosses into eigrpd/. */
 eigrp_result_t eigrp_policy_redistribute_route_map_evaluate(
 	eigrp_instance_t *eigrp, const char *name,
-	const eigrp_rib_route_t *route,
-	eigrp_filter_decision_t *decision)
+	const eigrp_rib_route_t *route, eigrp_filter_decision_t *decision)
 {
 	struct route_map *route_map;
 	struct prefix host_prefix;

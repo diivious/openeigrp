@@ -86,11 +86,12 @@ static bool eigrp_summary_prefix_match(const eigrp_prefix_t *a,
 	return a && b && a->address.afi == b->address.afi
 	       && a->prefix_length == b->prefix_length
 	       && memcmp(a->address.bytes, b->address.bytes,
-			 sizeof(a->address.bytes)) == 0;
+			 sizeof(a->address.bytes))
+			  == 0;
 }
 
-static const eigrp_af_vectors_t *eigrp_summary_context_vectors(
-	const eigrp_instance_context_t *context)
+static const eigrp_af_vectors_t *
+eigrp_summary_context_vectors(const eigrp_instance_context_t *context)
 {
 	if (!context)
 		return NULL;
@@ -102,8 +103,8 @@ static const eigrp_af_vectors_t *eigrp_summary_context_vectors(
 }
 
 
-static eigrp_intf_config_t *eigrp_summary_intf_config(
-	eigrp_instance_t *eigrp, const eigrp_intf_t *ei)
+static eigrp_intf_config_t *eigrp_summary_intf_config(eigrp_instance_t *eigrp,
+						      const eigrp_intf_t *ei)
 {
 	eigrp_af_config_t *af;
 	eigrp_intf_config_t *config;
@@ -117,9 +118,9 @@ static eigrp_intf_config_t *eigrp_summary_intf_config(
 	return config ? config : eigrp_intf_config_read(af, "default");
 }
 
-static eigrp_summary_config_t *eigrp_summary_match(
-	eigrp_instance_t *eigrp, const eigrp_intf_t *ei,
-	const eigrp_prefix_t *destination)
+static eigrp_summary_config_t *
+eigrp_summary_match(eigrp_instance_t *eigrp, const eigrp_intf_t *ei,
+		    const eigrp_prefix_t *destination)
 {
 	eigrp_intf_config_t *config;
 	eigrp_summary_config_t *summary, *best = NULL;
@@ -129,18 +130,22 @@ static eigrp_summary_config_t *eigrp_summary_match(
 		return NULL;
 	for (summary = config->summaries; summary; summary = summary->next) {
 		if (summary->prefix.address.afi != destination->address.afi
-		    || summary->prefix.prefix_length >= destination->prefix_length
+		    || summary->prefix.prefix_length
+			       >= destination->prefix_length
 		    || !eigrp_prefix_address_match(&summary->prefix,
-					   &destination->address))
+						   &destination->address))
 			continue;
-		if (!best || summary->prefix.prefix_length > best->prefix.prefix_length)
+		if (!best
+		    || summary->prefix.prefix_length
+			       > best->prefix.prefix_length)
 			best = summary;
 	}
 	return best;
 }
 
-static const eigrp_summary_metric_config_t *eigrp_summary_metric_lookup(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *prefix)
+static const eigrp_summary_metric_config_t *
+eigrp_summary_metric_lookup(eigrp_instance_t *eigrp,
+			    const eigrp_prefix_t *prefix)
 {
 	eigrp_af_config_t *af;
 	struct eigrp_summary_metric_entry *entry;
@@ -175,7 +180,8 @@ static bool eigrp_summary_auto_match(eigrp_instance_t *eigrp,
 	if (eigrp->af_vectors.summary_auto_prefix(component, summary)
 	    != EIGRP_RESULT_SUCCESS)
 		return false;
-	if (eigrp->af_vectors.summary_auto_prefix(&ei->address, &interface_major)
+	if (eigrp->af_vectors.summary_auto_prefix(&ei->address,
+						  &interface_major)
 	    != EIGRP_RESULT_SUCCESS)
 		return false;
 
@@ -212,7 +218,7 @@ bool eigrp_summary_specific_leak(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	/* A missing policy or evaluation failure fails closed: the configured
 	 * aggregate remains advertised, but no covered specific leaks. */
 	if (eigrp_sys_summary_leak_map_evaluate(eigrp, summary->leak_map,
-					       destination, &decision)
+						destination, &decision)
 	    != EIGRP_RESULT_SUCCESS)
 		return false;
 	return decision == EIGRP_FILTER_DECISION_PERMIT;
@@ -231,19 +237,21 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	eigrp_table_node_t *rn;
 	uint32_t selected_distance = EIGRP_MAX_METRIC;
 
-	if (!eigrp || !ei || !prefix || !route || !summary_prefix || !summary_route)
+	if (!eigrp || !ei || !prefix || !route || !summary_prefix
+	    || !summary_route)
 		return false;
 	summary = eigrp_summary_match(eigrp, ei, &prefix->destination);
 	memset(summary_prefix, 0, sizeof(*summary_prefix));
 	if (summary)
 		summary_prefix->destination = summary->prefix;
 	else if (!eigrp_summary_auto_match(eigrp, ei, &prefix->destination,
-					  &summary_prefix->destination))
+					   &summary_prefix->destination))
 		return false;
 
 	/* Select the lowest local distance among usable covered components.
 	 * A path learned on the advertising interface cannot support an
-	 * aggregate sent back over that interface; local connected paths can. */
+	 * aggregate sent back over that interface; local connected paths can.
+	 */
 	for (rn = eigrp_table_first(eigrp->topology_table); rn;
 	     rn = eigrp_table_next(rn)) {
 		eigrp_prefix_descriptor_t *candidate = rn->info;
@@ -254,23 +262,29 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 		if (!candidate
 		    || (candidate->distance == EIGRP_MAX_METRIC
 			&& candidate->nt != EIGRP_TOPOLOGY_TYPE_CONNECTED)
-		    || candidate->destination.address.afi != summary_prefix->destination.address.afi
-		    || candidate->destination.prefix_length <= summary_prefix->destination.prefix_length
-		    || !eigrp_prefix_address_match(&summary_prefix->destination,
-						   &candidate->destination.address))
+		    || candidate->destination.address.afi
+			       != summary_prefix->destination.address.afi
+		    || candidate->destination.prefix_length
+			       <= summary_prefix->destination.prefix_length
+		    || !eigrp_prefix_address_match(
+			    &summary_prefix->destination,
+			    &candidate->destination.address))
 			continue;
 		candidate_route = eigrp_topology_route_read(candidate);
-		if (!candidate_route || candidate_route->distance == EIGRP_MAX_METRIC
+		if (!candidate_route
+		    || candidate_route->distance == EIGRP_MAX_METRIC
 		    || (candidate->distance == EIGRP_MAX_METRIC
 			&& (candidate->state != EIGRP_FSM_STATE_PASSIVE
 			    || candidate->fdistance == EIGRP_MAX_METRIC
-			    || candidate_route->adv_router != eigrp->neighbor_self))
+			    || candidate_route->adv_router
+				       != eigrp->neighbor_self))
 		    || candidate_route->metric.delay == EIGRP_MAX_METRIC
 		    || candidate_route->total_metric.delay == EIGRP_MAX_METRIC
 		    || (candidate_route->ei == ei
 			&& candidate_route->adv_router != eigrp->neighbor_self))
 			continue;
-		if (!best_route || candidate_route->distance < selected_distance) {
+		if (!best_route
+		    || candidate_route->distance < selected_distance) {
 			best_route = candidate_route;
 			best_component = candidate->destination;
 			selected_distance = candidate_route->distance;
@@ -283,7 +297,8 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	memset(summary_route, 0, sizeof(*summary_route));
 	summary_route->prefix = summary_prefix;
 	summary_route->dest = summary_prefix->destination;
-	summary_route->topology_id = best_route ? best_route->topology_id : route->topology_id;
+	summary_route->topology_id =
+		best_route ? best_route->topology_id : route->topology_id;
 	summary_route->adv_router = eigrp->neighbor_self;
 	summary_route->type = eigrp->af_vectors.classic_internal_tlv_type;
 	if (best_route) {
@@ -292,13 +307,16 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 		summary_route->metric.delay = EIGRP_MAX_METRIC;
 	}
 
-	metric_config = eigrp_summary_metric_lookup(eigrp, &summary_prefix->destination);
+	metric_config = eigrp_summary_metric_lookup(
+		eigrp, &summary_prefix->destination);
 	if (best_route && metric_config && metric_config->metric_configured)
-		eigrp_metric_values_convert(&metric_config->metric, &summary_route->metric);
+		eigrp_metric_values_convert(&metric_config->metric,
+					    &summary_route->metric);
 
 	summary_route->reported_metric = summary_route->metric;
 	summary_route->total_metric = summary_route->metric;
-	summary_route->distance = eigrp_metric_calculate(eigrp, summary_route->metric);
+	summary_route->distance =
+		eigrp_metric_calculate(eigrp, summary_route->metric);
 	summary_prefix->reported_metric = summary_route->metric;
 	summary_prefix->distance = summary_route->distance;
 	summary_prefix->fdistance = summary_route->distance;
@@ -306,10 +324,12 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	summary_prefix->state = EIGRP_FSM_STATE_PASSIVE;
 
 	if (best_route)
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SUMMARY_COMPONENT,
-				       &best_component, selected_distance, 0, 0, 0);
-	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SUMMARY_METRIC,
-			       &summary_prefix->destination, summary_route->distance, 0, 0, 0);
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_SUMMARY_COMPONENT,
+			&best_component, selected_distance, 0, 0, 0);
+	(void)eigrp_eventlog_msg_add(
+		eigrp, EIGRP_EVENTLOG_OPCODE_SUMMARY_METRIC,
+		&summary_prefix->destination, summary_route->distance, 0, 0, 0);
 	return true;
 }
 
@@ -328,9 +348,10 @@ bool eigrp_summary_query_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	if (!eigrp || !ei || !destination || !summary_prefix || !summary_route)
 		return false;
 	config = eigrp_summary_intf_config(eigrp, ei);
-	for (configured = config ? config->summaries : NULL;
-	     configured; configured = configured->next)
-		if (eigrp_summary_prefix_match(&configured->prefix, destination))
+	for (configured = config ? config->summaries : NULL; configured;
+	     configured = configured->next)
+		if (eigrp_summary_prefix_match(&configured->prefix,
+					       destination))
 			break;
 	if (configured) {
 		for (rn = eigrp_table_first(eigrp->topology_table); rn;
@@ -340,15 +361,19 @@ bool eigrp_summary_query_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 
 			if (!component
 			    || (component->distance == EIGRP_MAX_METRIC
-				&& component->nt != EIGRP_TOPOLOGY_TYPE_CONNECTED)
-			    || component->destination.prefix_length <= destination->prefix_length
-			    || !eigrp_prefix_address_match(destination,
-						   &component->destination.address))
+				&& component->nt
+					   != EIGRP_TOPOLOGY_TYPE_CONNECTED)
+			    || component->destination.prefix_length
+				       <= destination->prefix_length
+			    || !eigrp_prefix_address_match(
+				    destination,
+				    &component->destination.address))
 				continue;
 			component_route = eigrp_topology_route_read(component);
-			if (component_route && eigrp_summary_route_build(
-					eigrp, ei, component, component_route,
-					summary_prefix, summary_route))
+			if (component_route
+			    && eigrp_summary_route_build(
+				    eigrp, ei, component, component_route,
+				    summary_prefix, summary_route))
 				return true;
 		}
 		/* No reachable component: return an unreachable aggregate. */
@@ -397,7 +422,7 @@ void eigrp_summary_runtime_update(eigrp_instance_t *eigrp)
 }
 
 static void eigrp_summary_withdraw(eigrp_instance_t *eigrp,
-			   const eigrp_prefix_t *prefix)
+				   const eigrp_prefix_t *prefix)
 {
 	eigrp_packetizer_work_t *work;
 	eigrp_prefix_descriptor_t *withdraw_prefix;
@@ -405,8 +430,9 @@ static void eigrp_summary_withdraw(eigrp_instance_t *eigrp,
 
 	if (!eigrp || !prefix)
 		return;
-	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SUMMARY_WITHDRAW,
-			       prefix, 0, 0, 0, 0);
+	(void)eigrp_eventlog_msg_add(eigrp,
+				     EIGRP_EVENTLOG_OPCODE_SUMMARY_WITHDRAW,
+				     prefix, 0, 0, 0, 0);
 	withdraw_prefix = eigrp_topology_prefix_create();
 	withdraw_route = eigrp_topology_route_create(NULL);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_UPDATE);
@@ -432,15 +458,14 @@ static void eigrp_summary_withdraw(eigrp_instance_t *eigrp,
 }
 /*
  * Syntax:
- *   Classic: `ip summary-address eigrp AS PREFIX` / `no ip summary-address eigrp AS PREFIX`
- *   Named: `summary-address PREFIX [DISTANCE [leak-map NAME]]` / `no summary-address ...`
- * Supported: Classic / Named
- * Placement:
- *   Classic: interface mode
- *   Named: af-interface mode
- * Description:
- * Creates or removes manual EIGRP interface summarization state.
- * The common target retains configuration and applies manual summary advertisement at the portable packetizer boundary; leak-map policy selectively permits covered specifics on that same packetization path.
+ *   Classic: `ip summary-address eigrp AS PREFIX` / `no ip summary-address
+ * eigrp AS PREFIX` Named: `summary-address PREFIX [DISTANCE [leak-map NAME]]` /
+ * `no summary-address ...` Supported: Classic / Named Placement: Classic:
+ * interface mode Named: af-interface mode Description: Creates or removes
+ * manual EIGRP interface summarization state. The common target retains
+ * configuration and applies manual summary advertisement at the portable
+ * packetizer boundary; leak-map policy selectively permits covered specifics on
+ * that same packetization path.
  */
 typedef enum eigrp_summary_message_type {
 	EIGRP_SUMMARY_MESSAGE_CREATE,
@@ -460,24 +485,28 @@ typedef struct eigrp_summary_message_args {
 } eigrp_summary_message_args_t;
 
 static eigrp_result_t eigrp_summary_message_process(eigrp_instance_t *eigrp,
-	void *arg);
+						    void *arg);
 
-eigrp_result_t eigrp_summary_create(
-	eigrp_intf_context_t *context, const eigrp_prefix_t *prefix,
-	const eigrp_summary_options_t *options)
+eigrp_result_t eigrp_summary_create(eigrp_intf_context_t *context,
+				    const eigrp_prefix_t *prefix,
+				    const eigrp_summary_options_t *options)
 {
-	eigrp_instance_t *instance = context && context->runtime
-		? context->runtime->eigrp
-		: (context && context->address_family
-			? context->address_family->runtime : NULL);
+	eigrp_instance_t *instance =
+		context && context->runtime
+			? context->runtime->eigrp
+			: (context && context->address_family
+				   ? context->address_family->runtime
+				   : NULL);
 	eigrp_summary_message_args_t message = {
-		.type = EIGRP_SUMMARY_MESSAGE_CREATE, .intf_context = context,
-		.prefix = prefix, .options = options,
+		.type = EIGRP_SUMMARY_MESSAGE_CREATE,
+		.intf_context = context,
+		.prefix = prefix,
+		.options = options,
 	};
 
 	if (eigrp_instance_thread_dispatch_needed(instance))
-		return eigrp_instance_message_call(instance,
-			eigrp_summary_message_process, &message);
+		return eigrp_instance_message_call(
+			instance, eigrp_summary_message_process, &message);
 	eigrp_summary_config_t *summary;
 	eigrp_prefix_t normalized;
 	char *leak_map = NULL;
@@ -498,7 +527,8 @@ eigrp_result_t eigrp_summary_create(
 
 	normalized = *prefix;
 	eigrp_summary_prefix_normalize(&normalized);
-	for (summary = context->config->summaries; summary; summary = summary->next) {
+	for (summary = context->config->summaries; summary;
+	     summary = summary->next) {
 		if (!eigrp_summary_prefix_match(&summary->prefix, &normalized))
 			continue;
 		free(summary->leak_map);
@@ -516,7 +546,8 @@ eigrp_result_t eigrp_summary_create(
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 	}
 	summary->prefix = normalized;
-	summary->administrative_distance = options ? options->administrative_distance : 0;
+	summary->administrative_distance =
+		options ? options->administrative_distance : 0;
 	summary->leak_map = leak_map;
 	summary->next = context->config->summaries;
 	context->config->summaries = summary;
@@ -527,31 +558,33 @@ eigrp_result_t eigrp_summary_create(
 
 /*
  * Syntax:
- *   Classic: `ip summary-address eigrp AS PREFIX` / `no ip summary-address eigrp AS PREFIX`
- *   Named: `summary-address PREFIX [DISTANCE [leak-map NAME]]` / `no summary-address ...`
- * Supported: Classic / Named
- * Placement:
- *   Classic: interface mode
- *   Named: af-interface mode
- * Description:
- * Creates or removes manual EIGRP interface summarization state.
- * The common target retains configuration and applies manual summary advertisement at the portable packetizer boundary; leak-map policy selectively permits covered specifics on that same packetization path.
+ *   Classic: `ip summary-address eigrp AS PREFIX` / `no ip summary-address
+ * eigrp AS PREFIX` Named: `summary-address PREFIX [DISTANCE [leak-map NAME]]` /
+ * `no summary-address ...` Supported: Classic / Named Placement: Classic:
+ * interface mode Named: af-interface mode Description: Creates or removes
+ * manual EIGRP interface summarization state. The common target retains
+ * configuration and applies manual summary advertisement at the portable
+ * packetizer boundary; leak-map policy selectively permits covered specifics on
+ * that same packetization path.
  */
-eigrp_result_t eigrp_summary_delete(
-	eigrp_intf_context_t *context, const eigrp_prefix_t *prefix)
+eigrp_result_t eigrp_summary_delete(eigrp_intf_context_t *context,
+				    const eigrp_prefix_t *prefix)
 {
-	eigrp_instance_t *instance = context && context->runtime
-		? context->runtime->eigrp
-		: (context && context->address_family
-			? context->address_family->runtime : NULL);
+	eigrp_instance_t *instance =
+		context && context->runtime
+			? context->runtime->eigrp
+			: (context && context->address_family
+				   ? context->address_family->runtime
+				   : NULL);
 	eigrp_summary_message_args_t message = {
-		.type = EIGRP_SUMMARY_MESSAGE_DELETE, .intf_context = context,
+		.type = EIGRP_SUMMARY_MESSAGE_DELETE,
+		.intf_context = context,
 		.prefix = prefix,
 	};
 
 	if (eigrp_instance_thread_dispatch_needed(instance))
-		return eigrp_instance_message_call(instance,
-			eigrp_summary_message_process, &message);
+		return eigrp_instance_message_call(
+			instance, eigrp_summary_message_process, &message);
 	eigrp_summary_config_t **cursor;
 	eigrp_summary_config_t *summary;
 	eigrp_prefix_t normalized;
@@ -572,7 +605,8 @@ eigrp_result_t eigrp_summary_delete(
 			continue;
 		*cursor = summary->next;
 		if (context->runtime)
-			eigrp_summary_withdraw(context->runtime->eigrp, &summary->prefix);
+			eigrp_summary_withdraw(context->runtime->eigrp,
+					       &summary->prefix);
 		free(summary->leak_map);
 		free(summary);
 		if (context->runtime)
@@ -597,8 +631,7 @@ void eigrp_summary_delete_all(eigrp_intf_config_t *interface)
 	interface->summaries = NULL;
 }
 
-static eigrp_summary_state_t *eigrp_summary_state_create(
-	eigrp_af_config_t *af)
+static eigrp_summary_state_t *eigrp_summary_state_create(eigrp_af_config_t *af)
 {
 	if (!af)
 		return NULL;
@@ -618,18 +651,22 @@ static eigrp_summary_state_t *eigrp_summary_state_create(
  *   Named: topology base mode
  * Description:
  * Controls retained automatic summarization state for the named topology.
- * This project keeps the command target separate even where modern deployment guidance treats auto-summary as retired.
+ * This project keeps the command target separate even where modern deployment
+ * guidance treats auto-summary as retired.
  */
-eigrp_result_t eigrp_summary_auto_update(eigrp_operation_t operation, eigrp_instance_context_t *context)
+eigrp_result_t eigrp_summary_auto_update(eigrp_operation_t operation,
+					 eigrp_instance_context_t *context)
 {
 	eigrp_summary_message_args_t message = {
-		.type = EIGRP_SUMMARY_MESSAGE_AUTO, .operation = operation,
+		.type = EIGRP_SUMMARY_MESSAGE_AUTO,
+		.operation = operation,
 		.instance_context = context,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_summary_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_summary_message_process,
+			&message);
 	bool enabled;
 
 	if (operation != EIGRP_SET && operation != EIGRP_RESET)
@@ -662,8 +699,10 @@ void eigrp_summary_policy_update_all(void)
 
 	if (!eigrp_process.virt_router)
 		return;
-	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)) {
-		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, runtime)) {
+	for (EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node,
+				   virt_router)) {
+		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
+					   runtime)) {
 			if (!runtime)
 				continue;
 			eigrp_summary_runtime_update(runtime);
@@ -672,64 +711,68 @@ void eigrp_summary_policy_update_all(void)
 }
 
 
-
-
-
-
-
 /*
  * Syntax:
- *   Named: `summary-metric PREFIX <metric-vector|distance DISTANCE>` / `no summary-metric PREFIX`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
+ *   Named: `summary-metric PREFIX <metric-vector|distance DISTANCE>` / `no
+ * summary-metric PREFIX` Supported: Named Placement: Named: topology base mode
  * Description:
  * Creates, updates, or removes an explicit summary metric override.
- * The target retains the configuration and refreshes live summary advertisements so an explicit metric vector takes effect immediately.
+ * The target retains the configuration and refreshes live summary
+ * advertisements so an explicit metric vector takes effect immediately.
  */
-eigrp_result_t eigrp_summary_metric_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_prefix_t *prefix, const eigrp_summary_metric_config_t *config)
+eigrp_result_t
+eigrp_summary_metric_update(eigrp_operation_t operation,
+			    eigrp_instance_context_t *context,
+			    const eigrp_prefix_t *prefix,
+			    const eigrp_summary_metric_config_t *config)
 {
 	eigrp_summary_message_args_t message = {
-		.type = EIGRP_SUMMARY_MESSAGE_METRIC, .operation = operation,
-		.instance_context = context, .prefix = prefix,
+		.type = EIGRP_SUMMARY_MESSAGE_METRIC,
+		.operation = operation,
+		.instance_context = context,
+		.prefix = prefix,
 		.metric_config = config,
 	};
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
-		return eigrp_instance_message_call(context->runtime,
-			eigrp_summary_message_process, &message);
+		return eigrp_instance_message_call(
+			context->runtime, eigrp_summary_message_process,
+			&message);
 	if (operation == EIGRP_RESET) {
-	eigrp_summary_state_t *state;
-	struct eigrp_summary_metric_entry **cursor;
-	struct eigrp_summary_metric_entry *entry;
-	eigrp_prefix_t normalized;
+		eigrp_summary_state_t *state;
+		struct eigrp_summary_metric_entry **cursor;
+		struct eigrp_summary_metric_entry *entry;
+		eigrp_prefix_t normalized;
 
-	if (!eigrp_summary_prefix_valid(prefix))
-		return EIGRP_RESULT_INVALID_ARGUMENT;
-	if (!context || (!context->config && !context->runtime))
-		return EIGRP_RESULT_NOT_FOUND;
-	if (context->config && prefix->address.afi != context->config->afi)
-		return EIGRP_RESULT_INVALID_ARGUMENT;
-
-	if (context->config && context->config->summary_state) {
-		state = context->config->summary_state;
-		normalized = *prefix;
-		eigrp_summary_prefix_normalize(&normalized);
-		for (cursor = &state->metrics; *cursor;
-		     cursor = &(*cursor)->next) {
-			entry = *cursor;
-			if (!eigrp_summary_prefix_match(&entry->prefix, &normalized))
-				continue;
-			*cursor = entry->next;
-			free(entry);
-			if (context->runtime)
-				eigrp_summary_runtime_update(context->runtime);
-			return EIGRP_RESULT_SUCCESS;
-		}
-		if (!context->runtime)
+		if (!eigrp_summary_prefix_valid(prefix))
+			return EIGRP_RESULT_INVALID_ARGUMENT;
+		if (!context || (!context->config && !context->runtime))
 			return EIGRP_RESULT_NOT_FOUND;
-	}
-	return EIGRP_RESULT_NOT_FOUND;
+		if (context->config
+		    && prefix->address.afi != context->config->afi)
+			return EIGRP_RESULT_INVALID_ARGUMENT;
+
+		if (context->config && context->config->summary_state) {
+			state = context->config->summary_state;
+			normalized = *prefix;
+			eigrp_summary_prefix_normalize(&normalized);
+			for (cursor = &state->metrics; *cursor;
+			     cursor = &(*cursor)->next) {
+				entry = *cursor;
+				if (!eigrp_summary_prefix_match(&entry->prefix,
+								&normalized))
+					continue;
+				*cursor = entry->next;
+				free(entry);
+				if (context->runtime)
+					eigrp_summary_runtime_update(
+						context->runtime);
+				return EIGRP_RESULT_SUCCESS;
+			}
+			if (!context->runtime)
+				return EIGRP_RESULT_NOT_FOUND;
+		}
+		return EIGRP_RESULT_NOT_FOUND;
 	}
 
 	if (operation != EIGRP_SET)
@@ -760,7 +803,8 @@ eigrp_result_t eigrp_summary_metric_update(eigrp_operation_t operation, eigrp_in
 		normalized = *prefix;
 		eigrp_summary_prefix_normalize(&normalized);
 		for (entry = state->metrics; entry; entry = entry->next) {
-			if (!eigrp_summary_prefix_match(&entry->prefix, &normalized))
+			if (!eigrp_summary_prefix_match(&entry->prefix,
+							&normalized))
 				continue;
 			entry->config = *config;
 			if (context->runtime)
@@ -782,35 +826,35 @@ eigrp_result_t eigrp_summary_metric_update(eigrp_operation_t operation, eigrp_in
 
 /*
  * Syntax:
- *   Named: `summary-metric PREFIX <metric-vector|distance DISTANCE>` / `no summary-metric PREFIX`
- * Supported: Named
- * Placement:
- *   Named: topology base mode
+ *   Named: `summary-metric PREFIX <metric-vector|distance DISTANCE>` / `no
+ * summary-metric PREFIX` Supported: Named Placement: Named: topology base mode
  * Description:
  * Creates, updates, or removes an explicit summary metric override.
- * The target retains the configuration and refreshes live summary advertisements so an explicit metric vector takes effect immediately.
+ * The target retains the configuration and refreshes live summary
+ * advertisements so an explicit metric vector takes effect immediately.
  */
 
 
 static eigrp_result_t eigrp_summary_message_process(eigrp_instance_t *eigrp,
-	void *arg)
+						    void *arg)
 {
 	eigrp_summary_message_args_t *message = arg;
 
 	(void)eigrp;
 	switch (message->type) {
 	case EIGRP_SUMMARY_MESSAGE_CREATE:
-		return eigrp_summary_create(message->intf_context, message->prefix,
-			message->options);
+		return eigrp_summary_create(message->intf_context,
+					    message->prefix, message->options);
 	case EIGRP_SUMMARY_MESSAGE_DELETE:
-		return eigrp_summary_delete(message->intf_context, message->prefix);
+		return eigrp_summary_delete(message->intf_context,
+					    message->prefix);
 	case EIGRP_SUMMARY_MESSAGE_AUTO:
 		return eigrp_summary_auto_update(message->operation,
-			message->instance_context);
+						 message->instance_context);
 	case EIGRP_SUMMARY_MESSAGE_METRIC:
-		return eigrp_summary_metric_update(message->operation,
-			message->instance_context, message->prefix,
-			message->metric_config);
+		return eigrp_summary_metric_update(
+			message->operation, message->instance_context,
+			message->prefix, message->metric_config);
 	}
 	return EIGRP_RESULT_INVALID_ARGUMENT;
 }

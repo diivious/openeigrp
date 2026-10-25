@@ -48,6 +48,7 @@ def withdrawal_binary(tmp_path_factory):
         *(str(CODE / name) for name in sources),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
         "-pthread",
+        "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
         "-o",
         str(binary),
     ]

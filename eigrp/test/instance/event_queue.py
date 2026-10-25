@@ -134,8 +134,9 @@ def test_rib_callbacks_enqueue_portable_snapshot_for_af_consumption():
     assert "eigrp_rib_route_t route;" in rib_h
     assert "EIGRP_RIB_EVENT_UPDATE" in rib_h
     assert "EIGRP_RIB_EVENT_DELETE" in rib_h
-    assert "eigrp_instance_rib_event_enqueue(runtime, EIGRP_RIB_EVENT_UPDATE, route)" in redistribute
-    assert "eigrp_instance_rib_event_enqueue(runtime, EIGRP_RIB_EVENT_DELETE, route)" in redistribute
+    compact = "".join(redistribute.split())
+    assert "eigrp_instance_rib_event_enqueue(runtime,EIGRP_RIB_EVENT_UPDATE,route)" in compact
+    assert "eigrp_instance_rib_event_enqueue(runtime,EIGRP_RIB_EVENT_DELETE,route)" in compact
     assert "event->route = *route;" in packet
     assert "eigrp_rib_event_process(eigrp, event)" in packet
     assert "EIGRP_AF_RIB_BATCH 1U" in packet

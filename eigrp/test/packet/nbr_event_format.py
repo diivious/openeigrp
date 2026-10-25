@@ -19,6 +19,7 @@ def test_neighbor_event_format(tmp_path):
         str(ROOT / "eigrp/test/packet/nbr_event_format.c"),
         str(ROOT / "eigrp/code/eigrp_eventlog.c"),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
+        str(ROOT / "unix/code/eigrp_unix_format.c"),
         "-o", str(executable),
     ]
     build = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)

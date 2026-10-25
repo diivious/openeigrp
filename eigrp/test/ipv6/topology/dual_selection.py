@@ -178,7 +178,7 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
         str(ROOT / "eigrp" / "code" / "eigrp_list.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
-        *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ), "-o", str(binary),
+        *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ), "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), "-o", str(binary),
     ], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert result.returncode == 0, result.stderr
 

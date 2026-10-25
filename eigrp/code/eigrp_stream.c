@@ -77,7 +77,8 @@ size_t eigrp_stream_get(void *dst, eigrp_stream_t *stream, size_t size)
 	size_t available;
 	if (!stream || !dst)
 		return 0;
-	available = stream->endp > stream->getp ? stream->endp - stream->getp : 0;
+	available =
+		stream->endp > stream->getp ? stream->endp - stream->getp : 0;
 	if (size > available)
 		size = available;
 	if (size) {
@@ -110,7 +111,8 @@ uint32_t eigrp_stream_getl(eigrp_stream_t *stream)
 
 size_t eigrp_stream_put(eigrp_stream_t *stream, const void *src, size_t size)
 {
-	if (!stream || (!src && size) || !eigrp_stream_ensure(stream, stream->endp + size))
+	if (!stream || (!src && size)
+	    || !eigrp_stream_ensure(stream, stream->endp + size))
 		return 0;
 	if (size) {
 		memcpy(stream->data + stream->endp, src, size);

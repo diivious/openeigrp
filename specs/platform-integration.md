@@ -133,6 +133,13 @@ notifications.
 
 The platform implements the host side of these services using native mechanisms.
 
+Portable formatting uses `eigrp_snprintf()` and `eigrp_vsnprintf()` from the
+same host contract. Each integration chooses its formatter without introducing
+platform headers into the core: FRR uses `vsnprintfrr()` and Unix uses
+`vsnprintf()`. Both expose the C `snprintf()` return/truncation convention.
+Bounded string copying uses the portable inline `eigrp_strcpy()` helper in
+`eigrp_string.h`, which rejects overflow without truncation.
+
 ## 5. Public versus private types
 
 The integration boundary has two categories of public data.

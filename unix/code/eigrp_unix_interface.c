@@ -39,12 +39,13 @@ struct eigrp_unix_interface {
 static eigrp_unix_interface_t *interfaces;
 
 static bool eigrp_unix_prefix_equal(const eigrp_prefix_t *left,
-	const eigrp_prefix_t *right)
+				    const eigrp_prefix_t *right)
 {
 	return left && right && left->address.afi == right->address.afi
 	       && left->prefix_length == right->prefix_length
 	       && memcmp(left->address.bytes, right->address.bytes,
-			 sizeof(left->address.bytes)) == 0;
+			 sizeof(left->address.bytes))
+			  == 0;
 }
 
 static bool eigrp_unix_prefix_valid(const eigrp_prefix_t *prefix)
@@ -58,8 +59,7 @@ static bool eigrp_unix_prefix_valid(const eigrp_prefix_t *prefix)
 	return false;
 }
 
-static eigrp_prefix_t eigrp_unix_connected_prefix(
-	const eigrp_prefix_t *address)
+static eigrp_prefix_t eigrp_unix_connected_prefix(const eigrp_prefix_t *address)
 {
 	eigrp_prefix_t prefix = *address;
 	size_t bytes = address->address.afi == EIGRP_AFI_IPV4 ? 4U : 16U;
@@ -68,7 +68,8 @@ static eigrp_prefix_t eigrp_unix_connected_prefix(
 	size_t index;
 
 	if (remainder && full < bytes) {
-		prefix.address.bytes[full] &= (uint8_t)(0xffU << (8U - remainder));
+		prefix.address.bytes[full] &=
+			(uint8_t)(0xffU << (8U - remainder));
 		full++;
 	}
 	for (index = full; index < bytes; index++)
@@ -76,9 +77,10 @@ static eigrp_prefix_t eigrp_unix_connected_prefix(
 	return prefix;
 }
 
-static void eigrp_unix_connected_route(
-	const eigrp_unix_interface_t *interface, const eigrp_prefix_t *address,
-	eigrp_rib_route_t *route, eigrp_rib_nexthop_t *nexthop)
+static void eigrp_unix_connected_route(const eigrp_unix_interface_t *interface,
+				       const eigrp_prefix_t *address,
+				       eigrp_rib_route_t *route,
+				       eigrp_rib_nexthop_t *nexthop)
 {
 	eigrp_metric_values_t values = {0};
 
@@ -95,7 +97,7 @@ static void eigrp_unix_connected_route(
 	values.reliability = EIGRP_RELIABILITY_DEFAULT;
 	values.load = EIGRP_LOAD_DEFAULT;
 	values.mtu = interface->mtu > UINT16_MAX ? UINT16_MAX
-						       : (uint16_t)interface->mtu;
+						 : (uint16_t)interface->mtu;
 	eigrp_metric_values_convert(&values, &route->redist.vecmetric);
 }
 
@@ -105,8 +107,10 @@ static bool eigrp_unix_interface_connected_prefix_present(
 	const eigrp_unix_interface_address_t *candidate;
 	eigrp_prefix_t prefix = eigrp_unix_connected_prefix(address);
 
-	for (candidate = interface->addresses; candidate; candidate = candidate->next) {
-		eigrp_prefix_t other = eigrp_unix_connected_prefix(&candidate->prefix);
+	for (candidate = interface->addresses; candidate;
+	     candidate = candidate->next) {
+		eigrp_prefix_t other =
+			eigrp_unix_connected_prefix(&candidate->prefix);
 
 		if (eigrp_unix_prefix_equal(&prefix, &other))
 			return true;
@@ -114,15 +118,17 @@ static bool eigrp_unix_interface_connected_prefix_present(
 	return false;
 }
 
-static void eigrp_unix_interface_connected_update(
-	const eigrp_unix_interface_t *interface, bool present)
+static void
+eigrp_unix_interface_connected_update(const eigrp_unix_interface_t *interface,
+				      bool present)
 {
 	const eigrp_unix_interface_address_t *address;
 	eigrp_rib_route_t route;
 	eigrp_rib_nexthop_t nexthop;
 
 	for (address = interface->addresses; address; address = address->next) {
-		eigrp_unix_connected_route(interface, &address->prefix, &route, &nexthop);
+		eigrp_unix_connected_route(interface, &address->prefix, &route,
+					   &nexthop);
 		if (present)
 			(void)eigrp_unix_rib_source_route_update(&route);
 		else
@@ -130,10 +136,10 @@ static void eigrp_unix_interface_connected_update(
 	}
 }
 
-static void eigrp_unix_interface_state_fill(
-	const eigrp_unix_interface_t *interface,
-	const eigrp_unix_interface_address_t *address,
-	eigrp_intf_runtime_state_t *state)
+static void
+eigrp_unix_interface_state_fill(const eigrp_unix_interface_t *interface,
+				const eigrp_unix_interface_address_t *address,
+				eigrp_intf_runtime_state_t *state)
 {
 	memset(state, 0, sizeof(*state));
 	state->interface_name = interface->name;
@@ -169,8 +175,8 @@ eigrp_unix_interface_t *eigrp_unix_interface_find(const char *name)
 	return NULL;
 }
 
-static eigrp_unix_interface_t *eigrp_unix_interface_find_ifindex(
-	eigrp_ifindex_t ifindex)
+static eigrp_unix_interface_t *
+eigrp_unix_interface_find_ifindex(eigrp_ifindex_t ifindex)
 {
 	eigrp_unix_interface_t *interface;
 
@@ -180,9 +186,11 @@ static eigrp_unix_interface_t *eigrp_unix_interface_find_ifindex(
 	return NULL;
 }
 
-eigrp_result_t eigrp_unix_interface_create(
-	const char *name, eigrp_ifindex_t ifindex, bool multicast_capable,
-	uint32_t bandwidth, uint32_t mtu, eigrp_unix_interface_t **created)
+eigrp_result_t eigrp_unix_interface_create(const char *name,
+					   eigrp_ifindex_t ifindex,
+					   bool multicast_capable,
+					   uint32_t bandwidth, uint32_t mtu,
+					   eigrp_unix_interface_t **created)
 {
 	eigrp_unix_interface_t *interface;
 
@@ -190,7 +198,8 @@ eigrp_result_t eigrp_unix_interface_create(
 		*created = NULL;
 	if (!name || !name[0] || !ifindex || !mtu)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	if (eigrp_unix_interface_find(name) || eigrp_unix_interface_find_ifindex(ifindex))
+	if (eigrp_unix_interface_find(name)
+	    || eigrp_unix_interface_find_ifindex(ifindex))
 		return EIGRP_RESULT_CONFLICT;
 	interface = calloc(1, sizeof(*interface));
 	if (!interface)
@@ -227,7 +236,7 @@ eigrp_result_t eigrp_unix_interface_delete(const char *name)
 		eigrp_unix_segment_interface_detach_all(interface);
 		eigrp_unix_interface_connected_update(interface, false);
 		eigrp_sys_intf_remove(EIGRP_VRF_DEFAULT, interface->ifindex,
-			EIGRP_INTERFACE_REMOVE_HOST);
+				      EIGRP_INTERFACE_REMOVE_HOST);
 		while ((address = interface->addresses) != NULL) {
 			interface->addresses = address->next;
 			free(address);
@@ -277,15 +286,17 @@ eigrp_result_t eigrp_unix_interface_down(const char *name)
 	eigrp_unix_interface_connected_update(interface, false);
 	interface->operative = false;
 	eigrp_sys_intf_down(EIGRP_VRF_DEFAULT, interface->ifindex,
-		interface->name, 0, interface->bandwidth, interface->mtu);
+			    interface->name, 0, interface->bandwidth,
+			    interface->mtu);
 
 out:
 	eigrp_unix_runtime_leave();
 	return result;
 }
 
-eigrp_result_t eigrp_unix_interface_address_add(
-	const char *name, const eigrp_prefix_t *prefix, bool secondary)
+eigrp_result_t eigrp_unix_interface_address_add(const char *name,
+						const eigrp_prefix_t *prefix,
+						bool secondary)
 {
 	eigrp_unix_interface_t *interface = eigrp_unix_interface_find(name);
 	eigrp_unix_interface_address_t *address;
@@ -310,7 +321,8 @@ eigrp_result_t eigrp_unix_interface_address_add(
 		eigrp_rib_nexthop_t nexthop;
 		eigrp_result_t result;
 
-		eigrp_unix_connected_route(interface, &address->prefix, &route, &nexthop);
+		eigrp_unix_connected_route(interface, &address->prefix, &route,
+					   &nexthop);
 		result = eigrp_unix_rib_source_route_update(&route);
 
 		if (result != EIGRP_RESULT_SUCCESS) {
@@ -324,8 +336,8 @@ eigrp_result_t eigrp_unix_interface_address_add(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_unix_interface_address_remove(
-	const char *name, const eigrp_prefix_t *prefix)
+eigrp_result_t eigrp_unix_interface_address_remove(const char *name,
+						   const eigrp_prefix_t *prefix)
 {
 	eigrp_unix_interface_t *interface = eigrp_unix_interface_find(name);
 	eigrp_unix_interface_address_t **cursor;
@@ -335,26 +347,29 @@ eigrp_result_t eigrp_unix_interface_address_remove(
 		return EIGRP_RESULT_NOT_FOUND;
 	if (!eigrp_unix_prefix_valid(prefix))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	for (cursor = &interface->addresses; *cursor; cursor = &(*cursor)->next) {
+	for (cursor = &interface->addresses; *cursor;
+	     cursor = &(*cursor)->next) {
 		if (!eigrp_unix_prefix_equal(&(*cursor)->prefix, prefix))
 			continue;
 		address = *cursor;
 		*cursor = address->next;
 		if (interface->operative
 		    && !eigrp_unix_interface_connected_prefix_present(
-			       interface, &address->prefix)) {
+			    interface, &address->prefix)) {
 			eigrp_rib_route_t route;
 			eigrp_rib_nexthop_t nexthop;
 
-			eigrp_unix_connected_route(interface, &address->prefix, &route, &nexthop);
+			eigrp_unix_connected_route(interface, &address->prefix,
+						   &route, &nexthop);
 			(void)eigrp_unix_rib_source_route_remove(&route);
 		}
 		eigrp_sys_intf_addr_update(EIGRP_VRF_DEFAULT,
-			interface->ifindex, &address->prefix,
-			EIGRP_INTERFACE_REMOVE_HOST);
+					   interface->ifindex, &address->prefix,
+					   EIGRP_INTERFACE_REMOVE_HOST);
 		free(address);
-		/* If portable EIGRP used the removed address, another address on the
-		 * same host interface is now eligible to repopulate runtime state. */
+		/* If portable EIGRP used the removed address, another address
+		 * on the same host interface is now eligible to repopulate
+		 * runtime state. */
 		eigrp_unix_interface_notify(interface);
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -372,8 +387,8 @@ const char *eigrp_unix_interface_name(const eigrp_unix_interface_t *interface)
 	return interface ? interface->name : NULL;
 }
 
-eigrp_ifindex_t eigrp_unix_interface_ifindex(
-	const eigrp_unix_interface_t *interface)
+eigrp_ifindex_t
+eigrp_unix_interface_ifindex(const eigrp_unix_interface_t *interface)
 {
 	return interface ? interface->ifindex : 0;
 }
@@ -389,8 +404,8 @@ bool eigrp_unix_interface_multicast_capable(
 	return interface && interface->multicast_capable;
 }
 
-size_t eigrp_unix_interface_address_count(
-	const eigrp_unix_interface_t *interface)
+size_t
+eigrp_unix_interface_address_count(const eigrp_unix_interface_t *interface)
 {
 	const eigrp_unix_interface_address_t *address;
 	size_t count = 0;
@@ -426,8 +441,9 @@ void eigrp_unix_interface_address_walk(
 
 /* Public host service: enumerate every address belonging to every interface.
  * Portable EIGRP decides which addresses participate for the runtime AF. */
-eigrp_result_t eigrp_sys_interface_walk(
-	eigrp_instance_t *eigrp, eigrp_sys_interface_walk_cb callback, void *arg)
+eigrp_result_t eigrp_sys_interface_walk(eigrp_instance_t *eigrp,
+					eigrp_sys_interface_walk_cb callback,
+					void *arg)
 {
 	eigrp_unix_interface_t *interface;
 	eigrp_unix_interface_address_t *address;
@@ -438,10 +454,12 @@ eigrp_result_t eigrp_sys_interface_walk(
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	afi = eigrp_instance_afi(eigrp);
 	for (interface = interfaces; interface; interface = interface->next) {
-		for (address = interface->addresses; address; address = address->next) {
+		for (address = interface->addresses; address;
+		     address = address->next) {
 			if (address->prefix.address.afi != afi)
 				continue;
-			eigrp_unix_interface_state_fill(interface, address, &state);
+			eigrp_unix_interface_state_fill(interface, address,
+							&state);
 			callback(&state, arg);
 		}
 	}

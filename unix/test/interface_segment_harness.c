@@ -16,26 +16,28 @@ static unsigned address_removes;
 static eigrp_intf_runtime_state_t last_state;
 
 void eigrp_sys_intf_update(eigrp_vrf_id_t vrf_id,
-	const eigrp_intf_runtime_state_t *state)
+			   const eigrp_intf_runtime_state_t *state)
 {
 	assert(vrf_id == EIGRP_VRF_DEFAULT);
 	last_state = *state;
 	state_updates++;
 }
 
-void eigrp_sys_intf_down(eigrp_vrf_id_t vrf_id,
-	eigrp_ifindex_t ifindex, const char *name, uint8_t type,
-	uint32_t bandwidth, uint32_t mtu)
+void eigrp_sys_intf_down(eigrp_vrf_id_t vrf_id, eigrp_ifindex_t ifindex,
+			 const char *name, uint8_t type, uint32_t bandwidth,
+			 uint32_t mtu)
 {
-	(void)type; (void)bandwidth; (void)mtu;
+	(void)type;
+	(void)bandwidth;
+	(void)mtu;
 	assert(vrf_id == EIGRP_VRF_DEFAULT);
 	assert(ifindex != 0);
 	assert(name != NULL);
 	link_downs++;
 }
 
-void eigrp_sys_intf_remove(eigrp_vrf_id_t vrf_id,
-	eigrp_ifindex_t ifindex, eigrp_intf_remove_reason_t reason)
+void eigrp_sys_intf_remove(eigrp_vrf_id_t vrf_id, eigrp_ifindex_t ifindex,
+			   eigrp_intf_remove_reason_t reason)
 {
 	assert(vrf_id == EIGRP_VRF_DEFAULT);
 	assert(ifindex != 0);
@@ -43,9 +45,9 @@ void eigrp_sys_intf_remove(eigrp_vrf_id_t vrf_id,
 	link_removes++;
 }
 
-void eigrp_sys_intf_addr_update(eigrp_vrf_id_t vrf_id,
-	eigrp_ifindex_t ifindex, const eigrp_prefix_t *address,
-	eigrp_intf_remove_reason_t reason)
+void eigrp_sys_intf_addr_update(eigrp_vrf_id_t vrf_id, eigrp_ifindex_t ifindex,
+				const eigrp_prefix_t *address,
+				eigrp_intf_remove_reason_t reason)
 {
 	assert(vrf_id == EIGRP_VRF_DEFAULT);
 	assert(ifindex != 0);
@@ -59,19 +61,19 @@ void eigrp_sys_intf_addr_update(eigrp_vrf_id_t vrf_id,
 eigrp_afi_t eigrp_instance_afi(const eigrp_instance_t *eigrp)
 {
 	return eigrp == (const eigrp_instance_t *)1 ? EIGRP_AFI_IPV4
-		: EIGRP_AFI_IPV6;
+						    : EIGRP_AFI_IPV6;
 }
 
-eigrp_result_t eigrp_rib_redist_add(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *route)
+eigrp_result_t eigrp_rib_redist_add(eigrp_instance_t *eigrp,
+				    const eigrp_rib_route_t *route)
 {
 	(void)eigrp;
 	(void)route;
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_rib_redist_del(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *route)
+eigrp_result_t eigrp_rib_redist_del(eigrp_instance_t *eigrp,
+				    const eigrp_rib_route_t *route)
 {
 	(void)eigrp;
 	(void)route;
@@ -97,7 +99,7 @@ static void count_state(const eigrp_intf_runtime_state_t *state, void *arg)
 }
 
 static void count_endpoint(const char *uut_name, const char *interface_name,
-	const eigrp_unix_interface_t *interface, void *arg)
+			   const eigrp_unix_interface_t *interface, void *arg)
 {
 	unsigned *count = arg;
 	assert(uut_name && uut_name[0]);
@@ -115,13 +117,17 @@ int main(void)
 	eigrp_prefix_t v6a = prefix("2001:db8:12::1", 64);
 	unsigned count = 0;
 
-	assert(eigrp_unix_interface_create("eth0", 1, true, 1000000, 1500, &r1e0)
+	assert(eigrp_unix_interface_create("eth0", 1, true, 1000000, 1500,
+					   &r1e0)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(eigrp_unix_interface_create("eth1", 2, true, 1000000, 1500, &r1e1)
+	assert(eigrp_unix_interface_create("eth1", 2, true, 1000000, 1500,
+					   &r1e1)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(eigrp_unix_interface_create("r2eth0", 3, true, 1000000, 1500, &r2e0)
+	assert(eigrp_unix_interface_create("r2eth0", 3, true, 1000000, 1500,
+					   &r2e0)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(eigrp_unix_interface_create("r3eth0", 4, true, 1000000, 1500, &r3e0)
+	assert(eigrp_unix_interface_create("r3eth0", 4, true, 1000000, 1500,
+					   &r3e0)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(eigrp_unix_interface_address_add("eth0", &v4a, false)
 	       == EIGRP_RESULT_SUCCESS);
@@ -142,15 +148,18 @@ int main(void)
 	assert(link_downs == 1);
 	assert(eigrp_unix_interface_up("eth0") == EIGRP_RESULT_SUCCESS);
 
-	assert(eigrp_sys_interface_walk((eigrp_instance_t *)1, count_state, &count)
+	assert(eigrp_sys_interface_walk((eigrp_instance_t *)1, count_state,
+					&count)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(count == 2); /* both IPv4 addresses */
 	count = 0;
-	assert(eigrp_sys_interface_walk((eigrp_instance_t *)2, count_state, &count)
+	assert(eigrp_sys_interface_walk((eigrp_instance_t *)2, count_state,
+					&count)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(count == 1); /* IPv6 address on the same interface */
 
-	assert(eigrp_unix_segment_create("lan12", &lan12) == EIGRP_RESULT_SUCCESS);
+	assert(eigrp_unix_segment_create("lan12", &lan12)
+	       == EIGRP_RESULT_SUCCESS);
 	/* Topology membership is keyed by UUT + interface name, so a shared
 	 * medium naturally represents R1:eth0, R2:eth0, R3:eth0. */
 	assert(eigrp_unix_segment_endpoint_attach(lan12, "R1", "eth0")
@@ -161,7 +170,8 @@ int main(void)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(eigrp_unix_segment_endpoint_count(lan12) == 3);
 	assert(eigrp_unix_segment_delete("lan12") == EIGRP_RESULT_SUCCESS);
-	assert(eigrp_unix_segment_create("lan12", &lan12) == EIGRP_RESULT_SUCCESS);
+	assert(eigrp_unix_segment_create("lan12", &lan12)
+	       == EIGRP_RESULT_SUCCESS);
 	assert(eigrp_unix_segment_interface_attach(lan12, "R1", r1e0)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(eigrp_unix_segment_interface_attach(lan12, "R2", r2e0)

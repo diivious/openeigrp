@@ -21,7 +21,7 @@ eigrp_af_config_t *eigrp_af_config_runtime_read(eigrp_instance_t *eigrp)
 }
 
 eigrp_intf_config_t *eigrp_intf_config_read(eigrp_af_config_t *af_config,
-					   const char *name)
+					    const char *name)
 {
 	eigrp_intf_config_t *item;
 
@@ -31,7 +31,8 @@ eigrp_intf_config_t *eigrp_intf_config_read(eigrp_af_config_t *af_config,
 	return NULL;
 }
 
-eigrp_route_descriptor_t *eigrp_topology_route_read(eigrp_prefix_descriptor_t *prefix)
+eigrp_route_descriptor_t *
+eigrp_topology_route_read(eigrp_prefix_descriptor_t *prefix)
 {
 	return (eigrp_route_descriptor_t *)prefix->internal_routes;
 }
@@ -46,27 +47,37 @@ bool eigrp_prefix_address_match(const eigrp_prefix_t *prefix,
 	    || memcmp(prefix->address.bytes, address->bytes, bytes))
 		return false;
 	i = bytes;
-	return !remaining || ((prefix->address.bytes[i] ^ address->bytes[i])
-		& (0xff << (8 - remaining))) == 0;
+	return !remaining
+	       || ((prefix->address.bytes[i] ^ address->bytes[i])
+		   & (0xff << (8 - remaining)))
+			  == 0;
 }
 
-eigrp_result_t eigrp_eventlog_msg_add(eigrp_instance_t *eigrp,
-				     uint16_t opcode, const eigrp_prefix_t *addr,
-				     eventmsg_arg_t a, eventmsg_arg_t b,
-				     eventmsg_arg_t c, eventmsg_arg_t d)
+eigrp_result_t eigrp_eventlog_msg_add(eigrp_instance_t *eigrp, uint16_t opcode,
+				      const eigrp_prefix_t *addr,
+				      eventmsg_arg_t a, eventmsg_arg_t b,
+				      eventmsg_arg_t c, eventmsg_arg_t d)
 {
-	(void)eigrp; (void)opcode; (void)addr;
-	(void)a; (void)b; (void)c; (void)d;
+	(void)eigrp;
+	(void)opcode;
+	(void)addr;
+	(void)a;
+	(void)b;
+	(void)c;
+	(void)d;
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_sys_summary_leak_map_evaluate(eigrp_instance_t *eigrp,
-					       const char *name,
-					       const eigrp_prefix_t *destination,
-					       eigrp_filter_decision_t *decision)
+eigrp_result_t
+eigrp_sys_summary_leak_map_evaluate(eigrp_instance_t *eigrp, const char *name,
+				    const eigrp_prefix_t *destination,
+				    eigrp_filter_decision_t *decision)
 {
-	(void)eigrp; (void)name; (void)destination;
-	*decision = leak_permit ? EIGRP_FILTER_DECISION_PERMIT : EIGRP_FILTER_DECISION_DENY;
+	(void)eigrp;
+	(void)name;
+	(void)destination;
+	*decision = leak_permit ? EIGRP_FILTER_DECISION_PERMIT
+				: EIGRP_FILTER_DECISION_DENY;
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -80,10 +91,9 @@ static eigrp_prefix_t pfx(const char *ip, uint8_t length)
 }
 
 static void component(eigrp_prefix_descriptor_t *prefix,
-			      eigrp_route_descriptor_t *route,
-			      const char *ip, uint32_t local, uint32_t predecessor,
-			      eigrp_intf_t *ingress, eigrp_nbr_t *origin,
-			      uint16_t type)
+		      eigrp_route_descriptor_t *route, const char *ip,
+		      uint32_t local, uint32_t predecessor,
+		      eigrp_intf_t *ingress, eigrp_nbr_t *origin, uint16_t type)
 {
 	memset(prefix, 0, sizeof(*prefix));
 	memset(route, 0, sizeof(*route));
@@ -134,11 +144,14 @@ int main(void)
 	ic.interface_name = "eth12";
 	ic.summaries = &sc;
 	sc.prefix = pfx("10.30.0.0", 16);
-	component(&p1, &r1, "10.30.1.0", 7864320, 7208960,
-		  &ingress, &neighbor, EIGRP_TLV_IPv4_INT);
-	component(&p2, &r2, "10.30.2.0", 13762560, 13107200,
-		  &ingress, &neighbor, EIGRP_TLV_IPv4_INT);
-	topology.head = &n1; n1.info = &p1; n1.next = &n2; n2.info = &p2;
+	component(&p1, &r1, "10.30.1.0", 7864320, 7208960, &ingress, &neighbor,
+		  EIGRP_TLV_IPv4_INT);
+	component(&p2, &r2, "10.30.2.0", 13762560, 13107200, &ingress,
+		  &neighbor, EIGRP_TLV_IPv4_INT);
+	topology.head = &n1;
+	n1.info = &p1;
+	n1.next = &n2;
+	n2.info = &p2;
 
 	assert(eigrp_summary_route_build(&eigrp, &out, &p1, &r1, &sp, &sr));
 	assert(sr.metric.delay == r1.total_metric.delay);
@@ -168,7 +181,8 @@ int main(void)
 
 	/* Local connected subnet under outgoing summary is not split-horizon
 	 * poisoned, even though its component interface is the outgoing one. */
-	r2.ei = &out; r2.adv_router = &self;
+	r2.ei = &out;
+	r2.adv_router = &self;
 	assert(eigrp_summary_route_build(&eigrp, &out, &p2, &r2, &sp, &sr));
 	assert(sr.metric.delay != EIGRP_MAX_METRIC && sr.ei == NULL);
 	++tests;
@@ -180,14 +194,16 @@ int main(void)
 	p2.distance = EIGRP_MAX_METRIC;
 	assert(eigrp_summary_route_build(&eigrp, &out, &p2, &r2, &sp, &sr));
 	assert(sr.metric.delay == r2.total_metric.delay);
-	assert(eigrp_summary_query_route_build(&eigrp, &out, &sc.prefix, &sp, &sr));
+	assert(eigrp_summary_query_route_build(&eigrp, &out, &sc.prefix, &sp,
+					       &sr));
 	assert(sr.metric.delay == r2.total_metric.delay);
 	p2.distance = r2.distance;
 	p2.nt = EIGRP_TOPOLOGY_TYPE_REMOTE;
 	++tests;
 
 	/* A route learned over that interface must not support an aggregate
-	 * back to the same neighbor; choose an independent source if present. */
+	 * back to the same neighbor; choose an independent source if present.
+	 */
 	r2.adv_router = &neighbor;
 	assert(eigrp_summary_route_build(&eigrp, &out, &p2, &r2, &sp, &sr));
 	assert(sr.metric.delay == EIGRP_MAX_METRIC);
@@ -198,7 +214,8 @@ int main(void)
 	assert(sr.metric.delay == r1.total_metric.delay);
 	++tests;
 
-	/* Metric override takes precedence only while a live component exists. */
+	/* Metric override takes precedence only while a live component exists.
+	 */
 	af.summary_state = &state;
 	state.metrics = &override;
 	override.prefix = sc.prefix;
@@ -221,26 +238,35 @@ int main(void)
 
 	/* A QUERY for a suppressed component must receive an unreachable reply;
 	 * an exact summary QUERY is answered from reachable components. */
-	r2.ei = &ingress; r2.adv_router = &neighbor;
-	assert(eigrp_summary_query_route_build(&eigrp, &out, &sc.prefix, &sp, &sr));
-	assert(sr.metric.delay == r2.total_metric.delay || sr.metric.delay == 100);
-	assert(eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp, &sr));
-	assert(sr.metric.delay == EIGRP_MAX_METRIC && sr.type == EIGRP_TLV_IPv4_INT);
+	r2.ei = &ingress;
+	r2.adv_router = &neighbor;
+	assert(eigrp_summary_query_route_build(&eigrp, &out, &sc.prefix, &sp,
+					       &sr));
+	assert(sr.metric.delay == r2.total_metric.delay
+	       || sr.metric.delay == 100);
+	assert(eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp,
+					       &sr));
+	assert(sr.metric.delay == EIGRP_MAX_METRIC
+	       && sr.type == EIGRP_TLV_IPv4_INT);
 	assert(sr.distance == EIGRP_MAX_METRIC && sr.adv_router == &self);
-	assert(!eigrp_summary_query_route_build(&eigrp, &out,
-						  &(eigrp_prefix_t){0}, &sp, &sr));
+	assert(!eigrp_summary_query_route_build(
+		&eigrp, &out, &(eigrp_prefix_t){0}, &sp, &sr));
 	++tests;
 
-	/* Deliberate leak-map permits normal DUAL processing; deny suppresses. */
+	/* Deliberate leak-map permits normal DUAL processing; deny suppresses.
+	 */
 	sc.leak_map = "test-leak";
 	leak_permit = true;
-	assert(!eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp, &sr));
+	assert(!eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp,
+						&sr));
 	leak_permit = false;
-	assert(eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp, &sr));
+	assert(eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp,
+					       &sr));
 	assert(sr.metric.delay == EIGRP_MAX_METRIC);
 	++tests;
 
-	/* Infinity with no fallback even without an explicit metric override. */
+	/* Infinity with no fallback even without an explicit metric override.
+	 */
 	af.summary_state = NULL;
 	remote_metric = sr.distance;
 	assert(remote_metric == EIGRP_MAX_METRIC);
@@ -248,7 +274,8 @@ int main(void)
 	assert(sr.metric.delay == r2.total_metric.delay);
 	r2.distance = p2.distance = EIGRP_MAX_METRIC;
 	assert(eigrp_summary_route_build(&eigrp, &out, &p1, &r1, &sp, &sr));
-	assert(sr.metric.delay == EIGRP_MAX_METRIC && sr.distance == EIGRP_MAX_METRIC);
+	assert(sr.metric.delay == EIGRP_MAX_METRIC
+	       && sr.distance == EIGRP_MAX_METRIC);
 	++tests;
 
 	printf("PASS: %d summary implementation cases\\n", tests);

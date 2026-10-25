@@ -29,7 +29,7 @@ def process_executable(tmp_path_factory):
         f"-I{ROOT}", f"-I{ROOT / 'test' / 'build' / 'include'}",
         str(TEST_SOURCE), *(str(CODE / file) for file in sources),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
-        "-pthread", "-o", str(binary),
+        "-pthread", "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), "-o", str(binary),
     ]
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

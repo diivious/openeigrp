@@ -18,7 +18,7 @@ def test_interface_lifecycle_transmit():
     with tempfile.TemporaryDirectory() as folder:
         binary = Path(folder) / "interface_lifecycle"
         subprocess.run(["cc", *flags, str(source), str(CODE / "eigrp_stream.c"),
-                        str(CODE / "eigrp_list.c"), gc_flag, "-o", str(binary)], check=True)
+                        str(CODE / "eigrp_list.c"), gc_flag, "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
 
 

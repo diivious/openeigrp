@@ -8,6 +8,7 @@ vtysh_daemons += eigrpd
 man8 += $(MANBUILD)/frr-eigrpd.8
 endif
 
+# eigrp_frr.c also provides FRR host formatting for the portable core.
 eigrpd_eigrpd_SOURCES = \
 	eigrpd/eigrp_auth.c \
 	eigrpd/eigrp_checksum.c \

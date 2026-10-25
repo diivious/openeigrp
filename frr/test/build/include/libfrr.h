@@ -3,6 +3,8 @@
 
 #include <zebra.h>
 
-static inline void frr_fini(void) {}
+static inline void frr_fini(void)
+{
+}
 
 #endif /* EIGRP_TEST_LIBFRR_H */

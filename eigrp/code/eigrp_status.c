@@ -9,13 +9,13 @@
 #include "eigrp_features.h"
 
 
-eigrp_result_t eigrp_status_capability_state_read(
-	eigrp_status_capability_state_t *state)
+eigrp_result_t
+eigrp_status_capability_state_read(eigrp_status_capability_state_t *state)
 {
 	if (!state)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	*state = (eigrp_status_capability_state_t) {
+	*state = (eigrp_status_capability_state_t){
 		.release = EIGRP_RELEASE,
 		.tlv1 = true,
 		.tlv2 = true,
@@ -33,8 +33,8 @@ struct eigrp_status_iterate_context {
 	void *arg;
 };
 
-static eigrp_result_t eigrp_status_af(
-	const char *instance_name, eigrp_af_config_t *af, void *arg)
+static eigrp_result_t eigrp_status_af(const char *instance_name,
+				      eigrp_af_config_t *af, void *arg)
 {
 	struct eigrp_status_iterate_context *context = arg;
 	eigrp_status_protocol_state_t state = {
@@ -53,7 +53,7 @@ static eigrp_result_t eigrp_status_af(
 }
 
 static eigrp_result_t eigrp_status_iterate(eigrp_status_protocol_cb callback,
-					void *arg)
+					   void *arg)
 {
 	struct eigrp_status_iterate_context context = {
 		.callback = callback,
@@ -70,8 +70,8 @@ static eigrp_result_t eigrp_status_iterate(eigrp_status_protocol_cb callback,
 
 	if (eigrp_afi_supported(EIGRP_AFI_IPV4)) {
 		request.afi = EIGRP_AFI_IPV4;
-		ipv4_result = eigrp_af_config_iterate(
-			&request, eigrp_status_af, &context);
+		ipv4_result = eigrp_af_config_iterate(&request, eigrp_status_af,
+						      &context);
 		if (ipv4_result != EIGRP_RESULT_SUCCESS
 		    && ipv4_result != EIGRP_RESULT_NOT_FOUND)
 			return ipv4_result;
@@ -79,8 +79,8 @@ static eigrp_result_t eigrp_status_iterate(eigrp_status_protocol_cb callback,
 
 	if (eigrp_afi_supported(EIGRP_AFI_IPV6)) {
 		request.afi = EIGRP_AFI_IPV6;
-		ipv6_result = eigrp_af_config_iterate(
-			&request, eigrp_status_af, &context);
+		ipv6_result = eigrp_af_config_iterate(&request, eigrp_status_af,
+						      &context);
 		if (ipv6_result != EIGRP_RESULT_SUCCESS
 		    && ipv6_result != EIGRP_RESULT_NOT_FOUND)
 			return ipv6_result;
@@ -100,10 +100,11 @@ static eigrp_result_t eigrp_status_iterate(eigrp_status_protocol_cb callback,
  *   Operational/read-only
  * Description:
  * Aggregates configured/running EIGRP protocol instances for display.
- * The target walks common address-family state and leaves VTY formatting to FRR.
+ * The target walks common address-family state and leaves VTY formatting to
+ * FRR.
  */
 eigrp_result_t eigrp_status_protocol_iterate(eigrp_status_protocol_cb callback,
-					  void *arg)
+					     void *arg)
 {
 	return eigrp_status_iterate(callback, arg);
 }
@@ -118,8 +119,8 @@ eigrp_result_t eigrp_status_protocol_iterate(eigrp_status_protocol_cb callback,
  * Exports EIGRP protocol state used by the technical-support display.
  * The portable target remains independent of FRR VTY formatting.
  */
-eigrp_result_t eigrp_status_tech_support_iterate(eigrp_status_protocol_cb callback,
-					      void *arg)
+eigrp_result_t
+eigrp_status_tech_support_iterate(eigrp_status_protocol_cb callback, void *arg)
 {
 	return eigrp_status_iterate(callback, arg);
 }

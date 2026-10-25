@@ -129,7 +129,7 @@ These still build the UUT first. For a source-only portable test without an FRR
 build, use the project test target directly:
 
 ```sh
-make portable-test
+make uut
 ```
 
 To force bootstrap/configure before the UUT build:

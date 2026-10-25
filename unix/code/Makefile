@@ -5,7 +5,7 @@ CFLAGS ?= -O2 -g
 CPPFLAGS += -I../../eigrp/code -I.
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -pthread
 
-OBJS = eigrp_unix_sys.o eigrp_unix_config.o eigrp_unix_rib.o eigrp_unix_interface.o eigrp_unix_segment.o eigrp_unix_wire.o eigrp_unix_policy.o eigrp_unix_keychain.o eigrp_log.o
+OBJS = eigrp_unix_sys.o eigrp_unix_format.o eigrp_unix_config.o eigrp_unix_rib.o eigrp_unix_interface.o eigrp_unix_segment.o eigrp_unix_wire.o eigrp_unix_policy.o eigrp_unix_keychain.o eigrp_log.o
 
 .PHONY: all clean
 all: libeigrp-unix-runtime.a eigrp-wire

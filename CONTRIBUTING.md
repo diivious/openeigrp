@@ -43,7 +43,7 @@ Flow:
 2. Clone your fork
 3. Branch from current master
 4. Make the change in this tree
-5. Run the test gate in Section 7
+5. Run `make all` and record its result
 6. Push the branch
 7. Open a pull request against diivious/eigrp master
 ```
@@ -124,6 +124,25 @@ Rules:
 - Do not sort includes, rename locals, or wrap comments as a side effect.
 - Do not land drive-by cleanups in a feature or bug fix.
 
+Before committing, run `make check`. This checks staged, unstaged and
+untracked changes and runs the style-checker's executable regression tests.
+`make check SOURCE=all` checks the entire tree. Fix all reported violations;
+CI checks the pushed or proposed-merge diff using `STYLE_CHECK_BASE`.
+
+**Before opening a pull request for merge, run `make all` locally.** It runs
+build, full-tree style validation, all portable pytest/YAML UUT scenarios,
+and the quick scale gate, sequentially. Do not open the PR if a stage fails.
+If host limitations prevent a stage, disclose the unverified stage in the PR
+rather than describing the gate as passed.
+
+C source checks require `clang-format` on `PATH` (install with Homebrew or the
+host package manager). The check enforces whitespace hygiene, C formatting,
+and a small set of unsafe C library calls. In `frr/code/`, use FRR's
+`snprintfrr()` rather than `snprintf()`; portable `eigrp/code/` must not depend
+on FRR APIs. The remaining semantic naming and architecture rules in
+`specs/code-conventions.md` still require review; they are not inferred
+mechanically by this checker.
+
 If a file is messy and you want to clean it, say so to the repo moderators
 before you touch it. Unrelated style churn will be rejected.
 
@@ -148,18 +167,18 @@ New files use the copyright of the person who wrote them.
 From the repository root, the normal standalone development loop is:
 
 ```sh
-make
-make test
+make                # Build
+make all            # Required before opening a merge PR
 ```
 
-`make` builds `eigrp/code` plus `unix/code`. `make test` is the authoritative
-portable/core gate: portable build validation, `eigrp/test`, `unix/test`, the
+`make` builds `eigrp/code` plus `unix/code`. `make all` is the
+pre-merge gate, with `make uut` providing the portable/core tests: portable build validation, `eigrp/test`, `unix/test`, the
 IPv4 and IPv6 Basic Core Gates, and the RTP Core Gate. It requires no FRR/BIRD
 checkout or VM, root privileges, or host VLAN configuration, and it never
 invokes platform tooling implicitly.
 
-GitHub Actions executes this same gate on Linux and macOS; it does not reproduce
-the individual build/test targets in workflow YAML. See
+GitHub Actions executes the build, style, and UUT stages on Linux and macOS;
+the local `make all` additionally includes the quick scale gate. See
 the root `Makefile` and `.github/workflows/` for the hosted CI contract.
 
 For protocol changes that also require FRR platform validation, move to the FRR

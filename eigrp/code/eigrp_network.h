@@ -24,33 +24,32 @@
 /* IPv4/IPv6 prefix and address management functions
  * might move to eigrp_addr.h if this grows
  */
-static inline const char *
-eigrp_print_addr(eigrp_addr_t *addr)
+static inline const char *eigrp_print_addr(eigrp_addr_t *addr)
 {
-    static char buffers[4][INET6_ADDRSTRLEN];
-    static unsigned int next;
-    char *buffer;
+	static char buffers[4][INET6_ADDRSTRLEN];
+	static unsigned int next;
+	char *buffer;
 
-    if (!addr)
-        return "<null>";
-    buffer = buffers[next++ % 4U];
-    if (addr->afi == AF_INET6) {
-        if (!inet_ntop(AF_INET6, &addr->ip.v6, buffer, INET6_ADDRSTRLEN))
-            return "<invalid>";
-        return buffer;
-    }
-    if (addr->afi == AF_INET) {
-        if (!inet_ntop(AF_INET, &addr->ip.v4, buffer, INET6_ADDRSTRLEN))
-            return "<invalid>";
-        return buffer;
-    }
-    return "<unknown-af>";
+	if (!addr)
+		return "<null>";
+	buffer = buffers[next++ % 4U];
+	if (addr->afi == AF_INET6) {
+		if (!inet_ntop(AF_INET6, &addr->ip.v6, buffer,
+			       INET6_ADDRSTRLEN))
+			return "<invalid>";
+		return buffer;
+	}
+	if (addr->afi == AF_INET) {
+		if (!inet_ntop(AF_INET, &addr->ip.v4, buffer, INET6_ADDRSTRLEN))
+			return "<invalid>";
+		return buffer;
+	}
+	return "<unknown-af>";
 }
 
-static inline const char *
-eigrp_print_routerid(struct in_addr ipv4)
+static inline const char *eigrp_print_routerid(struct in_addr ipv4)
 {
-    return inet_ntoa(ipv4);
+	return inet_ntoa(ipv4);
 }
 
 
@@ -60,13 +59,13 @@ eigrp_result_t eigrp_network_create(eigrp_instance_context_t *context,
 eigrp_result_t eigrp_network_delete(eigrp_instance_context_t *context,
 				    const eigrp_prefix_t *prefix);
 void eigrp_network_config_delete_all(eigrp_af_config_t *af);
-eigrp_result_t eigrp_network_runtime_exists(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *prefix, bool *exists);
+eigrp_result_t eigrp_network_runtime_exists(eigrp_instance_t *eigrp,
+					    const eigrp_prefix_t *prefix,
+					    bool *exists);
 void eigrp_network_runtime_delete_all(eigrp_instance_t *eigrp);
 void eigrp_network_intfs_update(eigrp_instance_t *eigrp);
 void eigrp_network_intf_update(eigrp_instance_t *eigrp,
-	const eigrp_intf_runtime_state_t *state);
-
+			       const eigrp_intf_runtime_state_t *state);
 
 
 #endif /* EIGRP_NETWORK_H_ */

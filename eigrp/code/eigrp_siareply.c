@@ -30,7 +30,8 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 {
 	eigrp_debug_neighbor_sia(nbr, "SIA-REPLY received");
 	eigrp_debug_transmit_event(EIGRP_DEBUG_TRANSMIT_SIA, eigrp,
-				   nbr ? nbr->ei : NULL, nbr, "SIA-REPLY received");
+				   nbr ? nbr->ei : NULL, nbr,
+				   "SIA-REPLY received");
 	struct eigrp_fsm_action_message msg = {0};
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_route_descriptor_t *route;
@@ -44,9 +45,10 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			break;
 
 		prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						       &route->dest);
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SIA_REPLY_RX,
-			&route->dest, ei ? ei->ifindex : 0,
+						     &route->dest);
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_SIA_REPLY_RX, &route->dest,
+			ei ? ei->ifindex : 0,
 			(route->metric.flags & EIGRP_OPAQUE_ACTIVE) ? 1 : 0,
 			prefix ? prefix->state : EIGRP_FSM_STATE_PASSIVE, 0);
 		if (!prefix) {
@@ -54,8 +56,10 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 			eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 					      &route->dest);
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP SIA-REPLY: Neighbor(%s) sent unknown prefix %s",
-				   eigrp_print_addr(&nbr->src), prefix_buf);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"EIGRP SIA-REPLY: Neighbor(%s) sent unknown prefix %s",
+				eigrp_print_addr(&nbr->src), prefix_buf);
 			eigrp_topology_route_free(route);
 			continue;
 		}
@@ -66,16 +70,20 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			if (route->metric.flags & EIGRP_OPAQUE_ACTIVE)
 				eigrp_fsm_sia_reply_received(prefix, nbr);
 			else {
-				/* A non-ACTIVE SIA-REPLY says convergence completed.
-				 * Treat it as the outstanding REPLY through DUAL. */
+				/* A non-ACTIVE SIA-REPLY says convergence
+				 * completed. Treat it as the outstanding REPLY
+				 * through DUAL. */
 				msg.packet_type = EIGRP_OPC_REPLY;
 				msg.eigrp = eigrp;
-				msg.data_type = (route->type == EIGRP_TLV_IPv4_EXT
-						 || route->type == EIGRP_TLV_IPv6_EXT
-						 || route->type == EIGRP_TLV_MP_EXT)
-						? EIGRP_EXT : EIGRP_INT;
+				msg.data_type =
+					(route->type == EIGRP_TLV_IPv4_EXT
+					 || route->type == EIGRP_TLV_IPv6_EXT
+					 || route->type == EIGRP_TLV_MP_EXT)
+						? EIGRP_EXT
+						: EIGRP_INT;
 				msg.adv_router = nbr;
-				msg.route = eigrp_prefix_descriptor_lookup(prefix, nbr);
+				msg.route = eigrp_prefix_descriptor_lookup(
+					prefix, nbr);
 				if (!msg.route) {
 					route->adv_router = nbr;
 					route->prefix = prefix;
@@ -84,9 +92,12 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				}
 				msg.metrics = route->metric;
 				msg.prefix = prefix;
-				msg.transient_route = route_retained &&
-					!eigrp_nbr_route_admit(eigrp, nbr, &prefix->destination,
-								   &msg.metrics);
+				msg.transient_route =
+					route_retained
+					&& !eigrp_nbr_route_admit(
+						eigrp, nbr,
+						&prefix->destination,
+						&msg.metrics);
 				eigrp_fsm_event(&msg);
 				if (msg.transient_route)
 					route_retained = false;
@@ -104,10 +115,11 @@ void eigrp_siareply_send(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 	eigrp_debug_neighbor_sia(nbr, "SIA-REPLY send");
 	eigrp_debug_transmit_event(EIGRP_DEBUG_TRANSMIT_SIA, eigrp,
-				   nbr ? nbr->ei : NULL, nbr, "queue SIA-REPLY");
-	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_SIA_REPLY_TX,
-		&prefix->destination, nbr && nbr->ei ? nbr->ei->ifindex : 0,
-		active ? 1 : 0, 0, 0);
+				   nbr ? nbr->ei : NULL, nbr,
+				   "queue SIA-REPLY");
+	(void)eigrp_eventlog_msg_add(
+		eigrp, EIGRP_EVENTLOG_OPCODE_SIA_REPLY_TX, &prefix->destination,
+		nbr && nbr->ei ? nbr->ei->ifindex : 0, active ? 1 : 0, 0, 0);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_SIAREPLY);
 	work->nbr = nbr;
 	work->prefix = prefix;

@@ -160,8 +160,8 @@ static uint16_t eigrp_tlv1_metric_encode(eigrp_stream_t *pkt,
 	return EIGRP_TLV1_METRIC_SIZE;
 }
 
-static uint16_t eigrp_tlv1_route_tlv_type(
-	const eigrp_instance_t *eigrp, const eigrp_route_descriptor_t *route)
+static uint16_t eigrp_tlv1_route_tlv_type(const eigrp_instance_t *eigrp,
+					  const eigrp_route_descriptor_t *route)
 {
 	if (!eigrp || !route)
 		return 0;
@@ -222,7 +222,8 @@ static eigrp_route_descriptor_t *eigrp_tlv1_decoder(eigrp_instance_t *eigrp,
 			eigrp_tlv1_decode_abort(pkt);
 
 		if (eigrp_debug_packet_any_enabled(EIGRP_DEBUG_RECV)) {
-			eigrp_log(EIGRP_LOG_DEBUG,
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
 				"EIGRP TLV: Neighbor(%s): invalid TLV_type(%u)",
 				eigrp_print_addr(&nbr->src), type);
 		}
@@ -232,9 +233,11 @@ static eigrp_route_descriptor_t *eigrp_tlv1_decoder(eigrp_instance_t *eigrp,
 	min_length = eigrp_tlv1_min_length(eigrp, external);
 	if (length < min_length || length > remaining) {
 		if (eigrp_debug_packet_any_enabled(EIGRP_DEBUG_RECV)) {
-			eigrp_log(EIGRP_LOG_DEBUG,
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
 				"EIGRP TLV: Neighbor(%s) corrupt packet type=%u length=%u remaining=%zu",
-				eigrp_print_addr(&nbr->src), type, length, remaining);
+				eigrp_print_addr(&nbr->src), type, length,
+				remaining);
 		}
 		eigrp_tlv1_decode_abort(pkt);
 		return NULL;
@@ -273,8 +276,8 @@ static eigrp_route_descriptor_t *eigrp_tlv1_decoder(eigrp_instance_t *eigrp,
 	/*
 	 * RFC 7868 allows more than one destination in the TLV.  This
 	 * implementation currently consumes one route descriptor and skips any
-	 * remaining destinations so the next decoder pass starts on the next TLV
-	 * boundary.
+	 * remaining destinations so the next decoder pass starts on the next
+	 * TLV boundary.
 	 */
 	decoded = eigrp->af_vectors.packet_prefix_decode(pkt, &route->dest);
 	if (!decoded)
@@ -290,7 +293,8 @@ static eigrp_route_descriptor_t *eigrp_tlv1_decoder(eigrp_instance_t *eigrp,
 
 malformed:
 	if (eigrp_debug_packet_any_enabled(EIGRP_DEBUG_RECV)) {
-		eigrp_log(EIGRP_LOG_DEBUG,
+		eigrp_log(
+			EIGRP_LOG_DEBUG,
 			"EIGRP TLV: Neighbor(%s) malformed TLV type=%u length=%u decoded=%u",
 			eigrp_print_addr(&nbr->src), type, length, bytes);
 	}
@@ -300,10 +304,8 @@ malformed:
 	return NULL;
 }
 
-static uint16_t eigrp_tlv1_encoder(eigrp_instance_t *eigrp,
-				   eigrp_intf_t *ei,
-				   eigrp_nbr_t *nbr,
-				   eigrp_stream_t *pkt,
+static uint16_t eigrp_tlv1_encoder(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				   eigrp_nbr_t *nbr, eigrp_stream_t *pkt,
 				   eigrp_route_descriptor_t *route)
 {
 	const eigrp_prefix_t *filter_prefix;
@@ -319,20 +321,25 @@ static uint16_t eigrp_tlv1_encoder(eigrp_instance_t *eigrp,
 	if (!ei && nbr)
 		ei = nbr->ei;
 
-	filter_prefix = route->prefix ? &route->prefix->destination : &route->dest;
+	filter_prefix =
+		route->prefix ? &route->prefix->destination : &route->dest;
 	if (ei && filter_prefix
 	    && eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_OUT,
-					filter_prefix)) {
-		eigrp_log(EIGRP_LOG_INFO, "Prefix Filtered:  Setting Metric to EIGRP_MAX_METRIC");
+					  filter_prefix)) {
+		eigrp_log(
+			EIGRP_LOG_INFO,
+			"Prefix Filtered:  Setting Metric to EIGRP_MAX_METRIC");
 		route->metric.delay = EIGRP_MAX_METRIC;
 	}
 
 	type = eigrp_tlv1_route_tlv_type(eigrp, route);
 	if (!type) {
 		if (eigrp_debug_packet_any_enabled(EIGRP_DEBUG_SEND)) {
-			eigrp_log(EIGRP_LOG_DEBUG, "Neighbor(%s): invalid TLV_type(%u)",
-				   nbr ? eigrp_print_addr(&nbr->src) : "multicast",
-				   route->type);
+			eigrp_log(EIGRP_LOG_DEBUG,
+				  "Neighbor(%s): invalid TLV_type(%u)",
+				  nbr ? eigrp_print_addr(&nbr->src)
+				      : "multicast",
+				  route->type);
 		}
 		return 0;
 	}
@@ -351,7 +358,8 @@ static uint16_t eigrp_tlv1_encoder(eigrp_instance_t *eigrp,
 	eigrp_tlv1_metric_encode(pkt, &route->metric);
 
 	encoded = eigrp->af_vectors.packet_prefix_encode(
-		pkt, route->prefix ? &route->prefix->destination : &route->dest);
+		pkt,
+		route->prefix ? &route->prefix->destination : &route->dest);
 	if (!encoded)
 		goto encode_failed;
 

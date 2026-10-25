@@ -35,47 +35,68 @@ void eigrp_log(eigrp_log_level_t level, const char *format, ...)
 	(void)format;
 }
 bool eigrp_debug_af_enabled(eigrp_instance_t *eigrp,
-                            eigrp_debug_af_category_t category,
-                            const eigrp_addr_t *neighbor)
+			    eigrp_debug_af_category_t category,
+			    const eigrp_addr_t *neighbor)
 {
-	(void)eigrp; (void)category; (void)neighbor;
+	(void)eigrp;
+	(void)category;
+	(void)neighbor;
 	return false;
 }
-eigrp_result_t eigrp_eventlog_msg_add(eigrp_instance_t *eigrp,
-    uint16_t opcode, const eigrp_prefix_t *addr, eventmsg_arg_t a,
-    eventmsg_arg_t b, eventmsg_arg_t c, eventmsg_arg_t d)
+eigrp_result_t eigrp_eventlog_msg_add(eigrp_instance_t *eigrp, uint16_t opcode,
+				      const eigrp_prefix_t *addr,
+				      eventmsg_arg_t a, eventmsg_arg_t b,
+				      eventmsg_arg_t c, eventmsg_arg_t d)
 {
-	(void)eigrp; (void)opcode; (void)addr;
-	(void)a; (void)b; (void)c; (void)d;
+	(void)eigrp;
+	(void)opcode;
+	(void)addr;
+	(void)a;
+	(void)b;
+	(void)c;
+	(void)d;
 	return EIGRP_RESULT_SUCCESS;
 }
 eigrp_result_t eigrp_instance_rib_event_enqueue(eigrp_instance_t *eigrp,
-    eigrp_rib_event_type_t type, const eigrp_rib_route_t *route)
+						eigrp_rib_event_type_t type,
+						const eigrp_rib_route_t *route)
 {
-	(void)eigrp; (void)type; (void)route;
+	(void)eigrp;
+	(void)type;
+	(void)route;
 	return EIGRP_RESULT_SUCCESS;
 }
 eigrp_result_t eigrp_rib_route_add(eigrp_instance_t *eigrp,
-    const eigrp_rib_route_t *route)
+				   const eigrp_rib_route_t *route)
 {
-	(void)eigrp; (void)route;
+	(void)eigrp;
+	(void)route;
 	installs++;
 	return EIGRP_RESULT_SUCCESS;
 }
 eigrp_result_t eigrp_rib_route_del(eigrp_instance_t *eigrp,
-    const eigrp_prefix_t *prefix)
+				   const eigrp_prefix_t *prefix)
 {
-	(void)eigrp; (void)prefix;
+	(void)eigrp;
+	(void)prefix;
 	withdrawals++;
 	return EIGRP_RESULT_SUCCESS;
 }
 void eigrp_update_send_all(eigrp_instance_t *eigrp, eigrp_intf_t *exception)
 {
-	(void)eigrp; (void)exception;
+	(void)eigrp;
+	(void)exception;
 	updates++;
 }
-void eigrp_query_send_all(eigrp_instance_t *eigrp) { (void)eigrp; }
-void eigrp_sys_event_cancel(eigrp_event_t **e) { if (e) *e = NULL; }
+void eigrp_query_send_all(eigrp_instance_t *eigrp)
+{
+	(void)eigrp;
+}
+void eigrp_sys_event_cancel(eigrp_event_t **e)
+{
+	if (e)
+		*e = NULL;
+}
 
 static void init_runtime(eigrp_instance_t *eigrp, eigrp_nbr_t *self)
 {
@@ -110,8 +131,9 @@ static eigrp_metrics_t metric(void)
  * eigrp_query_unknown_route_record(), without invoking route_descriptor_add()
  * (which would install an un-elected path in the RIB). */
 static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
-    eigrp_nbr_t *nbr, eigrp_intf_t *link, unsigned id, bool external,
-    bool elected, bool self)
+					  eigrp_nbr_t *nbr, eigrp_intf_t *link,
+					  unsigned id, bool external,
+					  bool elected, bool self)
 {
 	eigrp_prefix_descriptor_t *pfx = eigrp_topology_prefix_create();
 	eigrp_route_descriptor_t *r = eigrp_topology_route_create(link);
@@ -125,17 +147,18 @@ static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
 	pfx->destination.prefix_length = 32;
 	pfx->state = EIGRP_FSM_STATE_PASSIVE;
 	pfx->nt = external ? EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
-	                   : (self ? EIGRP_TOPOLOGY_TYPE_CONNECTED
-	                           : EIGRP_TOPOLOGY_TYPE_REMOTE);
+			   : (self ? EIGRP_TOPOLOGY_TYPE_CONNECTED
+				   : EIGRP_TOPOLOGY_TYPE_REMOTE);
 	pfx->reported_metric.delay = EIGRP_MAX_METRIC;
 	r->type = external ? EIGRP_TLV_IPv4_EXT : EIGRP_TLV_IPv4_INT;
 	r->dest = pfx->destination;
 	r->prefix = pfx;
 	r->adv_router = self ? eigrp->neighbor_self : nbr;
 	r->metric = r->reported_metric = r->total_metric = metric();
-	r->reported_distance = self ? 0 : eigrp_metric_calculate(eigrp, r->reported_metric);
+	r->reported_distance =
+		self ? 0 : eigrp_metric_calculate(eigrp, r->reported_metric);
 	r->distance = self ? eigrp_metric_calculate(eigrp, r->metric)
-	                   : eigrp_metric_total_calculate(eigrp, r);
+			   : eigrp_metric_total_calculate(eigrp, r);
 	assert(r->distance != EIGRP_MAX_METRIC);
 	if (elected) {
 		pfx->distance = pfx->fdistance = pfx->rdistance = r->distance;
@@ -149,7 +172,7 @@ static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
 }
 
 static void assert_unelected(eigrp_instance_t *eigrp,
-                            eigrp_route_descriptor_t *route)
+			     eigrp_route_descriptor_t *route)
 {
 	eigrp_prefix_descriptor_t *pfx = route->prefix;
 	assert(pfx->state == EIGRP_FSM_STATE_PASSIVE);
@@ -159,8 +182,9 @@ static void assert_unelected(eigrp_instance_t *eigrp,
 	assert(pfx->reported_metric.delay == EIGRP_MAX_METRIC);
 	assert(route->distance != EIGRP_MAX_METRIC);
 	assert(route->reported_distance != EIGRP_MAX_METRIC);
-	assert(!(route->flags & (EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG |
-	                         EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG)));
+	assert(!(route->flags
+		 & (EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
+		    | EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG)));
 	assert(!pfx->req_action);
 	assert(!eigrp_list_lookup(eigrp->topology_changes, pfx));
 }
@@ -184,7 +208,8 @@ int main(void)
 	orig_ri = retained_int->distance;
 	orig_re = retained_ext->distance;
 
-	/* Recalculation must still refresh route metrics, just not elect them. */
+	/* Recalculation must still refresh route metrics, just not elect them.
+	 */
 	link.params.delay = 350;
 	eigrp.k_values[0] = 2;
 	for (unsigned pass = 0; pass < 3; pass++) {
@@ -201,7 +226,8 @@ int main(void)
 	assert(withdrawals == 0);
 
 	/* A locally originated redistributed route may legitimately recover
-	 * from infinity, even if all prefix metrics currently indicate poison. */
+	 * from infinity, even if all prefix metrics currently indicate poison.
+	 */
 	local = add_path(&eigrp, &self, NULL, 13, true, false, true);
 	eigrp_topology_metric_update(&eigrp);
 	assert(local->prefix->distance == local->distance);
@@ -212,8 +238,8 @@ int main(void)
 	connected = add_path(&eigrp, &self, &link, 14, false, false, true);
 	eigrp_topology_metric_update(&eigrp);
 	assert(connected->prefix->distance == connected->distance);
-	assert(connected->prefix->reported_metric.delay ==
-	       eigrp_delay_to_scaled(link.params.delay));
+	assert(connected->prefix->reported_metric.delay
+	       == eigrp_delay_to_scaled(link.params.delay));
 	assert(connected->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
 	assert_unelected(&eigrp, retained_int);
 	assert_unelected(&eigrp, retained_ext);

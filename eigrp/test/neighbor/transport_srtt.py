@@ -65,7 +65,7 @@ def test_karn_rule_rejects_retransmitted_packets_and_samples_successful_send_tim
     assert "eigrp_packet_reliable_send_update(ei, packet);" in packet
     assert "for (EIGRP_LIST_ITERATE_RO(ei->nbrs, node, nbr))" in packet
     assert "packet->sequence_number, now_msec" in packet
-    assert "packet->sequence_number == 0 || packet->retransmission" in packet
+    assert "packet->sequence_number==0||packet->retransmission" in "".join(packet.split())
     assert "eigrp_packet_retransmit_timer_start(nbr);" in packet
 
 

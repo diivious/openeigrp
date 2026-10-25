@@ -28,16 +28,17 @@
 #include "eigrp_filter.h"
 
 void eigrp_reply_send_route(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
-			   eigrp_prefix_descriptor_t *prefix,
-			   eigrp_route_descriptor_t *route, uint32_t flags)
+			    eigrp_prefix_descriptor_t *prefix,
+			    eigrp_route_descriptor_t *route, uint32_t flags)
 {
 	eigrp_packetizer_work_t *work;
 
 	if (!eigrp || !nbr || !prefix)
 		return;
 
-	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_REPLY_TX,
-		&prefix->destination, nbr->ei ? nbr->ei->ifindex : 0,
+	(void)eigrp_eventlog_msg_add(
+		eigrp, EIGRP_EVENTLOG_OPCODE_REPLY_TX, &prefix->destination,
+		nbr->ei ? nbr->ei->ifindex : 0,
 		route ? route->distance : prefix->distance, 0, 0);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_REPLY);
 	work->nbr = nbr;
@@ -73,17 +74,19 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 		route = (nbr->decoder)(eigrp, nbr, pkt, length);
 		if (!route) {
-			/* A decoder failure must consume input or terminate the walk.
-			 * Otherwise a malformed TLV can spin this receive callback. */
+			/* A decoder failure must consume input or terminate the
+			 * walk. Otherwise a malformed TLV can spin this receive
+			 * callback. */
 			if (pkt->getp == tlv_start)
 				return;
 			continue;
 		}
 
 		prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						       &route->dest);
-		(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_REPLY_RX,
-			&route->dest, route->distance,
+						     &route->dest);
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_REPLY_RX, &route->dest,
+			route->distance,
 			prefix ? prefix->distance : EIGRP_MAX_METRIC,
 			ei ? ei->ifindex : 0, 0);
 		if (!prefix) {
@@ -91,8 +94,10 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 			eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
 					      &route->dest);
-			eigrp_log(EIGRP_LOG_DEBUG, "EIGRP REPLY: Neighbor(%s) sent unknown prefix %s",
-				   eigrp_print_addr(&nbr->src), prefix_buf);
+			eigrp_log(
+				EIGRP_LOG_DEBUG,
+				"EIGRP REPLY: Neighbor(%s) sent unknown prefix %s",
+				eigrp_print_addr(&nbr->src), prefix_buf);
 			eigrp_topology_route_free(route);
 			continue;
 		}
@@ -124,17 +129,19 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		msg.data_type = (received_route->type == EIGRP_TLV_IPv4_EXT
 				 || received_route->type == EIGRP_TLV_IPv6_EXT
 				 || received_route->type == EIGRP_TLV_MP_EXT)
-					? EIGRP_EXT : EIGRP_INT;
+					? EIGRP_EXT
+					: EIGRP_INT;
 		msg.adv_router = nbr;
 		msg.route = route;
 		msg.metrics = received_route->metric;
 		if (eigrp_filter_prefix_update(eigrp, ei, EIGRP_FILTER_IN,
-						  &received_route->dest))
+					       &received_route->dest))
 			msg.metrics.delay = EIGRP_MAX_METRIC;
 		msg.prefix = prefix;
-		msg.transient_route = !topology_route &&
-			!eigrp_nbr_route_admit(eigrp, nbr, &prefix->destination,
-						   &msg.metrics);
+		msg.transient_route =
+			!topology_route
+			&& !eigrp_nbr_route_admit(
+				eigrp, nbr, &prefix->destination, &msg.metrics);
 		eigrp_fsm_event(&msg);
 
 		if (free_received_route || msg.transient_route)

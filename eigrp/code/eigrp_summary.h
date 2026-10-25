@@ -13,19 +13,20 @@
 #include "eigrp_structs.h"
 #include "eigrp.h"
 
-eigrp_result_t eigrp_summary_create(
-	eigrp_intf_context_t *context, const eigrp_prefix_t *prefix,
-	const eigrp_summary_options_t *options);
-eigrp_result_t eigrp_summary_delete(
-	eigrp_intf_context_t *context, const eigrp_prefix_t *prefix);
+eigrp_result_t eigrp_summary_create(eigrp_intf_context_t *context,
+				    const eigrp_prefix_t *prefix,
+				    const eigrp_summary_options_t *options);
+eigrp_result_t eigrp_summary_delete(eigrp_intf_context_t *context,
+				    const eigrp_prefix_t *prefix);
 void eigrp_summary_delete_all(eigrp_intf_config_t *interface);
 
 eigrp_result_t eigrp_summary_auto_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context);
-eigrp_result_t eigrp_summary_metric_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	const eigrp_prefix_t *prefix,
-	const eigrp_summary_metric_config_t *config);
+					 eigrp_instance_context_t *context);
+eigrp_result_t
+eigrp_summary_metric_update(eigrp_operation_t operation,
+			    eigrp_instance_context_t *context,
+			    const eigrp_prefix_t *prefix,
+			    const eigrp_summary_metric_config_t *config);
 void eigrp_summary_state_delete_all(eigrp_af_config_t *af);
 
 /* Runtime advertisement helpers used by UPDATE/packetizer paths. */

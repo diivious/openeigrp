@@ -39,8 +39,8 @@ static char *eigrp_unix_config_trim(char *line)
 	return line;
 }
 
-static eigrp_result_t eigrp_unix_config_parent_apply(
-	eigrp_unix_config_t *config, const char *line)
+static eigrp_result_t
+eigrp_unix_config_parent_apply(eigrp_unix_config_t *config, const char *line)
 {
 	const char *name = line + strlen("router eigrp ");
 	size_t length = strlen(name);
@@ -58,8 +58,8 @@ static eigrp_result_t eigrp_unix_config_parent_apply(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_unix_config_af_apply(
-	eigrp_unix_config_t *config, const char *line)
+static eigrp_result_t eigrp_unix_config_af_apply(eigrp_unix_config_t *config,
+						 const char *line)
 {
 	char family[16];
 	char extra;
@@ -69,10 +69,13 @@ static eigrp_result_t eigrp_unix_config_af_apply(
 
 	if (!config->instance_name[0])
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	if (sscanf(line, "address-family %15s autonomous-system %u %c",
-		   family, &asn, &extra) != 2
-	    && sscanf(line, "address-family %15s unicast autonomous-system %u %c",
-		      family, &asn, &extra) != 2)
+	if (sscanf(line, "address-family %15s autonomous-system %u %c", family,
+		   &asn, &extra)
+		    != 2
+	    && sscanf(line,
+		      "address-family %15s unicast autonomous-system %u %c",
+		      family, &asn, &extra)
+		       != 2)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (strcmp(family, "ipv4") != 0)
 		return EIGRP_RESULT_UNSUPPORTED;
@@ -80,9 +83,9 @@ static eigrp_result_t eigrp_unix_config_af_apply(
 	if (asn == 0 || asn > UINT16_MAX)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	result = eigrp_af_config_create(
-		config->instance_name, afi, EIGRP_UNIX_DEFAULT_VRF_NAME,
-		(uint16_t)asn);
+	result = eigrp_af_config_create(config->instance_name, afi,
+					EIGRP_UNIX_DEFAULT_VRF_NAME,
+					(uint16_t)asn);
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
 	config->address_family = eigrp_af_config_read(
@@ -95,8 +98,9 @@ static eigrp_result_t eigrp_unix_config_af_apply(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-static eigrp_result_t eigrp_unix_config_router_id_apply(
-	eigrp_unix_config_t *config, const char *value)
+static eigrp_result_t
+eigrp_unix_config_router_id_apply(eigrp_unix_config_t *config,
+				  const char *value)
 {
 	struct in_addr address;
 	eigrp_instance_context_t context = {0};
@@ -116,8 +120,8 @@ static eigrp_result_t eigrp_unix_config_router_id_apply(
 	return eigrp_instance_router_id_update(EIGRP_SET, &context, router_id);
 }
 
-static eigrp_result_t eigrp_unix_config_line_apply(
-	eigrp_unix_config_t *config, char *raw_line)
+static eigrp_result_t eigrp_unix_config_line_apply(eigrp_unix_config_t *config,
+						   char *raw_line)
 {
 	char *line = eigrp_unix_config_trim(raw_line);
 
@@ -134,13 +138,13 @@ static eigrp_result_t eigrp_unix_config_line_apply(
 		if (!config->address_family)
 			return EIGRP_RESULT_INVALID_ARGUMENT;
 		return eigrp_af_config_shutdown_update(EIGRP_SET,
-			config->address_family);
+						       config->address_family);
 	}
 	if (strcmp(line, "no shutdown") == 0) {
 		if (!config->address_family)
 			return EIGRP_RESULT_INVALID_ARGUMENT;
 		return eigrp_af_config_shutdown_update(EIGRP_RESET,
-			config->address_family);
+						       config->address_family);
 	}
 	if (strcmp(line, "exit-address-family") == 0) {
 		config->address_family = NULL;
@@ -169,7 +173,7 @@ void eigrp_unix_config_delete(eigrp_unix_config_t *config)
 }
 
 eigrp_result_t eigrp_unix_config_apply_file(eigrp_unix_config_t *config,
-	FILE *input, unsigned *error_line)
+					    FILE *input, unsigned *error_line)
 {
 	char line[EIGRP_UNIX_CONFIG_LINE_MAX];
 	unsigned line_number = 0;
@@ -198,7 +202,8 @@ eigrp_result_t eigrp_unix_config_apply_file(eigrp_unix_config_t *config,
 }
 
 eigrp_result_t eigrp_unix_config_apply_text(eigrp_unix_config_t *config,
-	const char *text, unsigned *error_line)
+					    const char *text,
+					    unsigned *error_line)
 {
 	FILE *input;
 	eigrp_result_t result;

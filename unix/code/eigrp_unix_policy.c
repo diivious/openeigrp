@@ -23,11 +23,11 @@ static bool uut_denied_active;
 
 void eigrp_unix_policy_uut_deny_set(const eigrp_prefix_t *prefix)
 {
-    uut_denied_active = prefix != NULL;
-    if (prefix) {
-        uut_denied_prefix = *prefix;
-        eigrp_prefix_normalize(&uut_denied_prefix);
-    }
+	uut_denied_active = prefix != NULL;
+	if (prefix) {
+		uut_denied_prefix = *prefix;
+		eigrp_prefix_normalize(&uut_denied_prefix);
+	}
 }
 #endif
 
@@ -41,62 +41,65 @@ void eigrp_sys_policy_finish(void)
 
 eigrp_result_t eigrp_sys_policy_instance_create(eigrp_instance_t *eigrp)
 {
-    (void)eigrp;
-    return EIGRP_RESULT_SUCCESS;
+	(void)eigrp;
+	return EIGRP_RESULT_SUCCESS;
 }
 
 void eigrp_sys_policy_instance_delete(eigrp_instance_t *eigrp)
 {
-    (void)eigrp;
+	(void)eigrp;
 }
 
-eigrp_result_t eigrp_sys_filter_evaluate(
-    eigrp_instance_t *eigrp, eigrp_distribute_list_type_t type,
-    const char *name, const eigrp_prefix_t *prefix,
-    eigrp_filter_decision_t *decision)
+eigrp_result_t eigrp_sys_filter_evaluate(eigrp_instance_t *eigrp,
+					 eigrp_distribute_list_type_t type,
+					 const char *name,
+					 const eigrp_prefix_t *prefix,
+					 eigrp_filter_decision_t *decision)
 {
-    (void)eigrp;
-    (void)type;
-    (void)name;
-    (void)prefix;
-    if (!decision)
-        return EIGRP_RESULT_INVALID_ARGUMENT;
-    *decision = EIGRP_FILTER_DECISION_PERMIT;
+	(void)eigrp;
+	(void)type;
+	(void)name;
+	(void)prefix;
+	if (!decision)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	*decision = EIGRP_FILTER_DECISION_PERMIT;
 #ifdef EIGRP_UUT_TEST
-    if (uut_denied_active && name && prefix &&
-        type == EIGRP_DISTRIBUTE_ACCESS_LIST &&
-        strcmp(name, "uut-inbound-deny") == 0 &&
-        prefix->address.afi == uut_denied_prefix.address.afi &&
-        prefix->prefix_length == uut_denied_prefix.prefix_length &&
-        memcmp(prefix->address.bytes, uut_denied_prefix.address.bytes,
-               prefix->address.afi == EIGRP_AFI_IPV4 ? 4U : 16U) == 0)
-        *decision = EIGRP_FILTER_DECISION_DENY;
+	if (uut_denied_active && name && prefix
+	    && type == EIGRP_DISTRIBUTE_ACCESS_LIST
+	    && strcmp(name, "uut-inbound-deny") == 0
+	    && prefix->address.afi == uut_denied_prefix.address.afi
+	    && prefix->prefix_length == uut_denied_prefix.prefix_length
+	    && memcmp(prefix->address.bytes, uut_denied_prefix.address.bytes,
+		      prefix->address.afi == EIGRP_AFI_IPV4 ? 4U : 16U)
+		       == 0)
+		*decision = EIGRP_FILTER_DECISION_DENY;
 #endif
-    return EIGRP_RESULT_SUCCESS;
+	return EIGRP_RESULT_SUCCESS;
 }
 
 eigrp_result_t eigrp_sys_redistribute_route_map_evaluate(
-    eigrp_instance_t *eigrp, const char *name,
-    const eigrp_rib_route_t *route, eigrp_filter_decision_t *decision)
+	eigrp_instance_t *eigrp, const char *name,
+	const eigrp_rib_route_t *route, eigrp_filter_decision_t *decision)
 {
-    (void)eigrp;
-    (void)name;
-    (void)route;
-    if (!decision)
-        return EIGRP_RESULT_INVALID_ARGUMENT;
-    *decision = EIGRP_FILTER_DECISION_PERMIT;
-    return EIGRP_RESULT_SUCCESS;
+	(void)eigrp;
+	(void)name;
+	(void)route;
+	if (!decision)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	*decision = EIGRP_FILTER_DECISION_PERMIT;
+	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_sys_summary_leak_map_evaluate(
-    eigrp_instance_t *eigrp, const char *name, const eigrp_prefix_t *prefix,
-    eigrp_filter_decision_t *decision)
+eigrp_result_t
+eigrp_sys_summary_leak_map_evaluate(eigrp_instance_t *eigrp, const char *name,
+				    const eigrp_prefix_t *prefix,
+				    eigrp_filter_decision_t *decision)
 {
-    (void)eigrp;
-    (void)name;
-    (void)prefix;
-    if (!decision)
-        return EIGRP_RESULT_INVALID_ARGUMENT;
-    *decision = EIGRP_FILTER_DECISION_DENY;
-    return EIGRP_RESULT_SUCCESS;
+	(void)eigrp;
+	(void)name;
+	(void)prefix;
+	if (!decision)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	*decision = EIGRP_FILTER_DECISION_DENY;
+	return EIGRP_RESULT_SUCCESS;
 }

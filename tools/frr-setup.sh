@@ -12,7 +12,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 invocation_dir="$(pwd -P)"
 devel_root="$(cd "$invocation_dir/.." && pwd -P)"
 frr_root=""
-frr_orig_root=""
+frr_url=https://github.com/FRRouting/frr.git
+frr_tag=frr-10.7.1
+frr_sha=f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1
 skip_clone=0
 skip_build=0
 
@@ -23,13 +25,14 @@ usage: $script_name [options]
 options:
   --devel-root PATH    Development root. Default: parent of the current
                        working directory. Relative paths are resolved from CWD.
-  --skip-clone         Do not clone missing FRR repositories.
+  --skip-clone         Require an existing FRR checkout; do not clone.
   --skip-build         Do not configure/build/install FRR.
   --help               Show this help.
 
 This script is intentionally Debian-focused. Run it from an existing EIGRP
-checkout. It installs FRR build packages, clones the FRR checkouts if needed,
-stages this EIGRP tree into FRR, and creates basic local FRR config files.
+checkout. It installs FRR build packages, clones the official FRR 10.7.1
+release if needed, stages this EIGRP tree into FRR, and creates config files.
+An existing checkout must already be at the pinned release commit.
 USAGE
 }
 
@@ -85,7 +88,6 @@ esac
 mkdir -p "$devel_root"
 devel_root="$(cd "$devel_root" && pwd -P)"
 frr_root="$devel_root/frr"
-frr_orig_root="$devel_root/frr-orig"
 
 if ! grep -q '^/usr/local/lib$' /etc/ld.so.conf 2>/dev/null; then
 	echo "Adding /usr/local/lib to /etc/ld.so.conf"
@@ -137,18 +139,17 @@ fi
 sudo usermod -a -G frr "$USER"
 sudo usermod -a -G frrvty "$USER"
 
-if [[ "$skip_clone" -eq 0 ]]; then
-	echo "Cloning FRR repositories if missing"
-	(
-		cd "$devel_root"
-		[[ -d frr ]] || git clone https://github.com/frrouting/frr.git frr
-		[[ -d frr-orig ]] || git clone https://github.com/frrouting/frr.git frr-orig
-	)
+if [[ "$skip_clone" -eq 0 && ! -e "$frr_root" ]]; then
+	echo "Cloning official FRR release $frr_tag"
+	git clone --branch "$frr_tag" --depth 1 --single-branch "$frr_url" "$frr_root"
 fi
 
-if [[ ! -d "$frr_root" ]]; then
-	fail "FRR checkout not found: $frr_root"
-fi
+[[ -d "$frr_root" ]] || fail "FRR checkout not found: $frr_root"
+git -C "$frr_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+	fail "FRR path is not a Git checkout: $frr_root"
+actual_sha="$(git -C "$frr_root" rev-parse HEAD)"
+[[ "$actual_sha" == "$frr_sha" ]] || \
+	fail "FRR checkout is at $actual_sha, expected $frr_tag ($frr_sha); checkout is unchanged"
 
 "$script_dir/frr-install.sh" --frr-root "$frr_root"
 

@@ -30,11 +30,12 @@
 #define EIGRP_NEIGHBOR_MAX_PER_INTERFACE 2048U
 #define EIGRP_NEIGHBOR_MAX_PER_INSTANCE 8192U
 
-/* Caller must hold instance->peer_lock (ingress authentication already does). */
+/* Caller must hold instance->peer_lock (ingress authentication already does).
+ */
 bool eigrp_nbr_admit_locked(const eigrp_intf_t *ei);
 /* Combined neighbor/topology admission for a new neighbor-owned path. */
 bool eigrp_nbr_route_admit(eigrp_instance_t *, eigrp_nbr_t *,
-	const eigrp_prefix_t *, const eigrp_metrics_t *);
+			   const eigrp_prefix_t *, const eigrp_metrics_t *);
 
 
 /* Prefix-limit admission is orthogonal to the normal EIGRP DOWN/PENDING/UP
@@ -53,8 +54,10 @@ typedef struct eigrp_neighbor {
 	uint8_t os_rel_minor; // system version - just for show
 
 	/* TLV version and packet vectors for this neighbor. */
-	uint8_t tlv_rel_major; // eigrp version - tells us what TLV format to use
-	uint8_t tlv_rel_minor; // eigrp version - tells us what TLV format to use
+	uint8_t tlv_rel_major; // eigrp version - tells us what TLV format to
+			       // use
+	uint8_t tlv_rel_minor; // eigrp version - tells us what TLV format to
+			       // use
 	uint8_t tlv_version;
 
 	eigrp_packet_decoder_t decoder;
@@ -69,17 +72,20 @@ typedef struct eigrp_neighbor {
 
 	/* This neighbor's parent eigrp interface. */
 	eigrp_intf_t *ei;
-	bool published; /* Protected by eigrp_instance::peer_lock. */
-	uint64_t generation; /* Prevent queued packets crossing neighbor lifetimes. */
+	bool published;		  /* Protected by eigrp_instance::peer_lock. */
+	uint64_t generation;	  /* Prevent queued packets crossing neighbor
+				     lifetimes. */
 	uint64_t multicast_epoch; /* Changes on every UP transition. */
 
 	/* EIGRP neighbor Information */
-	uint8_t state; /* normal adjacency FSM status */
+	uint8_t state;			     /* normal adjacency FSM status */
 	eigrp_nbr_limit_state_t limit_state; /* prefix-limit admission status */
 	/* The receive path marks DOWN immediately, but drains DUAL/RTP only
 	 * after the packet TLV walker returns. Owned by the AF thread. */
-	bool eigrp_pfxlimits_af_suspended; /* Suspension imposed by the AF topology prefix limit. */
-	bool topo_batch_seen; /* Temporary per-prefix mark during AF suspension teardown. */
+	bool eigrp_pfxlimits_af_suspended; /* Suspension imposed by the AF
+					      topology prefix limit. */
+	bool topo_batch_seen; /* Temporary per-prefix mark during AF suspension
+				 teardown. */
 	bool limit_cleanup_pending;
 	uint8_t limit_prev_state;
 	eigrp_prefix_limit_t limit_pending_cfg;
@@ -88,7 +94,8 @@ typedef struct eigrp_neighbor {
 	bool limit_prefix_count_valid;
 
 	/* Prefix-limit penalty lifetime is owned by this peer.  Protocol timers
-	 * are cancelled on DOWN; these survive until restart/reset or DELETE. */
+	 * are cancelled on DOWN; these survive until restart/reset or DELETE.
+	 */
 	uint16_t limit_restart_cnt;
 	uint32_t limit_penalty_q16;
 	uint64_t limit_decay_msec;
@@ -97,10 +104,12 @@ typedef struct eigrp_neighbor {
 	eigrp_timer_event_t *t_limit_restart;
 	eigrp_timer_event_t *t_limit_reset;
 
-	uint32_t recv_sequence_number; /* Last received sequence Number. */
-	uint32_t peer_init_sequence_number; /* Accepted peer INIT, for duplicate detection. */
+	uint32_t recv_sequence_number;	    /* Last received sequence Number. */
+	uint32_t peer_init_sequence_number; /* Accepted peer INIT, for duplicate
+					       detection. */
 	/* Only an uncompleted peer INIT exchange may retransmit this sequence.
-	 * Do not reserve a real RTP sequence number as a completion sentinel. */
+	 * Do not reserve a real RTP sequence number as a completion sentinel.
+	 */
 	bool peer_init_retransmit_eligible;
 	/* A repeated INIT before EOT is ambiguous: it may be an RTP retry or
 	 * a restarted peer with the same INIT sequence.  Reconcile and re-send
@@ -120,15 +129,15 @@ typedef struct eigrp_neighbor {
 	uint32_t rttvar_msec;
 	uint32_t rto_msec;
 
-	eigrp_addr_t src;		/* Neighbor Src address. */
+	eigrp_addr_t src; /* Neighbor Src address. */
 
 	/* Timer values. */
 	uint16_t v_holddown;
 
 	/* Events. */
 	eigrp_timer_event_t *t_holddown;
-	eigrp_timer_event_t *t_nbr_send_gr; /* event for sending multiple GR packet
-					 chunks */
+	eigrp_timer_event_t *t_nbr_send_gr; /* event for sending multiple GR
+					 packet chunks */
 
 	eigrp_packet_queue_t *retrans_queue;
 
@@ -165,7 +174,7 @@ typedef struct eigrp_neighbor {
 
 /* Prototypes */
 extern eigrp_nbr_t *eigrp_nbr_lookup(eigrp_intf_t *, struct eigrp_header *,
-					  eigrp_addr_t *);
+				     eigrp_addr_t *);
 extern eigrp_nbr_t *eigrp_nbr_create(eigrp_intf_t *, eigrp_addr_t *);
 /* DOWN clears operational ownership but retains the neighbor identity.
  * DELETE additionally unpublishes the peer and frees all remaining state. */
@@ -174,17 +183,18 @@ void eigrp_nbr_down(eigrp_nbr_t *nbr);
 void eigrp_nbr_down_deferred(eigrp_nbr_t *nbr);
 extern void eigrp_nbr_delete(eigrp_nbr_t *neigh);
 /* Neighbor limit-state lifecycle; restart/reset handling is separate. */
-bool eigrp_nbr_limit_state_update(eigrp_nbr_t *nbr, eigrp_nbr_limit_state_t state);
+bool eigrp_nbr_limit_state_update(eigrp_nbr_t *nbr,
+				  eigrp_nbr_limit_state_t state);
 void eigrp_nbr_limit_release(eigrp_nbr_t *nbr);
 /* Task 2 timer engine.  Task 3 invokes this when a hard limit is crossed.
  * Per-peer timer options inherit from neighbor-all, then process settings. */
 /* Mark prefix-limit DOWN without retiring descriptors used by this packet. */
 bool eigrp_nbr_limit_mark_down(eigrp_nbr_t *nbr,
-	const eigrp_prefix_limit_t *limit);
+			       const eigrp_prefix_limit_t *limit);
 /* Complete DOWN and start the penalty only at a safe receive boundary. */
 void eigrp_nbr_limit_cleanup(eigrp_nbr_t *nbr);
 bool eigrp_nbr_limit_exceeded(eigrp_nbr_t *nbr,
-	const eigrp_prefix_limit_t *limit);
+			      const eigrp_prefix_limit_t *limit);
 void eigrp_nbr_limit_restart_expired(void *arg);
 void eigrp_nbr_limit_reset_expired(void *arg);
 void eigrp_nbr_limit_timers_cancel(eigrp_nbr_t *nbr);
@@ -197,9 +207,10 @@ uint32_t eigrp_nbr_limit_remaining(uint64_t deadline_msec, uint64_t now_msec);
 extern void eigrp_nbr_holddown_expired(void *arg);
 
 extern void eigrp_nbr_holddown_update(eigrp_nbr_t *);
-extern void eigrp_nbr_state_update(eigrp_operation_t, eigrp_nbr_t *, uint8_t state);
+extern void eigrp_nbr_state_update(eigrp_operation_t, eigrp_nbr_t *,
+				   uint8_t state);
 extern void eigrp_nbr_state_update_reason(eigrp_operation_t, eigrp_nbr_t *,
-	uint8_t state, uint16_t reason);
+					  uint8_t state, uint16_t reason);
 extern void eigrp_nbr_codec_select(eigrp_nbr_t *, uint8_t tlv_version);
 extern void eigrp_nbr_codec_update(eigrp_instance_t *);
 extern uint8_t eigrp_nbr_state(eigrp_nbr_t *);
@@ -208,60 +219,59 @@ extern const char *eigrp_nbr_state_str(eigrp_nbr_t *);
 
 /* Per-neighbor Reliable Transport Protocol RTT/RTO state. */
 void eigrp_nbr_rtt_clear(eigrp_nbr_t *nbr);
-void eigrp_nbr_srtt_update(eigrp_nbr_t *nbr,
-				const eigrp_packet_t *packet);
+void eigrp_nbr_srtt_update(eigrp_nbr_t *nbr, const eigrp_packet_t *packet);
 void eigrp_nbr_rto_backoff(eigrp_nbr_t *nbr);
 uint32_t eigrp_nbr_rto(const eigrp_nbr_t *nbr);
-extern eigrp_nbr_t *eigrp_nbr_lookup_by_addr(eigrp_intf_t *,
-						  struct in_addr *);
+extern eigrp_nbr_t *eigrp_nbr_lookup_by_addr(eigrp_intf_t *, struct in_addr *);
 extern eigrp_nbr_t *eigrp_nbr_lookup_by_addr_process(eigrp_instance_t *,
-							  struct in_addr addr);
+						     struct in_addr addr);
 
-extern int eigrp_nbr_split_horizon(eigrp_route_descriptor_t *,
-					 eigrp_intf_t *);
+extern int eigrp_nbr_split_horizon(eigrp_route_descriptor_t *, eigrp_intf_t *);
 
 eigrp_result_t eigrp_nbr_static_create(eigrp_af_config_t *af,
-					    const eigrp_address_t *address,
-					    const char *interface_name);
+				       const eigrp_address_t *address,
+				       const char *interface_name);
 eigrp_result_t eigrp_nbr_static_delete(eigrp_af_config_t *af,
-					    const eigrp_address_t *address,
-					    const char *interface_name);
+				       const eigrp_address_t *address,
+				       const char *interface_name);
 void eigrp_nbr_static_delete_all(eigrp_af_config_t *af);
 bool eigrp_nbr_static_hello_send(eigrp_intf_t *ei);
-bool eigrp_nbr_static_source_allowed(eigrp_intf_t *ei,
-                                          const eigrp_addr_t *src);
-eigrp_result_t eigrp_nbr_state_iterate(
-	eigrp_af_config_t *config, eigrp_instance_t *runtime,
-	const char *interface_name, bool static_only,
-	eigrp_nbr_state_iterate_cb callback, void *arg);
-eigrp_result_t eigrp_nbr_clear(
-	eigrp_instance_t *runtime, const eigrp_nbr_clear_request_t *request,
-	eigrp_nbr_clear_cb callback, void *arg, size_t *affected_count);
+bool eigrp_nbr_static_source_allowed(eigrp_intf_t *ei, const eigrp_addr_t *src);
+eigrp_result_t
+eigrp_nbr_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime,
+			const char *interface_name, bool static_only,
+			eigrp_nbr_state_iterate_cb callback, void *arg);
+eigrp_result_t eigrp_nbr_clear(eigrp_instance_t *runtime,
+			       const eigrp_nbr_clear_request_t *request,
+			       eigrp_nbr_clear_cb callback, void *arg,
+			       size_t *affected_count);
 
 eigrp_result_t eigrp_nbr_description_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	const eigrp_address_t *address,
-	const char *description);
+					    eigrp_instance_context_t *context,
+					    const eigrp_address_t *address,
+					    const char *description);
 eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	const eigrp_address_t *address,
-	const eigrp_prefix_limit_t *limit);
-eigrp_result_t eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	const eigrp_prefix_limit_t *limit);
+					   eigrp_instance_context_t *context,
+					   const eigrp_address_t *address,
+					   const eigrp_prefix_limit_t *limit);
+eigrp_result_t
+eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation,
+				eigrp_instance_context_t *context,
+				const eigrp_prefix_limit_t *limit);
 eigrp_result_t eigrp_nbr_log_update(eigrp_operation_t operation,
-	eigrp_instance_context_t *context,
-	eigrp_nbr_log_type_t type,
-	bool enabled,
-	uint16_t seconds);
+				    eigrp_instance_context_t *context,
+				    eigrp_nbr_log_type_t type, bool enabled,
+				    uint16_t seconds);
 bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
-	const eigrp_prefix_t *prefix);
+			    const eigrp_prefix_t *prefix);
 bool eigrp_nbr_warning_should_emit(eigrp_instance_t *runtime,
-	const eigrp_nbr_t *neighbor, const char *reason);
+				   const eigrp_nbr_t *neighbor,
+				   const char *reason);
 void eigrp_nbr_warning_state_clear(eigrp_instance_t *runtime);
 #ifdef EIGRP_TESTING
 bool eigrp_nbr_warning_should_emit_test(eigrp_instance_t *runtime,
-	const eigrp_nbr_t *neighbor, const char *reason, uint64_t now_msec);
+					const eigrp_nbr_t *neighbor,
+					const char *reason, uint64_t now_msec);
 #endif
 void eigrp_nbr_policy_delete_all(eigrp_af_config_t *af);
 

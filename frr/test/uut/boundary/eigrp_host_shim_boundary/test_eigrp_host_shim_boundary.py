@@ -84,7 +84,7 @@ def test_interface_adapter_reports_host_facts_and_common_code_decides_participat
     network = read("eigrp/code/eigrp_network.c")
     interface = read("eigrp/code/eigrp_interface.c")
 
-    imported = function_body(adapter, "eigrp_frr_interface_state_import")
+    imported = function_body(adapter, "eigrp_frr_intf_state_import")
     walk = function_body(southbound, "eigrp_sys_interface_walk")
     matches = function_body(network, "eigrp_network_runtime_matches")
     refresh = function_body(interface, "eigrp_intf_runtime_update")
@@ -99,7 +99,7 @@ def test_interface_adapter_reports_host_facts_and_common_code_decides_participat
     # only IPv4 primary addresses participate in EIGRP.
     assert "co->address->family != AF_INET" not in walk
     assert "ZEBRA_IFA_SECONDARY" in walk
-    assert "eigrp_frr_interface_state_import" in walk
+    assert "eigrp_frr_intf_state_import" in walk
 
     assert "eigrp_prefix_address_match" in matches
     assert "state->secondary" in network
@@ -335,7 +335,7 @@ def test_frr_event_and_rib_ingress_logs_invalid_host_data_at_boundary():
     assert "eigrp_log(EIGRP_LOG_ERROR," in event_run
     assert "eigrp_log(EIGRP_LOG_ERROR," in work_new
     assert "eigrp_log(EIGRP_LOG_ERROR," in work_run
-    assert "eigrp_frr_interface_state_import" in address_add
+    assert "eigrp_frr_intf_state_import" in address_add
     assert "eigrp_log(EIGRP_LOG_ERROR," in address_add
     assert "eigrp_frr_prefix_import" in address_delete
     assert "eigrp_log(EIGRP_LOG_ERROR," in address_delete

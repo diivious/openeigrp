@@ -4,14 +4,19 @@
  * Copyright (C) 2026 Donnie V. Savage
  */
 
+#include <limits.h>
+#include <stdarg.h>
 #include <string.h>
+#include <zebra.h>
+
+#include "printfrr.h"
 
 #include "eigrp_frr.h"
 #include "eigrp_const.h"
 
 DEFINE_MGROUP(EIGRPD, "eigrpd");
 
-static eigrp_afi_t eigrp_frr_address_family_import(uint8_t family)
+static eigrp_afi_t eigrp_frr_afi_import(uint8_t family)
 {
 	switch (family) {
 	case AF_INET:
@@ -23,7 +28,7 @@ static eigrp_afi_t eigrp_frr_address_family_import(uint8_t family)
 	}
 }
 
-static uint8_t eigrp_frr_address_family_export(eigrp_afi_t afi)
+static uint8_t eigrp_frr_afi_export(eigrp_afi_t afi)
 {
 	switch (afi) {
 	case EIGRP_AFI_IPV4:
@@ -45,7 +50,7 @@ eigrp_result_t eigrp_frr_prefix_import(const struct prefix *host,
 	if (!host || !prefix)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	afi = eigrp_frr_address_family_import(host->family);
+	afi = eigrp_frr_afi_import(host->family);
 	if (!afi)
 		return EIGRP_RESULT_UNSUPPORTED;
 
@@ -80,7 +85,7 @@ eigrp_result_t eigrp_frr_prefix_export(const eigrp_prefix_t *prefix,
 	if (!prefix || !host)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 
-	family = eigrp_frr_address_family_export(prefix->address.afi);
+	family = eigrp_frr_afi_export(prefix->address.afi);
 	if (family == AF_UNSPEC)
 		return EIGRP_RESULT_UNSUPPORTED;
 
@@ -105,7 +110,7 @@ eigrp_result_t eigrp_frr_prefix_export(const eigrp_prefix_t *prefix,
 	return EIGRP_RESULT_SUCCESS;
 }
 
-uint8_t eigrp_frr_interface_type(const struct interface *ifp)
+uint8_t eigrp_frr_intf_type(const struct interface *ifp)
 {
 	if (!ifp)
 		return EIGRP_IFTYPE_BROADCAST;
@@ -116,9 +121,10 @@ uint8_t eigrp_frr_interface_type(const struct interface *ifp)
 	return EIGRP_IFTYPE_BROADCAST;
 }
 
-eigrp_result_t eigrp_frr_interface_state_import(
-	const struct interface *ifp, const struct prefix *address, bool secondary,
-	eigrp_intf_runtime_state_t *state)
+eigrp_result_t eigrp_frr_intf_state_import(const struct interface *ifp,
+					   const struct prefix *address,
+					   bool secondary,
+					   eigrp_intf_runtime_state_t *state)
 {
 	eigrp_result_t result;
 
@@ -131,10 +137,31 @@ eigrp_result_t eigrp_frr_interface_state_import(
 		return result;
 	state->interface_name = ifp->name;
 	state->ifindex = ifp->ifindex;
-	state->type = eigrp_frr_interface_type(ifp);
+	state->type = eigrp_frr_intf_type(ifp);
 	state->secondary = secondary;
 	state->operative = if_is_operative(ifp);
 	state->bandwidth = ifp->bandwidth;
 	state->mtu = ifp->mtu;
 	return EIGRP_RESULT_SUCCESS;
+}
+
+int eigrp_vsnprintf(char *dst, size_t size, const char *fmt, va_list args)
+{
+	ssize_t result = vsnprintfrr(dst, size, fmt, args);
+
+	if (result < 0 || result > INT_MAX)
+		return -1;
+	return (int)result;
+}
+
+int eigrp_snprintf(char *dst, size_t size, const char *fmt, ...)
+{
+	va_list args;
+	int result;
+
+	va_start(args, fmt);
+	result = eigrp_vsnprintf(dst, size, fmt, args);
+	va_end(args);
+
+	return result;
 }

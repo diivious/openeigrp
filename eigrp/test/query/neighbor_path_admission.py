@@ -24,6 +24,7 @@ def test_query_reply_neighbor_path_admission(tmp_path, packet):
            str(Path(__file__).with_suffix('.c')),
            *(str(CODE / name) for name in sources),
            '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections',
+           "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
            '-o', str(binary)]
     build = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     assert build.returncode == 0, build.stderr

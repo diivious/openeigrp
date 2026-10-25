@@ -8,7 +8,6 @@
 #include <string.h>
 
 
-
 #include "eigrp.h"
 #include "eigrp_table.h"
 #include "eigrp_structs.h"
@@ -29,7 +28,7 @@ eigrp_stat_context_validate(const eigrp_instance_context_t *context)
 }
 
 static void eigrp_stat_nbr_address(const eigrp_nbr_t *nbr,
-					      eigrp_address_t *address)
+				   eigrp_address_t *address)
 {
 	memset(address, 0, sizeof(*address));
 	if (nbr->src.afi == AF_INET6) {
@@ -55,8 +54,8 @@ static uint32_t eigrp_stat_prefix_count(eigrp_instance_t *runtime)
 	return count;
 }
 
-static uint32_t eigrp_stat_nbr_prefix_count(
-	eigrp_instance_t *runtime, eigrp_nbr_t *neighbor)
+static uint32_t eigrp_stat_nbr_prefix_count(eigrp_instance_t *runtime,
+					    eigrp_nbr_t *neighbor)
 {
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_table_node_t *route_node;
@@ -67,8 +66,8 @@ static uint32_t eigrp_stat_nbr_prefix_count(
 	if (neighbor->limit_prefix_count_valid)
 		return neighbor->limit_prefix_count;
 
-	for (route_node = eigrp_table_first(runtime->topology_table); route_node;
-	     route_node = eigrp_table_next(route_node)) {
+	for (route_node = eigrp_table_first(runtime->topology_table);
+	     route_node; route_node = eigrp_table_next(route_node)) {
 		prefix = route_node->info;
 		if (!prefix)
 			continue;
@@ -80,9 +79,9 @@ static uint32_t eigrp_stat_nbr_prefix_count(
 
 /* Return both AF-owned penalty scopes without inspecting neighbors. These
  * values remain meaningful while all adjacencies are suspended or removed. */
-eigrp_result_t eigrp_stat_pfxlimits_summary_read(
-	const eigrp_instance_context_t *context,
-	eigrp_pfxlimits_summary_t *state)
+eigrp_result_t
+eigrp_stat_pfxlimits_summary_read(const eigrp_instance_context_t *context,
+				  eigrp_pfxlimits_summary_t *state)
 {
 	eigrp_instance_t *runtime;
 	uint64_t now;
@@ -126,9 +125,10 @@ eigrp_result_t eigrp_stat_pfxlimits_summary_read(
  * Exports EIGRP accounting state for the selected address-family.
  * FRR supplies rendering callbacks only.
  */
-eigrp_result_t eigrp_stat_accounting_iterate(
-	const eigrp_instance_context_t *context, uint32_t *total_prefix_count,
-	eigrp_stat_accounting_cb callback, void *arg)
+eigrp_result_t
+eigrp_stat_accounting_iterate(const eigrp_instance_context_t *context,
+			      uint32_t *total_prefix_count,
+			      eigrp_stat_accounting_cb callback, void *arg)
 {
 	eigrp_result_t result = eigrp_stat_context_validate(context);
 	eigrp_intf_t *interface;
@@ -143,23 +143,27 @@ eigrp_result_t eigrp_stat_accounting_iterate(
 
 	*total_prefix_count = eigrp_stat_prefix_count(context->runtime);
 	for (EIGRP_LIST_ITERATE_RO(context->runtime->eiflist, interface_node,
-				  interface)) {
-		for (EIGRP_LIST_ITERATE_RO(interface->nbrs, neighbor_node, neighbor)) {
+				   interface)) {
+		for (EIGRP_LIST_ITERATE_RO(interface->nbrs, neighbor_node,
+					   neighbor)) {
 			eigrp_stat_nbr_limit_t state = {0};
 
 			state.status = eigrp_nbr_limit_status(neighbor);
 			if (!state.status)
 				continue;
 			eigrp_stat_nbr_address(neighbor,
-							  &state.neighbor_address);
-			state.interface_name = eigrp_intf_name_string(interface);
+					       &state.neighbor_address);
+			state.interface_name =
+				eigrp_intf_name_string(interface);
 			state.prefix_count = eigrp_stat_nbr_prefix_count(
 				context->runtime, neighbor);
 			state.restart_cnt = neighbor->limit_restart_cnt;
 			{
 				uint64_t now = eigrp_sys_monotime_msec();
-				state.restart_seconds = eigrp_nbr_limit_remaining(
-					neighbor->limit_restart_due_msec, now);
+				state.restart_seconds =
+					eigrp_nbr_limit_remaining(
+						neighbor->limit_restart_due_msec,
+						now);
 				state.reset_seconds = eigrp_nbr_limit_remaining(
 					neighbor->limit_reset_due_msec, now);
 			}
@@ -183,9 +187,8 @@ eigrp_result_t eigrp_stat_accounting_iterate(
  * Exports EIGRP packet and protocol traffic counters.
  * Counter ownership remains with the EIGRP runtime.
  */
-eigrp_result_t eigrp_stat_traffic_read(
-	const eigrp_instance_context_t *context,
-	eigrp_statistics_traffic_state_t *state)
+eigrp_result_t eigrp_stat_traffic_read(const eigrp_instance_context_t *context,
+				       eigrp_statistics_traffic_state_t *state)
 {
 	eigrp_result_t result = eigrp_stat_context_validate(context);
 	eigrp_intf_t *interface;
@@ -206,7 +209,8 @@ eigrp_result_t eigrp_stat_traffic_read(
 			    | EIGRP_STATISTICS_TRAFFIC_SIA_QUERY
 			    | EIGRP_STATISTICS_TRAFFIC_SIA_REPLY;
 	state->received_valid = state->sent_valid;
-	for (EIGRP_LIST_ITERATE_RO(context->runtime->eiflist, node, interface)) {
+	for (EIGRP_LIST_ITERATE_RO(context->runtime->eiflist, node,
+				   interface)) {
 		state->sent_ack += interface->stats.sent.ack;
 		state->sent_hello += interface->stats.sent.hello;
 		state->sent_query += interface->stats.sent.query;

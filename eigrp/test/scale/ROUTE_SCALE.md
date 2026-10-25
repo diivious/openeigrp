@@ -11,25 +11,27 @@ modified or simulated DUAL state inserted directly.
 
 ## Targets
 
-| Root target | What it checks |
+The root Makefile exposes one `scale` target. The default is the quick pacing,
+lost-ACK and 32-peer multicast recovery gate. Select heavier tests with
+`SUITE` or `CASE`:
+
+| Command | Qualification |
 | --- | --- |
-| `make scale` | Quick packet pacing, lost-ACK unicast retry, and reduced multicast ACK-backpressure/recovery gate |
-| `make scale-peers` | Establish 2,048 peers and drain their initial RTP work |
-| `make scale-internal` | Inject 100K classic internal routes into one R1 |
-| `make scale-external` | Inject 100K classic external routes into one R1 |
-| `make scale-line` | Propagate 100K mixed routes R1 → R2 → R3 |
-| `make scale-kite` | Propagate 100K mixed routes over a three-router kite |
-| `make scale-peer-routes` | 2,048 peers each send 50 routes (102,400 total) |
-| `make scale-100k` | Run `scale-peers` followed by all five route-flood tests sequentially |
-| `make scale-withdraw` | Install, withdraw and reinstall 100K redistributed routes; verify topology and RIB cleanup |
-| `make scale-mcast` | Withhold ACKs from 300 peers during multicast, then release; verify CR MTU safety and RTP drain |
-| `make scale-linkdown` | Drop/recover R1–R2 halfway through 100K-route ingress; verify all routers relearn |
-| `make scale-mixed-tlv` | Use one TLV1 and two TLV2 neighbors; verify actual classic and MP UPDATE TLVs |
-| `make scale-churn` | Change, withdraw and reinstate 10K routes repeatedly inside a 100K-route topology |
-| `make scale-auth-md5` | Originate 100K redistributed static routes over a live MD5-authenticated R1–R2 adjacency |
-| `make scale-stress` | Run the five non-authenticated stress tests sequentially |
-| `make scale-auth` | Run MD5 authenticated flooding (`scale-auth-sha2` planned, not implemented) |
-| `make scale-all` | Run `scale-100k`, `scale-stress`, then `scale-auth`, collecting suite failures |
+| `make scale` | Quick pacing/backpressure gate |
+| `make scale SUITE=100k` | 2,048 peers and all five route-volume tests |
+| `make scale SUITE=stress` | Withdraw, multicast, linkdown, mixed-TLV and churn |
+| `make scale SUITE=auth` | MD5-authenticated route flooding |
+| `make scale SUITE=all` | All heavy suites, collecting failures |
+| `make scale CASE=peers` | Establish 2,048 neighbors |
+| `make scale CASE=internal` / `external` | 100K route injection |
+| `make scale CASE=line` / `kite` | 100K mixed-route propagation |
+| `make scale CASE=peer-routes` | 50 routes from each of 2,048 peers |
+| `make scale CASE=withdraw` | 100K withdrawal and reinjection |
+| `make scale CASE=mcast` | Delayed ACK / CR MTU and recovery |
+| `make scale CASE=linkdown` | Link loss and relearning |
+| `make scale CASE=mixed-tlv` | Classic and MP TLVs on the same interface |
+| `make scale CASE=churn` | Repeated updates and withdrawal |
+| `make scale CASE=auth-md5` | 100K authenticated redistribution |
 
 The multicast test originates external routes through R1's real static-route
 redistribution interface. Injecting routes from a peer on the same shared LAN
@@ -56,22 +58,22 @@ future `scale-auth-sha2` test after the required configuration path is ready.
 ## Running
 
 ```sh
-make scale                         # Quick pacing/backpressure gate
-make scale-peers
-make scale-100k
-make scale-mcast
-make scale-stress
-make scale-auth
-make scale-all
+make scale                    # Quick pacing/backpressure gate
+make scale SUITE=100k
+make scale SUITE=stress
+make scale SUITE=auth
+make scale SUITE=all
+make scale CASE=peers
+make scale CASE=mcast
 
-# Lightweight development smoke (not a substitute for full qualification)
-EIGRP_SCALE_ROUTES=1000 make scale-withdraw
-EIGRP_SCALE_ROUTES=1000 EIGRP_SCALE_CHURN_ROUTES=100 make scale-churn
-EIGRP_SCALE_ROUTES=1000 make scale-auth-md5
+# Lightweight development smoke (not full qualification)
+EIGRP_SCALE_ROUTES=1000 make scale CASE=withdraw
+EIGRP_SCALE_ROUTES=1000 EIGRP_SCALE_CHURN_ROUTES=100 make scale CASE=churn
+EIGRP_SCALE_ROUTES=1000 make scale CASE=auth-md5
 EIGRP_SCALE_PEERS=64 EIGRP_SCALE_MCAST_SLOW_PEERS=16 \
- EIGRP_SCALE_MCAST_ROUTES=48 make scale-mcast
-EIGRP_SCALE_ROUTES=1000 make scale-linkdown
-EIGRP_SCALE_TLV_ROUTES=48 make scale-mixed-tlv
+ EIGRP_SCALE_MCAST_ROUTES=48 make scale CASE=mcast
+EIGRP_SCALE_ROUTES=1000 make scale CASE=linkdown
+EIGRP_SCALE_TLV_ROUTES=48 make scale CASE=mixed-tlv
 ```
 
 ## Parameters and limits

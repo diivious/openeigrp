@@ -26,8 +26,8 @@ void show_ip_eigrp_interface_detail(struct vty *, eigrp_instance_t *,
 void show_ip_eigrp_interface_sub(struct vty *, eigrp_instance_t *,
 				 eigrp_intf_t *);
 void show_ip_eigrp_neighbor_sub(struct vty *, eigrp_nbr_t *, int);
-void show_ip_eigrp_prefix_descriptor(struct vty *,
-				     eigrp_prefix_descriptor_t *, bool);
+void show_ip_eigrp_prefix_descriptor(struct vty *, eigrp_prefix_descriptor_t *,
+				     bool);
 void show_ip_eigrp_route_descriptor(struct vty *, eigrp_instance_t *,
 				    eigrp_route_descriptor_t *, bool *first,
 				    bool include_serial);

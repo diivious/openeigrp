@@ -224,7 +224,7 @@ at one instant. These cases are also discovered by `make uut`.
 Run the standalone reliable-transport qualification from the repository root:
 
 ```
-make rtp-core
+make uut SUITE=rtp-core
 ```
 
 The gate runs the versioned RTP fault scenarios under `eigrp/test/rtp/`,
@@ -232,7 +232,7 @@ including SRTT/RTO sampling, lost reliable-packet retransmission, lost ACK/retry
 handling, and reliable-multicast peer retry behavior. The same unprivileged Unix
 wire/UUT framework is used; no host networking setup or platform VM is required.
 
-Root `make test` runs this RTP gate as part of the discovered UUT scenarios, without rerunning separate basic-core or RTP targets.
+Root `make uut` runs this RTP gate as part of the discovered UUT scenarios, without rerunning separate basic-core or RTP targets.
 
 ## Current authority-code observation
 
@@ -276,7 +276,7 @@ expectations are not weakened to hide an authority-code defect.
 
 ## ACTIVE/SIA qualification
 
-`make active-topology` runs the advanced SIA scenarios under `active-topology/`.
+`make -C eigrp/test/uut active-topology` runs the advanced SIA scenarios under `active-topology/`.
 Topology routers may set `active_time` in seconds; the UUT applies that value
 through the portable `eigrp_timer_active_time_update()` configuration API.
 Fault rules may also match `prefix`, limiting a packet action to route-bearing
@@ -286,7 +286,7 @@ they do not alter protocol state or synthesize EIGRP behavior.
 ## Pre-commit test runner reliability
 
 `make uut` runs portable pytest and each discovered YAML UUT scenario once.
-`make test` invokes the same gate (it does not repeat pytest or rerun the
+`make uut` invokes the same gate (it does not repeat pytest or rerun the
 IPv4/IPv6/RTP scenarios). Individual scenario targets remain available.
 
 `eigrp/test/uut/run_all.py` enforces a **per-scenario wall-clock watchdog**

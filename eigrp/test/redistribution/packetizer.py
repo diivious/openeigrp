@@ -22,8 +22,8 @@ def test_redistribution_stops_at_topology_not_packet_or_tlv():
 
 def test_topology_drains_dual_actions_through_normal_packetizer_entry_points():
     source = read("eigrp/code/eigrp_topology.c")
-    notify = source[source.index("static void eigrp_topology_changes_send") :]
-    notify = notify[: notify.index("eigrp_result_t eigrp_topology_redistributed_route_update")]
+    notify = source[source.index("eigrp_topology_changes_send(") :]
+    notify = notify[: notify.index("eigrp_topology_redistributed_route_update(")]
     assert "EIGRP_FSM_NEED_QUERY" in notify
     assert "EIGRP_FSM_NEED_UPDATE" in notify
     assert "eigrp_query_send_all(eigrp)" in notify
