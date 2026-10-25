@@ -92,8 +92,13 @@ if [[ -n "$report" ]]; then
         status=1
     fi
 else
-    echo 'WARNING: Remote runner provided no report ID' >&2
-    status=1
+    if (( status == 0 )); then
+        echo 'ERROR: Remote runner exited without providing a report ID' >&2
+        status=1
+    else
+        printf 'ERROR: Remote runner exited %d before providing a report ID\n' "$status" >&2
+    fi
+    printf 'FAIL: %s\n' "$scenario" >&2
 fi
 
 exit "$status"

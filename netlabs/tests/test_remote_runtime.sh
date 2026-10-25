@@ -11,6 +11,37 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$tmp/bin" "$tmp/state/runs/upload.abc/netlabs/labs/101"
+
+# The real runner requires Linux flock/timeout. Mock missing utilities for
+# macOS tests; the flock shim must preserve actual advisory locking semantics.
+if ! command -v flock >/dev/null 2>&1; then
+    cat >"$tmp/bin/flock" <<'PY'
+#!/usr/bin/env python3
+import fcntl
+import sys
+
+if len(sys.argv) != 3 or sys.argv[1] not in ('-n', '-u'):
+    sys.exit(2)
+mode = fcntl.LOCK_UN if sys.argv[1] == '-u' else fcntl.LOCK_EX | fcntl.LOCK_NB
+try:
+    fcntl.flock(int(sys.argv[2]), mode)
+except BlockingIOError:
+    sys.exit(1)
+PY
+    chmod +x "$tmp/bin/flock"
+fi
+
+if ! command -v timeout >/dev/null 2>&1; then
+    cat >"$tmp/bin/timeout" <<'SH'
+#!/bin/sh
+# Test drivers are mocked; verify the invocation, then preserve its exit code.
+[ "$1" = '--signal=TERM' ] && [ "$2" = '--kill-after=20s' ] &&
+    [ "$3" = '1500s' ] || exit 2
+shift 3
+exec "$@"
+SH
+    chmod +x "$tmp/bin/timeout"
+fi
 cat >"$tmp/bin/docker" <<'SH'
 #!/bin/sh
 [ "$1" != ps ] || exit 0
@@ -33,7 +64,54 @@ export PATH="$tmp/bin:$PATH"
 export REMOTE_LAB_DATA="$tmp/state"
 export REMOTE_LAB_STATE="$tmp/state/session"
 export LAB_MOCK_LOG="$tmp/actions.log"
-export NETLAB_PYTHON="$(command -v python3)"
+
+# The connectivity test only needs a node list, not a local PyYAML install.
+cat >"$tmp/bin/mock_nodes" <<'SH'
+#!/bin/sh
+[ "$1" = '-' ] && [ -r "$2" ] || exit 2
+cat >/dev/null
+printf 'r1\n'
+SH
+chmod +x "$tmp/bin/mock_nodes"
+export NETLAB_PYTHON="$tmp/bin/mock_nodes"
+
+# Confirm the advisory lock excludes another process even with no session file.
+mkdir -p "$tmp/state/session"
+python3 - "$tmp/state/session/lock" "$tmp/lock-held" "$tmp/lock-release" <<'PY' &
+import fcntl
+import pathlib
+import sys
+import time
+
+lock, ready, release = map(pathlib.Path, sys.argv[1:])
+with lock.open('a') as stream:
+    fcntl.flock(stream, fcntl.LOCK_EX)
+    ready.touch()
+    for _ in range(200):
+        if release.exists():
+            break
+        time.sleep(0.025)
+PY
+lock_pid=$!
+for _ in {1..50}; do
+    [[ ! -f "$tmp/lock-held" ]] || break
+    sleep 0.1
+done
+[[ -f "$tmp/lock-held" ]] || {
+    echo 'FAIL: lock holder did not start' >&2
+    exit 1
+}
+set +e
+bash "$runner" status >"$tmp/locked-out" 2>&1
+lock_rc=$?
+set -e
+touch "$tmp/lock-release"
+wait "$lock_pid"
+[[ "$lock_rc" -eq 3 ]] && grep -Fq 'BUSY:' "$tmp/locked-out" || {
+    echo 'FAIL: runner did not reject an already-held lock' >&2
+    exit 1
+}
+echo 'PASS: remote runner enforces exclusive locking'
 
 # Instructional labs must retain ownership and reject concurrent starts.
 bash "$runner" status | grep -F 'No active lab'

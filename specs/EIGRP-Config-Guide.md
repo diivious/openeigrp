@@ -290,10 +290,12 @@ neighbor 192.0.2.2 maximum-prefix 5000 80 warning-only
 neighbor maximum-prefix 20000 80 warning-only
 ```
 
-The grammar also retains `dampened`, `reset-time`, `restart`, and
-`restart-count`. The current runtime enforces the maximum, threshold, and
-`warning-only` behavior. A live runtime returns `EIGRP_RESULT_UNSUPPORTED` when
-restart/dampening fields are requested; the configuration remains retainable.
+The individual-neighbor command accepts a maximum, warning threshold, and
+`warning-only`. Neighbor restart, reset, and dampening behavior is active in
+the portable runtime. Each neighbor inherits timing and dampening settings from
+`neighbor maximum-prefix` (the address-family neighbor default), then from the
+topology `maximum-prefix` policy, or uses the built-in defaults. The individual-
+neighbor CLI does not provide separate restart/dampening options.
 
 ### 6.5 Neighbor logging
 
@@ -489,10 +491,12 @@ Redistribution limit:
 redistribute maximum-prefix 5000 80 warning-only
 ```
 
-The grammar also retains `dampened`, `reset-time`, `restart`, and
-`restart-count`. Runtime admission enforcement currently supports the maximum,
-threshold, and `warning-only` behavior; restart/dampening controls are retained
-but report `EIGRP_RESULT_UNSUPPORTED` on a live runtime.
+Topology and redistribution maximum-prefix policies support `dampened`,
+`reset-time`, `restart`, and `restart-count` in addition to the maximum, warning
+threshold, and `warning-only`. The portable runtime implements suspension,
+timed restart, incident counting, penalty decay, and lockout. A locked policy
+requires explicit clearing or a material configuration change; an unchanged
+configuration replay must not silently remove the lockout.
 
 ### 8.7 Metric and traffic controls
 

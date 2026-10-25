@@ -206,7 +206,10 @@ connect_lab() {
 
     local work node choice nodes=()
     work="$(state_get workspace)"
-    mapfile -t nodes < <(
+    # Bash 3.2-compatible array loading also supports local macOS mock tests.
+    while IFS= read -r node; do
+        nodes+=("$node")
+    done < <(
         "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" - "$work/topology.yml" <<'PY'
 import sys
 import yaml

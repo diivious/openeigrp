@@ -39,7 +39,8 @@ remote_transport_prepare() {
         -o ServerAliveCountMax=3
     )
 
-    if "${ssh_base[@]}" -o BatchMode=yes "$REMOTE_TARGET" true >/dev/null 2>&1; then
+    # The authentication probe must not consume stdin from its caller.
+    if "${ssh_base[@]}" -n -o BatchMode=yes "$REMOTE_TARGET" true >/dev/null 2>&1; then
         REMOTE_MODE=key
     elif command -v sshpass >/dev/null 2>&1; then
         REMOTE_MODE=password
@@ -101,6 +102,16 @@ remote_run() {
     command+=" $part"
     printf -v part '%q' "$action"
     command+=" $part"
+
+    # Start actions require the workspace as their first argument. Without it,
+    # runner.sh silently exits 2 before creating a UUT report or lab session.
+    case "$action" in
+        lab-start|uut-start)
+            printf -v part '%q' "$stage"
+            command+=" $part"
+            ;;
+    esac
+
     for part in "$@"; do
         printf -v part '%q' "$part"
         command+=" $part"
