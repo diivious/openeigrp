@@ -263,9 +263,11 @@ def main():
                     result = subprocess.run([formatter, "--version"], capture_output=True,
                                             text=True, check=False)
                     expected = "clang-format version " + CLANG_FORMAT_VERSION
-                    if result.returncode or result.stdout.strip() != expected:
+                    found = result.stdout.strip()
+                    if result.returncode or not (found == expected or
+                                                  found.startswith(expected + " ")):
                         raise RuntimeError(f"expected {expected}; found "
-                                           f"{result.stdout.strip() or result.stderr.strip()}")
+                                           f"{found or result.stderr.strip()}")
                     version_checked = True
             errors = check_source(root, path, contents, lines, formatter)
             violations += [f"[{label}] {error}" for error in errors]

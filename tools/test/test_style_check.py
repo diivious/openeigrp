@@ -144,6 +144,24 @@ class StyleCheckTest(unittest.TestCase):
         self.file("frr/code/check.c", "snprintf(buf, n, \"x\");\n")
         self.assert_fails_with("use snprintfrr()")
 
+    def test_formatter_version_accepts_distribution_metadata(self):
+        self.file("eigrp/code/check.c", "int a;\n")
+        formatter = self.bin / "clang-format"
+        formatter.write_text(formatter.read_text().replace(
+            "clang-format version 23.1.4",
+            "clang-format version 23.1.4 (https://github.com/conda-forge/clangdev-feedstock f01eefd7)"))
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_formatter_version_rejects_longer_version_number(self):
+        self.file("eigrp/code/check.c", "int a;\n")
+        formatter = self.bin / "clang-format"
+        formatter.write_text(formatter.read_text().replace(
+            "clang-format version 23.1.4", "clang-format version 23.1.40"))
+        result = self.run_check()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("expected clang-format version 23.1.4", result.stderr)
+
     def test_incorrect_formatter_version_is_an_error(self):
         self.file("eigrp/code/check.c", "int a;\n")
         formatter = self.bin / "clang-format"
