@@ -174,8 +174,12 @@ class StyleCheckTest(unittest.TestCase):
     def test_missing_formatter_is_an_error(self):
         self.file("eigrp/code/check.c", "int a;\n")
         env = dict(self.env)
-        # System python and git remain available, but clang-format is absent.
-        env["PATH"] = "/usr/bin:/bin"
+        # Isolate PATH so installed system formatters cannot satisfy the check.
+        git_bin = self.root / "git-only-bin"
+        git_bin.mkdir()
+        (git_bin / "git").symlink_to(shutil.which("git"))
+        env["PATH"] = str(git_bin)
+        self.assertIsNone(shutil.which("clang-format", path=env["PATH"]))
         result = self.run_check(env=env)
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn("clang-format not found", result.stderr)
