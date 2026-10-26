@@ -63,7 +63,7 @@ assert_free() {
     fi
 
     # A missing state file must not hide orphaned Containerlab resources.
-    if docker ps -a --format '{{.Names}}' | grep -Eq '^clab-(eigrp-neighbor|oeig-lab)-'; then
+    if docker ps -a --format '{{.Names}}' | grep -Eq '^clab-(eigrp-neighbor|eigrp-internal|oeig-lab)-'; then
         fail 'Orphaned OpenEIGRP containerlab nodes detected; investigate before starting a new session'
     fi
 }
@@ -74,7 +74,7 @@ validate_stage() {
 }
 
 clab_nodes_exist() {
-    docker ps -a --format '{{.Names}}' | grep -Eq '^clab-eigrp-neighbor-'
+    docker ps -a --format '{{.Names}}' | grep -Eq '^clab-(eigrp-neighbor|eigrp-internal)-'
 }
 
 netlab_destroy() {
@@ -118,7 +118,7 @@ run_lab() {
 }
 
 run_uut() {
-    local stage="$1" name="$2" work report rc clean_rc
+    local stage="$1" name="$2" work report rc clean_rc image_rc
     local -a steps
     assert_free
     validate_stage "$stage"
@@ -134,23 +134,34 @@ run_uut() {
     state_write uut "$name" "$stage" running
     mkdir -p "$stage/artifacts"
 
+    # Modify only the uploaded topology; repository fixtures remain unchanged.
+    # A failed image selection is a setup failure and still gets a report.
+    image_rc=0
+    "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
+        "$stage/netlabs/tools/remote/images.py" prepare \
+        "$work/topology.yml" "$stage/artifacts/image.json" || image_rc=$?
+
     # Stream Python output while keeping an identical transcript in runner.log.
     # PIPESTATUS[0] is the test result; tee must never mask a UUT failure.
     set +e
-    PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=20s 1500s \
-        "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
-        "$stage/netlabs/uut/$name.py" \
-        --scenario "$work/scenario.yaml" \
-        --topology "$work/topology.yml" \
-        --artifacts "$stage/artifacts" 2>&1 | tee "$stage/artifacts/runner.log"
-    steps=("${PIPESTATUS[@]}")
-    set -e
-
-    rc="${steps[0]}"
-    if (( steps[1] != 0 )); then
-        echo 'ERROR: Unable to save UUT output to runner.log' >&2
-        rc=1
+    if (( image_rc == 0 )); then
+        PYTHONUNBUFFERED=1 timeout --signal=TERM --kill-after=20s 1500s \
+            "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
+            "$stage/netlabs/uut/$name.py" \
+            --scenario "$work/scenario.yaml" \
+            --topology "$work/topology.yml" \
+            --artifacts "$stage/artifacts" 2>&1 | tee "$stage/artifacts/runner.log"
+        steps=("${PIPESTATUS[@]}")
+        rc="${steps[0]}"
+        if (( steps[1] != 0 )); then
+            echo 'ERROR: Unable to save UUT output to runner.log' >&2
+            rc=1
+        fi
+    else
+        rc="$image_rc"
+        printf 'FAIL: OpenEIGRP image selection (exit %s)\n' "$rc" | tee "$stage/artifacts/runner.log"
     fi
+    set -e
 
     echo 'Cleaning up remote topology...'
     clean_rc=0
@@ -176,6 +187,17 @@ run_uut() {
     else
         echo "FAIL: $name"
     fi
+    return "$rc"
+}
+
+run_image_update() {
+    local stage="$1" rc=0
+    assert_free
+    validate_stage "$stage"
+    command -v docker >/dev/null || fail 'Docker unavailable'
+    "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
+        "$stage/netlabs/tools/remote/images.py" update || rc=$?
+    rm -rf -- "$stage"
     return "$rc"
 }
 
@@ -276,6 +298,10 @@ case "$action" in
     uut-start)
         [[ $# == 2 ]] || exit 2
         run_uut "$1" "$2"
+        ;;
+    image-update)
+        [[ $# == 1 ]] || exit 2
+        run_image_update "$1"
         ;;
     status)
         [[ $# == 0 ]] || exit 2

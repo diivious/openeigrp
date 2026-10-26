@@ -106,7 +106,7 @@ remote_run() {
     # Start actions require the workspace as their first argument. Without it,
     # runner.sh silently exits 2 before creating a UUT report or lab session.
     case "$action" in
-        lab-start|uut-start)
+        lab-start|uut-start|image-update)
             printf -v part '%q' "$stage"
             command+=" $part"
             ;;

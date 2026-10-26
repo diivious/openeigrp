@@ -10,9 +10,13 @@ usage() {
     cat <<'HELP'
 Usage: netlabs/tools/remote-uut.sh --scenario 2R-neighbor
        netlabs/tools/remote-uut.sh --list
+       netlabs/tools/remote-uut.sh --update
 
-Runs a live mixed OpenEIGRP-FRR/CSR1000v scenario with IPv4 and IPv6 neighbor
-checks, retrieves reports, and destroys the topology even when assertions fail.
+Runs a live mixed OpenEIGRP-FRR/CSR1000v qualification scenario,
+retrieves its report, and destroys the topology even when assertions fail.
+--update checks GHCR for the latest published versioned OpenEIGRP image and
+pulls it onto the netlab appliance. Each scenario then uses the highest locally
+installed version. No registry access is needed for normal test runs.
 A scenario is NOT a replacement for the deterministic 'make uut' portable gate.
 HELP
 }
@@ -30,6 +34,25 @@ case "$1" in
             id="$(basename "$(dirname "$spec")")"
             [[ -f "$REMOTE_REPO_ROOT/netlabs/uut/$id.py" ]] && printf '%s\n' "$id"
         done
+        exit 0
+        ;;
+    --update)
+        [[ $# == 1 ]] || exit 2
+        remote_transport_prepare
+        printf 'Checking published OpenEIGRP images on %s...\n' "$REMOTE_HOST"
+        stage="$(remote_new_stage)"
+        remote_stage "$stage" netlabs/tools/remote/runner.sh netlabs/tools/remote/images.py
+        remote_install_runner "$stage"
+        if remote_run "$stage" image-update; then
+            echo 'PASS: OpenEIGRP image update'
+        else
+            rc=$?
+            # The runner may have exited before cleanup (for example: BUSY).
+            # The stage path has already passed remote_stage's strict validation.
+            remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || :
+            printf 'FAIL: OpenEIGRP image update (remote exit %d)\n' "$rc" >&2
+            exit "$rc"
+        fi
         exit 0
         ;;
     --scenario)
@@ -61,8 +84,15 @@ esac
 remote_transport_prepare
 printf 'Staging %s on %s...\n' "$scenario" "$REMOTE_HOST"
 stage="$(remote_new_stage)"
-remote_stage "$stage" netlabs/tools/remote/runner.sh \
-    "netlabs/uut/$scenario.py" "netlabs/uut/$scenario" netlabs/config
+# The internal-route UUT reuses the proven Cisco/FRR CLI helpers from
+# 2R-neighbor.py; stage that driver alongside the selected scenario.
+files=(netlabs/tools/remote/runner.sh netlabs/tools/remote/images.py
+    "netlabs/uut/$scenario.py"
+    "netlabs/uut/$scenario" netlabs/config)
+if [[ "$scenario" == 2R-internal ]]; then
+    files+=(netlabs/uut/2R-neighbor.py)
+fi
+remote_stage "$stage" "${files[@]}"
 remote_install_runner "$stage"
 
 printf 'Starting automated UUT: %s...\n' "$scenario"

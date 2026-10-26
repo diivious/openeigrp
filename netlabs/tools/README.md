@@ -48,21 +48,59 @@ netlabs/tools/remote-lab.sh --stop
 this initial framework. A successful start retains the lab until `--stop`.
 `--connect` prompts for a router and runs `netlab connect` interactively.
 
+## OpenEIGRP image updates
+
+The registry publishes immutable numbered releases (`0.3.0`, `0.4.0`, etc.).
+A `latest` tag is **not** assumed to exist, and the test never relabels a
+versioned image to a different version.
+
+Run this from Cruella (or another configured client) when you want to refresh
+StormTrooper's installed OpenEIGRP image:
+
+```sh
+netlabs/tools/remote-uut.sh --update
+```
+
+`--update` contacts GHCR, identifies the highest published `X.Y.Z` tag,
+pulls it on the appliance, and retains earlier installed versions. It does
+not pull or change Cisco images. The appliance refuses an update if a lab or
+UUT owns the shared session lock.
+
+**Every subsequent UUT run automatically selects the highest versioned
+OpenEIGRP image installed on the appliance.** Normal test runs never query
+the registry. The selected image is inserted into that run's temporary netlab
+`topology.yml`; the checked-in topology is unchanged. `image.json` records the
+selected tag, local Docker image ID and available repo digests, and the test
+report records the OpenEIGRP image reference. The image therefore remains
+identifiable even when newer releases are installed later.
+
+Unversioned aliases such as `current` and architecture-only suffixes are not
+eligible. If the appliance has no installed numbered release, the test fails
+with an image-selection error instead of silently deploying another image.
+Network or registry failures during `--update` are reported as failures and
+do not remove previously installed images.
+
 ## Automated UUT
 
 ```sh
 netlabs/tools/remote-uut.sh --list
 netlabs/tools/remote-uut.sh --scenario 2R-neighbor
+netlabs/tools/remote-uut.sh --scenario 2R-internal
 ```
 
-The initial UUT tests actual bidirectional IPv4 and IPv6 EIGRP adjacency
-between OpenEIGRP-FRR 0.3.0 and CSR1000v 17.03.06. It uses native netlab
-provisioning and the shared `netlabs/config/eigrp-named.j2` template.
-Pinned image tags must already exist on StormTrooper; it never substitutes a
-mutable `current` tag. The UUT produces JSON PASS/FAIL results and CLI/log
+The neighbor UUT tests actual bidirectional IPv4 and IPv6 EIGRP adjacency
+between the selected OpenEIGRP-FRR release and CSR1000v 17.03.06. It uses
+native netlab provisioning and the shared `netlabs/config/eigrp-named.j2`
+template. At least one versioned OpenEIGRP image and the pinned Cisco image
+must exist on StormTrooper. Use `--update` to fetch the latest published
+OpenEIGRP release. The UUT produces JSON PASS/FAIL results and CLI/log
 artifacts in `netlabs/results/` on the development host.
 
-The initial UUT is a **live compatibility scenario** with its own YAML schema.
+The internal-route UUT separately checks EIGRP-internal IPv4/IPv6 routes
+learned and installed in **both** routers. See `netlabs/uut/COMPATIBILITY.md`
+for the status of additional Cisco interoperability checks.
+
+Live compatibility scenarios have their own YAML schemas.
 It does not replace portable YAML UUT tests run by `make uut`; that harness has
 internal and broker assertions unavailable to physical VM peers.
 

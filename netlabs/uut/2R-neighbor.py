@@ -256,7 +256,12 @@ def main():
         topo = yaml.safe_load(a.topology.read_text(encoding='utf8'))
         if topo.get('name') != 'eigrp-neighbor' or set(topo.get('nodes', {})) != {'oe', 'csr'}:
             raise RuntimeError('Unexpected native netlab topology')
-        for image in ['ghcr.io/diivious/openeigrp-frr:0.3.0', 'vrnetlab/vr-csr:17.03.06']:
+        # The server pins the selected installed release in this staged topology.
+        image = topo['defaults']['devices.frr.clab.image']
+        if not re.fullmatch(r'ghcr\.io/diivious/openeigrp-frr:[0-9]+\.[0-9]+\.[0-9]+', image):
+            raise RuntimeError(f'Unexpected OpenEIGRP image reference: {image}')
+        report['openeigrp_image'] = image
+        for image in [image, 'vrnetlab/vr-csr:17.03.06']:
             command(['docker', 'image', 'inspect', image], timeout=15)
         if not pathlib.Path('/usr/bin/sshpass').exists() and not shutil.which('sshpass'):
             raise RuntimeError('sshpass is required to connect to the CSR CLI')

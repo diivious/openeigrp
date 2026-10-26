@@ -44,7 +44,9 @@ SH
 fi
 cat >"$tmp/bin/docker" <<'SH'
 #!/bin/sh
-[ "$1" != ps ] || exit 0
+if [ "$1" = ps ] && [ -n "${DOCKER_MOCK_ORPHAN:-}" ]; then
+    printf '%s\n' "$DOCKER_MOCK_ORPHAN"
+fi
 exit 0
 SH
 cat >"$tmp/bin/netlab" <<'SH'
@@ -74,6 +76,15 @@ printf 'r1\n'
 SH
 chmod +x "$tmp/bin/mock_nodes"
 export NETLAB_PYTHON="$tmp/bin/mock_nodes"
+
+# New scenario containers must block concurrent labs even without a state file.
+if DOCKER_MOCK_ORPHAN=clab-eigrp-internal-oe \
+        bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 >"$tmp/orphan.out" 2>&1; then
+    echo 'FAIL: orphaned eigrp-internal container did not block a new lab' >&2
+    exit 1
+fi
+grep -Fq 'Orphaned OpenEIGRP containerlab nodes detected' "$tmp/orphan.out"
+echo 'PASS: orphaned internal-route topology blocks new sessions'
 
 # Confirm the advisory lock excludes another process even with no session file.
 mkdir -p "$tmp/state/session"
@@ -150,7 +161,8 @@ echo 'PASS: runner lifecycle, mutual exclusion, status, teardown and failed depl
 # The UUT mock supplies actual artifacts, output, exit codes, and an optional delay.
 make_uut_workspace() {
     local workspace="$tmp/state/runs/upload.$1/netlabs/uut/2R-neighbor"
-    mkdir -p "$workspace"
+    mkdir -p "$workspace" "${workspace%/netlabs/uut/2R-neighbor}/netlabs/tools/remote"
+    printf '# test image selector\n' >"${workspace%/netlabs/uut/2R-neighbor}/netlabs/tools/remote/images.py"
     printf 'schema: openeigrp-live-neighbor/v1\n' >"$workspace/scenario.yaml"
     printf '# test script\n' >"${workspace%/*}/2R-neighbor.py"
     printf 'name: eigrp-neighbor\n' >"$workspace/topology.yml"
@@ -160,6 +172,20 @@ make_uut_workspace uut
 cat >"$tmp/bin/mock_python" <<'SH'
 #!/bin/sh
 case "$1" in
+    */netlabs/tools/remote/images.py)
+        if [ "$2" = update ]; then
+            echo 'Latest published OpenEIGRP release: 0.4.0'
+            exit "${MOCK_IMAGE_UPDATE_RC:-0}"
+        fi
+        [ "$2" = prepare ] || exit 72
+        [ -f "$3" ] || exit 72
+        if [ "${MOCK_IMAGE_PREPARE_RC:-0}" -ne 0 ]; then
+            echo 'ERROR: no versioned images installed' >&2
+            exit "$MOCK_IMAGE_PREPARE_RC"
+        fi
+        printf '{"image":"ghcr.io/diivious/openeigrp-frr:0.4.0"}\n' >"$4"
+        echo 'OpenEIGRP image: ghcr.io/diivious/openeigrp-frr:0.4.0'
+        exit 0 ;;
     */netlabs/uut/2R-neighbor.py) ;;
     *) echo "Incorrect scenario driver: $1" >&2; exit 72 ;;
 esac
@@ -184,6 +210,7 @@ result="$(bash "$runner" uut-start "$tmp/state/runs/upload.uut" 2R-neighbor)"
 printf '%s\n' "$result" | grep -F 'PASS: 2R-neighbor'
 report="$(printf '%s\n' "$result" | sed -n 's/^REPORT_ID=//p')"
 [[ -f "$tmp/state/results/$report/report.json" ]]
+[[ -f "$tmp/state/results/$report/image.json" ]]
 [[ ! -f "$tmp/state/session/session" ]]
 
 # The first progress message must reach stdout before the UUT finishes.
@@ -210,6 +237,40 @@ grep -F 'Validating test neighbors...' "$tmp/stream.txt"
 grep -F 'PASS: 2R-neighbor' "$tmp/stream.txt"
 [[ ! -f "$tmp/state/session/session" ]]
 echo 'PASS: remote runner streams progress before UUT completion'
+
+# Image refresh must use the same lock and remove its temporary staging area.
+update_stage="$tmp/state/runs/upload.update"
+mkdir -p "$update_stage/netlabs/tools/remote"
+printf '# mock image helper\n' >"$update_stage/netlabs/tools/remote/images.py"
+bash "$runner" image-update "$update_stage" | grep -F 'Latest published OpenEIGRP release: 0.4.0'
+[[ ! -d "$update_stage" ]]
+[[ ! -f "$tmp/state/session/session" ]]
+mkdir -p "$update_stage/netlabs/tools/remote"
+printf '# mock image helper\n' >"$update_stage/netlabs/tools/remote/images.py"
+if MOCK_IMAGE_UPDATE_RC=48 bash "$runner" image-update "$update_stage" >"$tmp/update-error.log"; then
+    echo 'FAIL: failed image update was reported as a success' >&2
+    exit 1
+else
+    update_rc=$?
+fi
+[[ "$update_rc" -eq 48 && ! -d "$update_stage" ]]
+echo 'PASS: image update success/failure and stage cleanup'
+
+# Selecting an image is a setup gate. Failure must still report and teardown.
+make_uut_workspace noimage
+if MOCK_IMAGE_PREPARE_RC=55 bash "$runner" uut-start \
+        "$tmp/state/runs/upload.noimage" 2R-neighbor >"$tmp/noimage.log" 2>&1; then
+    echo 'FAIL: missing image selection was reported as success' >&2
+    exit 1
+else
+    rc=$?
+fi
+[[ "$rc" == 55 && ! -d "$tmp/state/runs/upload.noimage" ]]
+failed_report="$(sed -n 's/^REPORT_ID=//p' "$tmp/noimage.log" | tail -n 1)"
+[[ -f "$tmp/state/results/$failed_report/run-status.txt" ]]
+grep -Fq 'status=55' "$tmp/state/results/$failed_report/run-status.txt"
+grep -Fq 'FAIL: OpenEIGRP image selection' "$tmp/noimage.log"
+echo 'PASS: missing images produce a failing report and teardown'
 
 # Exercise the real client entry point with a fake transport library.
 mkdir -p "$tmp/client/netlabs/tools/remote" "$tmp/client/netlabs/uut/2R-neighbor"
@@ -293,7 +354,7 @@ echo 'PASS: UUT success/failure propagation, retained reports, and teardown'
 [[ -f "$root/netlabs/tools/remote/runner.sh" ]]
 grep -Fq 'COPYFILE_DISABLE=1 tar --no-xattrs' "$root/netlabs/tools/remote/common.sh"
 "$root/netlabs/tools/remote-lab.sh" --help | grep -F 'netlabs/tools/remote-lab.sh'
-test "$("$root/netlabs/tools/remote-uut.sh" --list)" = '2R-neighbor'
+test "$("$root/netlabs/tools/remote-uut.sh" --list)" = $'2R-internal\n2R-neighbor'
 if "$root/netlabs/tools/remote-uut.sh" --scenario neighbor-two-router >"$tmp/legacy.txt" 2>&1; then
     echo 'FAIL: legacy scenario identifier unexpectedly accepted' >&2
     exit 1
