@@ -18,7 +18,7 @@ assumptions. Do not treat an FRR/BIRD behavior as EIGRP protocol authority.
 ## Repository boundary
 
 - **`openeigrp/netlabs/` remains here:** Cisco/OE interoperability scenarios,
-  topology fixtures, capture/impairment support, transport, result reporting,
+  topology fixtures, capture/fault injection support, transport, result reporting,
   and qualification documentation.
 - **The separate educational labs repository:** CCNA/CCNP/CCIE networking
   exercises, student/instructor material, persistent instructional topologies,
@@ -286,8 +286,7 @@ netlabs/
       scenario.yaml
       topology.yml
       README.md
-    tests/                       # Mocked/unit driver regression tests
-  tests/                          # Transport/remote-runner regression tests
+  test/                           # Grouped Infra, RTP and DUAL regressions
   results/                        # Generated; excluded from Git
 ```
 
@@ -305,8 +304,7 @@ New runnable scenarios follow the established convention:
   `eigrp-internal` container names; verify that failed deployments and
   teardown cannot strand an unrecognized topology. Update staging explicitly
   when a new scenario requires shared driver/helper files.
-- Include executable regression tests under `netlabs/uut/tests/` or
-  `netlabs/tests/` covering the actual validator/driver logic, plus the
+- Include executable regression tests under `netlabs/test/{infra,rtp,dual}/` covering the actual validator/driver logic, plus the
   scenario's live topology and assertions. These do **not** replace the
   portable YAML UUT obligation for any separately discovered protocol bug fix.
 - Keep each scenario narrowly scoped and independently runnable. A coverage
@@ -324,7 +322,7 @@ New runnable scenarios follow the established convention:
 | `2R-internal.py` | **Incomplete scenario** | Driver exists, but a matching `2R-internal/scenario.yaml` and `topology.yml` are absent; not discoverable/runnable through the current live runner |
 | RTP-02 through RTP-14 | **Planned** | No completed live test is asserted by this plan |
 | DUAL-02 through DUAL-15 | **Planned** | No completed live test is asserted by this plan |
-| Packet capture and deterministic impairment | **Needed infrastructure** | Packet evidence and controlled loss/delay must be implemented and verified before tests that depend on them |
+| Packet capture and controlled packet loss/delay | **Helpers present; live evidence not yet independently qualified** | Packet and fault assertions require live verification before RTP objectives can PASS |
 
 This is a **repository-content inventory**, not a claim that any scenario has
 passed against StormTrooper or the selected Cisco and OE images. Track actual
@@ -337,7 +335,7 @@ runnable, and leave existing passing scenarios intact.
 
 | Stage | Deliverable | Purpose |
 | --- | --- | --- |
-| **0: Evidence foundation** | Packet capture/decoder, artifact contract, deterministic impairment helper, and driver regression coverage | Ensure RTP assertions can prove wire behavior rather than infer it |
+| **0: Evidence foundation** | Packet capture/decoder, artifact contract, deterministic network fault helper, and driver regression coverage | Ensure RTP assertions can prove wire behavior rather than infer it |
 | **1: 2R startup/route baseline** | Complete `2R-internal`; extend neighbor evidence for RTP-01; add internal/external and withdrawal cases | Establish trusted OE↔CE exchange in both AFs |
 | **2: 2R RTP encoding/transport** | TLV1/TLV2, single/multiple TLVs, packet boundaries, sequence/ACK, cold restart | Qualify the common message exchange |
 | **3: 3R shared-LAN RTP** | Multicast, selective retransmission, CR, lagging neighbor and recovery | Qualify per-neighbor reliable delivery |
@@ -399,17 +397,20 @@ From the repository root:
 netlabs/tools/remote-uut.sh --list
 netlabs/tools/remote-uut.sh --scenario 2R-neighbor
 netlabs/tools/remote-uut.sh --update    # Explicitly refresh the OE image
+netlabs/tools/remote-uut.sh --abort     # Recover an interrupted live/regression run
 
-python3 -m unittest discover -s netlabs/uut/tests -p 'test_*.py'
-netlabs/tests/test_remote_runtime.sh
+python3 -m unittest discover -s netlabs/test/rtp -p 'test_*.py'
+netlabs/test/infra/test_remote_runtime.sh
 ```
 
 Only one remote lab/UUT session occupies the current host at a time. The
 shared runner stages the selected scenario, runs `netlab up`, executes the
 driver, collects `report.json` and CLI/router logs, invokes `netlab down`,
 and retrieves an evidence bundle under `netlabs/results/uut-.../`. It records
-cleanup separately. A cleanup failure retains the remote session for
-recovery and must never be reported as a passing run.
+cleanup separately. A cleanup failure retains the remote session for recovery and must never
+be reported as a passing run. Use `netlabs/tools/remote-uut.sh --abort` to
+cancel a registered live/regression worker or recover an unlocked stale UUT;
+never remove a held lock file to bypass the session owner.
 
 The current `2R-neighbor` driver checks both routers' neighbor tables for
 IPv4 and IPv6, using observed IPv6 link-local peer addresses. It does not

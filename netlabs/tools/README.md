@@ -85,7 +85,8 @@ do not remove previously installed images.
 ```sh
 netlabs/tools/remote-uut.sh --list
 netlabs/tools/remote-uut.sh --scenario 2R-neighbor
-netlabs/tools/remote-uut.sh --scenario 2R-internal
+netlabs/tools/remote-uut.sh --all
+netlabs/tools/remote-uut.sh --abort
 ```
 
 The neighbor UUT tests actual bidirectional IPv4 and IPv6 EIGRP adjacency
@@ -111,8 +112,21 @@ StormTrooper alone owns the session marker and an exclusive `flock` lock under
 A running lab persists after SSH disconnect. A live UUT holds the lock through
 validation, evidence collection, and teardown. Unrecoverable cleanup errors
 retain the session marker instead of reporting success or permitting a second
-run. After a terminated UUT has released its lock, `remote-lab.sh --stop` can
-clean up stale UUT resources before starting again.
+run. `netlabs/tools/remote-uut.sh --abort` installs the current recovery handler,
+then requests cancellation of a running UUT or regression job. New remote test
+jobs have a dedicated process group and record the worker PID plus its Linux
+start time. The recovery handler signals only a verified owner, waits for the
+exclusive lock, restores fault/capture state, then tears down the netlab
+resources. Partial diagnostics are preserved in a new report. A failed
+restoration retains the original workspace and state for further recovery.
+An older in-flight job that has no registered worker cannot be force-killed
+safely; `--abort` rejects it if the lock is still held. Inspect that specific
+worker on the appliance before terminating it, then retry `--abort` to recover
+the stale session. Do not delete the lock file or kill all netlab containers.
+Interactive persistent labs continue to use `remote-lab.sh --stop`.
+
+The staging stream uses POSIX USTAR archives instead of PAX metadata; this
+avoids GNU tar warnings about macOS `SCHILY.fflags` extended headers.
 
 Uploaded execution files go to `/home/netlab-data/runs/`; results remain in
 `/home/netlab-data/results/`. The shell runner is installed at
@@ -125,8 +139,8 @@ commands are repository-controlled, not downloaded from mutable upstream URLs.
 ## Test and qualification status
 
 ```sh
-python3 -m unittest discover -s netlabs/uut/tests -p 'test_2r_neighbor.py' -v
-netlabs/tests/test_remote_runtime.sh
+python3 -m unittest discover -s netlabs/test/rtp -p 'test_neighbor.py' -v
+netlabs/test/infra/test_remote_runtime.sh
 ```
 
 The tests exercise Python neighbor validation and Bash session transitions with

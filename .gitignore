@@ -26,9 +26,6 @@ __pycache__/
 *.log
 *.logs
 *.dSYM/
-/eigrp/test/uut/eigrp-uut-node
-/unix/code/eigrp-wire
-
 
 # FRR test build output
 /frr/test/build/obj/
@@ -42,3 +39,6 @@ eigrpd/eigrpd
 eigrpd/eigrpd.conf
 eigrpd/eigrpd.xref
 
+eigrp/test/uut/eigrp-uut-node
+unix/code/eigrp-wire
+netlabs/remote-lab.cfg

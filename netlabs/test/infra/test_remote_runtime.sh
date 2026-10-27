@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 runner="$root/netlabs/tools/remote/runner.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -35,9 +35,9 @@ if ! command -v timeout >/dev/null 2>&1; then
     cat >"$tmp/bin/timeout" <<'SH'
 #!/bin/sh
 # Test drivers are mocked; verify the invocation, then preserve its exit code.
-[ "$1" = '--signal=TERM' ] && [ "$2" = '--kill-after=20s' ] &&
-    [ "$3" = '1500s' ] || exit 2
-shift 3
+[ "$1" = '--foreground' ] && [ "$2" = '--signal=TERM' ] &&
+    [ "$3" = '--kill-after=20s' ] && [ "$4" = '1500s' ] || exit 2
+shift 4
 exec "$@"
 SH
     chmod +x "$tmp/bin/timeout"
@@ -276,6 +276,7 @@ echo 'PASS: missing images produce a failing report and teardown'
 mkdir -p "$tmp/client/netlabs/tools/remote" "$tmp/client/netlabs/uut/2R-neighbor"
 cp "$root/netlabs/tools/remote-uut.sh" "$tmp/client/netlabs/tools/remote-uut.sh"
 printf 'name: 2R-neighbor\n' >"$tmp/client/netlabs/uut/2R-neighbor/scenario.yaml"
+printf 'name: eigrp-neighbor\n' >"$tmp/client/netlabs/uut/2R-neighbor/topology.yml"
 printf '# driver\n' >"$tmp/client/netlabs/uut/2R-neighbor.py"
 cat >"$tmp/client/netlabs/tools/remote/common.sh" <<'SH'
 #!/usr/bin/env bash
@@ -296,6 +297,7 @@ remote_run() {
 remote_fetch_report() {
     mkdir -p "$2/$1"
     printf 'ok\n' >"$2/$1/run-status.txt"
+    printf '{"cleanup":"PASS"}\n' >"$2/$1/result.json"
 }
 SH
 export LAB_TEST_ROOT="$tmp/client"
@@ -352,9 +354,12 @@ echo 'PASS: UUT success/failure propagation, retained reports, and teardown'
 [[ -r "$root/netlabs/remote-lab.cfg" ]]
 [[ -f "$root/netlabs/tools/remote/common.sh" ]]
 [[ -f "$root/netlabs/tools/remote/runner.sh" ]]
-grep -Fq 'COPYFILE_DISABLE=1 tar --no-xattrs' "$root/netlabs/tools/remote/common.sh"
+grep -Fq 'COPYFILE_DISABLE=1 tar --format=ustar --no-xattrs' "$root/netlabs/tools/remote/common.sh"
 "$root/netlabs/tools/remote-lab.sh" --help | grep -F 'netlabs/tools/remote-lab.sh'
-test "$("$root/netlabs/tools/remote-uut.sh" --list)" = $'2R-internal\n2R-neighbor'
+# 2R-internal has a driver but no scenario/topology; never list it as runnable.
+# Future cases must not invalidate the historical fixture discovery test.
+"$root/netlabs/tools/remote-uut.sh" --list | grep -Fxq '2R-neighbor'
+! "$root/netlabs/tools/remote-uut.sh" --list | grep -Fxq '2R-internal'
 if "$root/netlabs/tools/remote-uut.sh" --scenario neighbor-two-router >"$tmp/legacy.txt" 2>&1; then
     echo 'FAIL: legacy scenario identifier unexpectedly accepted' >&2
     exit 1

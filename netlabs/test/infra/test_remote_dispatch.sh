@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/stage/netlabs/tools/remote"
@@ -36,7 +36,7 @@ cat >"$tmp/stage/netlabs/tools/remote/runner.sh" <<'SH'
 #!/usr/bin/env bash
 [[ $# -ge 1 ]] || exit 2
 case "$1" in
-    uut-start|lab-start)
+    uut-start|lab-start|regressions)
         [[ $# == 3 && "$2" == "$EXPECTED_STAGE" ]] || exit 2
         printf '%s %s\n' "$1" "$3" >>"$MOCK_LOG"
         ;;
@@ -62,8 +62,10 @@ remote_transport_prepare
 
 remote_run "$EXPECTED_STAGE" uut-start 2R-neighbor
 remote_run "$EXPECTED_STAGE" lab-start 101
+remote_run "$EXPECTED_STAGE" regressions all
 [[ $(sed -n '1p' "$MOCK_LOG") == 'uut-start 2R-neighbor' ]]
 [[ $(sed -n '2p' "$MOCK_LOG") == 'lab-start 101' ]]
+[[ $(sed -n '3p' "$MOCK_LOG") == 'regressions all' ]]
 [[ "$(remote_run "$EXPECTED_STAGE" status)" == 'No active lab or UUT session' ]]
 
 # Preserve the remote process exit code across the SSH command boundary.
@@ -93,6 +95,7 @@ printf 'PASS: SSH authentication probe preserves stdin\n'
 mkdir -p "$tmp/client/netlabs/tools/remote" "$tmp/client/netlabs/uut/2R-neighbor"
 cp "$root/netlabs/tools/remote-uut.sh" "$tmp/client/netlabs/tools/remote-uut.sh"
 printf 'schema: openeigrp-live-neighbor/v1\nname: 2R-neighbor\n' >"$tmp/client/netlabs/uut/2R-neighbor/scenario.yaml"
+printf 'name: eigrp-neighbor\n' >"$tmp/client/netlabs/uut/2R-neighbor/topology.yml"
 printf '# UUT driver\n' >"$tmp/client/netlabs/uut/2R-neighbor.py"
 cat >"$tmp/client/netlabs/tools/remote/common.sh" <<'SH'
 #!/usr/bin/env bash
