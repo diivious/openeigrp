@@ -194,6 +194,15 @@ jobs:
           set -o pipefail
           make uut 2>&1 | tee make-test.log
 
+      - name: Trace Linux UUT aborts on failure
+        if: ${{ failure() && runner.os == 'Linux' }}
+        shell: bash
+        env:
+          EIGRP_PYTHON: python3
+        run: |
+          set -o pipefail
+          python3 eigrp/test/uut/trace_linux_abort.py 2>&1 | tee abort-trace.log
+
       - name: Preserve failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -201,7 +210,11 @@ jobs:
           name: eigrp-core-${{ matrix.os }}-failure-log
           path: |
             make-test.log
+            abort-trace.log
             eigrp/test/uut/logs/
+            eigrp/test/uut/abort-trace/*.log
+            eigrp/test/uut/abort-trace/*.txt
+            eigrp/test/uut/eigrp-uut-node
           if-no-files-found: warn
 
   pipeline:
