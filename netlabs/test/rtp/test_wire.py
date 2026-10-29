@@ -42,10 +42,34 @@ def save_pcap(path, frames, linktype=1):
             f.write(frame)
 
 
+CISCO_V4 = bytes.fromhex(
+    '0602002d000000010aff00020000ff010005ea000000001312d0'
+    '0000007a12000000000000000000200aff0002'
+)
+CISCO_V6 = bytes.fromhex(
+    '06020045000000020aff00020000ff010005ea000000001312d00000007a1200'
+    '00000000000000000000000000000000000000008020010db8447300ff0000000000000002'
+)
+
+
+CISCO_TAGGED_V4 = bytes.fromhex(
+    "06030047000000010aff00020300ff010005dc00000005f5e1000000000186a000000000020200000007000000000aff00020000000000000007000000000000030020c613ff02"
+)
+CISCO_TAGGED_V6 = bytes.fromhex(
+    "0603005900000002000000000000ff010005dc00000005f5e1000000000186a000000000000000000000000000000000000000000aff0002000000000000000700000000000003008020010db84473020000000000000000ff"
+)
+OE_LEGACY_V4 = bytes.fromhex(
+    "0603003d000000010aff00010000ff010005dc0000000000000a00000000640000000000000000000aff000100000000000000000000030020c612ff01"
+)
+OE_LEGACY_V6 = bytes.fromhex(
+    "06030071000000020aff00010e00ff010005dc0000000000000a00000000640000000000070d000000000000000000000000000000000aff0001000000070300000000000000000000000000000000000aff00010000000000000000000003008020010db84473010000000000000000ff"
+)
+
 class DecoderTests(unittest.TestCase):
     def test_ipv4_ipv6_opcodes_flags_ack_and_tlvs(self):
         param = struct.pack('!HH', 1, 12) + bytes([1, 0, 1, 0, 0, 0]) + b'\x00\x0f'
-        mp_body = struct.pack('!HHI', 1, 0, 0x01020304) + bytes(24) + bytes([24, 10, 20, 30])
+        mp_body = (struct.pack('!HHI', 0, 1, 0x01020304) + bytes(24)
+                   + bytes(4) + bytes([24, 10, 20, 30]))
         mp = struct.pack('!HH', 0x0602, 4 + len(mp_body)) + mp_body
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / 'eigrp.pcap'
@@ -65,6 +89,88 @@ class DecoderTests(unittest.TestCase):
         wire.evidence(events, opcode='HELLO', ack=123)
         with self.assertRaises(AssertionError):
             wire.evidence(events, opcode='REPLY')
+
+    def test_cisco_ipv4_ipv6_multiprotocol_vectors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'cisco.pcap'
+            save_pcap(p, [v4(eigrp(opcode=1, tlvs=CISCO_V4)),
+                          v6(eigrp(opcode=1, tlvs=CISCO_V6))])
+            events, errors = wire.read_pcap(p)
+        self.assertFalse(errors)
+        self.assertEqual([item['tlvs'][0]['prefixes'] for item in events],
+                         [['10.255.0.2/32'], ['2001:db8:4473:ff::2/128']])
+        self.assertEqual([item['tlvs'][0]['next_hop'] for item in events],
+                         ['0.0.0.0', '::'])
+
+    def test_cisco_tagged_external_exactly_one_destination(self):
+        vectors = ((CISCO_TAGGED_V4, 4, '198.19.255.2/32', 7),
+                   (CISCO_TAGGED_V6, 6, '2001:db8:4473:200::ff/128', 7))
+        for raw, family, expected, tag in vectors:
+            with self.subTest(family=family, expected=expected):
+                event = wire.decode_eigrp(eigrp(opcode=1, tlvs=raw), family,
+                                          '10.44.53.2', '224.0.0.10', 0)
+                tlv = event['tlvs'][0]
+                self.assertEqual(tlv['prefixes'], [expected])
+                self.assertEqual(tlv['external'].get('tag'), tag)
+                self.assertEqual(tlv['external']['protocol'], 3)
+                self.assertEqual(tlv['external']['reserved'], 0)
+                self.assertEqual(len(tlv['prefixes']), 1)
+
+                # Unreachable-wide-metric withdrawal preserves provenance.
+                withdrawn = bytearray(raw)
+                withdrawn[20:26] = b'\xff' * 6
+                tlv = wire.decode_eigrp(eigrp(opcode=1, tlvs=withdrawn), family,
+                                        '10.44.53.2', '224.0.0.10', 0)['tlvs'][0]
+                self.assertEqual(tlv['metric']['delay'], 0xffffffffffff)
+                self.assertEqual(tlv['prefixes'], [expected])
+
+    def test_legacy_exterior_is_rejected(self):
+        for raw, family in ((OE_LEGACY_V4, 4), (OE_LEGACY_V6, 6),
+                            (OE_LEGACY_V4[:-1] + b'\x00', 4)):
+            with self.subTest(family=family, size=len(raw)):
+                with self.assertRaises(wire.DecodeError):
+                    wire.decode_eigrp(eigrp(opcode=1, tlvs=raw), family,
+                                      '10.44.53.1', '224.0.0.10', 0)
+
+    def test_mp_external_malformed_length_is_not_extra_prefixes(self):
+        for raw, family in ((CISCO_TAGGED_V4, 4), (CISCO_TAGGED_V6, 6)):
+            with self.subTest(family=family, size=len(raw)):
+                for count in (1, 2, 3, 4):
+                    shortened = bytearray(raw[:-count])
+                    shortened[2:4] = struct.pack('!H', len(shortened))
+                    with self.assertRaises(wire.DecodeError):
+                        wire.decode_eigrp(eigrp(opcode=1, tlvs=shortened), family,
+                                          '10.44.53.2', '224.0.0.10', 0)
+                wrong_length = bytearray(raw)
+                wrong_length[2:4] = struct.pack('!H', len(raw) - 1)
+                with self.assertRaises(wire.DecodeError):
+                    wire.decode_eigrp(eigrp(opcode=1, tlvs=wrong_length), family,
+                                      '10.44.53.2', '224.0.0.10', 0)
+                bad_attr = bytearray(raw)
+                bad_attr[12] = 255
+                with self.assertRaises(wire.DecodeError):
+                    wire.decode_eigrp(eigrp(opcode=1, tlvs=bad_attr), family,
+                                      '10.44.53.2', '224.0.0.10', 0)
+                extra = bytearray(raw + b'\x01')
+                extra[2:4] = struct.pack('!H', len(extra))
+                with self.assertRaises(wire.DecodeError):
+                    wire.decode_eigrp(eigrp(opcode=1, tlvs=extra), family,
+                                      '10.44.53.2', '224.0.0.10', 0)
+                bad_prefix = bytearray(raw)
+                offset = len(raw) - (17 if family == 6 else 5)
+                bad_prefix[offset] = 129 if family == 6 else 33
+                with self.assertRaises(wire.DecodeError):
+                    wire.decode_eigrp(eigrp(opcode=1, tlvs=bad_prefix), family,
+                                      '10.44.53.2', '224.0.0.10', 0)
+
+    def test_reject_prior_open_eigrp_header_order(self):
+        legacy = bytearray(CISCO_V4)
+        legacy[4:8] = b'\x00\x01\x00\x00'
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'legacy.pcap'
+            save_pcap(p, [v4(eigrp(opcode=1, tlvs=bytes(legacy)))])
+            with self.assertRaisesRegex(wire.DecodeError, 'AFI 0'):
+                wire.read_pcap(p)
 
     def test_classic_routes_and_generic_rtp_tlvs(self):
         def tlv(kind, value):

@@ -59,7 +59,8 @@ def test_cr_hello_capacity_checks_all_busy_receivers():
     assert "EIGRP_AUTH_MD5_TLV_SIZE" in capacity
     assert "EIGRP_AUTH_SHA256_TLV_SIZE" in capacity
     assert "eigrp_packet_reliable_prior_count(nbr, sequence)" in capacity
-    assert "eigrp_packet_payload_limit(ei->curr_mtu)" in capacity
+    assert "eigrp_packet_payload_limit(" in capacity
+    assert "ei->eigrp->af_vectors.packet_ip_header_bytes" in capacity
     assert "EIGRP_NEXT_SEQUENCE_TLV_SIZE" in capacity
 
 

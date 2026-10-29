@@ -1,0 +1,17 @@
+schema: openeigrp-live-internal/v1
+name: 2R-internal
+group: dual
+process: OpenEIGRP
+asn: 4473
+families: [ipv4, ipv6]
+neighbor_timeout: 120
+route_timeout: 150
+require_originated_updates: true
+require_ipv6_passive_runtime: lo
+routes:
+  oe:
+    ipv4: 10.255.0.1/32
+    ipv6: 2001:db8:4473:ff::1/128
+  csr:
+    ipv4: 10.255.0.2/32
+    ipv6: 2001:db8:4473:ff::2/128

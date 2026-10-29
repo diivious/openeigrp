@@ -292,6 +292,7 @@ void eigrp_ipv4_init(eigrp_af_vectors_t *vectors)
 	vectors->packet_receive = eigrp_ipv4_packet_receive;
 	vectors->packet_source_on_link = eigrp_ipv4_packet_source_on_link;
 	vectors->packet_address_bytes = EIGRP_IPV4_ADDRESS_BYTES;
+	vectors->packet_ip_header_bytes = EIGRP_IPV4_HEADER_LEN;
 	vectors->packet_address_decode = eigrp_ipv4_packet_address_decode;
 	vectors->packet_address_encode = eigrp_ipv4_packet_address_encode;
 	vectors->packet_prefix_decode = eigrp_ipv4_packet_prefix_decode;

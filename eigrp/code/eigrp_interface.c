@@ -984,6 +984,16 @@ eigrp_result_t eigrp_intf_passive_update(eigrp_operation_t operation,
 		eigrp_intf_multicast_update(EIGRP_SET, context->runtime);
 	}
 	eigrp_intf_context_runtime_rebind(context);
+	/* A configured passive IPv6 interface may already have a global
+	 * connected address before its AF configuration is applied.  Rescan
+	 * host interfaces now so an existing loopback can originate its route
+	 * without requiring a later address or interface notification.
+	 */
+	if (passive && instance
+	    && eigrp_instance_afi(instance) == EIGRP_AFI_IPV6 && context->config
+	    && context->config->interface_name
+	    && strcmp(context->config->interface_name, "default") != 0)
+		eigrp_network_intfs_update(instance);
 	if (context->address_family && context->address_family->runtime) {
 		eigrp_intf_t *ei;
 		eigrp_list_item_t *node;

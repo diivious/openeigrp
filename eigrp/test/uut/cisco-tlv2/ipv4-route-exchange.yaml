@@ -1,0 +1,35 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-topology.yaml
+name: IPv4 Cisco TLV2 Route Lifecycle
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.44.53.2, interface: eth0, timeout: 7}
+  - validate-neighbor: {uut: r2, neighbor: 10.44.53.1, interface: eth0, timeout: 7}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: 10.255.0.1/32, event: delivered, min: 1, timeout: 7}
+  - validate-packet: {uut: r2, interface: eth0, opcode: update, prefix: 10.255.0.2/32, event: delivered, min: 1, timeout: 7}
+  - validate-convergence:
+      timeout: 7
+      stable_for: 0.2
+      expect:
+        - route: {uut: r1, prefix: 10.255.0.2/32, table: rib, next_hop: 10.44.53.2, distance: 90}
+        - route: {uut: r2, prefix: 10.255.0.1/32, table: rib, next_hop: 10.44.53.1, distance: 90}
+  - packet-mark: withdrawal
+  - link-down: {uut: r1, interface: eth0}
+  - link-down: {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 7
+      stable_for: 0.2
+      expect:
+        - route: {uut: r1, prefix: 10.255.0.2/32, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.255.0.1/32, table: rib, present: false}
+  - packet-mark: recovery
+  - link-up: {uut: r1, interface: eth0}
+  - link-up: {uut: r2, interface: eth0}
+  - validate-neighbor: {uut: r1, neighbor: 10.44.53.2, interface: eth0, timeout: 7}
+  - validate-neighbor: {uut: r2, neighbor: 10.44.53.1, interface: eth0, timeout: 7}
+  - validate-convergence:
+      timeout: 7
+      stable_for: 0.2
+      expect:
+        - route: {uut: r1, prefix: 10.255.0.2/32, table: rib, next_hop: 10.44.53.2, distance: 90}
+        - route: {uut: r2, prefix: 10.255.0.1/32, table: rib, next_hop: 10.44.53.1, distance: 90}

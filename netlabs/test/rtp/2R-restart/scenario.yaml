@@ -1,0 +1,15 @@
+schema: openeigrp-live-rtp-restart-2r/v1
+name: 2R-restart
+group: rtp
+process: OpenEIGRP
+asn: 4473
+families: [ipv4, ipv6]
+# Loss checks use each peer address observed before restart; IOS SSH is
+# unavailable during Cisco reload, including the IPv6 neighbor-loss phase.
+# Recovery must rediscover the live peer and requalify both address families.
+restart_roles: [oe, ce]
+connectivity_timeout_seconds: 120
+# Restart the routing runtime, preserving both containerlab network namespaces.
+restart_modes: {oe: eigrpd-process, ce: ios-vm}
+loss_capture_ready_seconds: 25
+objectives: [RTP-12]

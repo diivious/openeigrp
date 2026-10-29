@@ -81,35 +81,61 @@ def stop(state, *, require_packets=False):
     if data.get('schema') != 'openeigrp-capture/v1':
         raise RuntimeError('unrecognized capture state')
     pid = int(data['pid'])
+    child = _PROCESSES.get(pid)
+    early_exit = None
     try:
-        if _starttime(pid) == data['starttime']:
-            cmdline = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
-            if not any(b'tcpdump' in item for item in cmdline) or \
-                    str(data['pcap']).encode() not in cmdline:
+        try:
+            stat = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+            # Linux stat field 22 is the process start time. A reused PID is
+            # never a valid capture, even if its command line looks familiar.
+            if int(stat[19]) != data['starttime']:
                 raise RuntimeError('capture PID identity mismatch; refusing to signal')
-            os.killpg(pid, signal.SIGINT)
-            for _ in range(60):
-                if not Path(f'/proc/{pid}').exists() or \
-                        Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] == 'Z':
-                    break
-                time.sleep(0.05)
+            if stat[0] == 'Z':
+                # Exited children have no cmdline. Do not mistake a zombie for
+                # a different process or send a signal to its process group.
+                early_exit = 'zombie'
             else:
-                raise RuntimeError('capture did not terminate after SIGINT')
-    except FileNotFoundError:
-        pass
+                cmdline = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+                if not any(b'tcpdump' in item for item in cmdline) or \
+                        str(data['pcap']).encode() not in cmdline:
+                    raise RuntimeError('capture PID identity mismatch; refusing to signal')
+                os.killpg(pid, signal.SIGINT)
+                for _ in range(60):
+                    try:
+                        state_now = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
+                    except FileNotFoundError:
+                        break
+                    if state_now == 'Z':
+                        break
+                    time.sleep(0.05)
+                else:
+                    raise RuntimeError('capture did not terminate after SIGINT')
+        except FileNotFoundError:
+            early_exit = 'process no longer exists'
     finally:
-        child = _PROCESSES.pop(pid, None)
         if child is not None:
             try:
                 child.wait(timeout=3)
+                if early_exit is not None:
+                    early_exit += f' (exit {child.returncode})'
+                _PROCESSES.pop(pid, None)
             except subprocess.TimeoutExpired:
-                _PROCESSES[pid] = child
+                # Retain the process handle if it has not terminated.
+                pass
+    if early_exit:
+        # Nothing remains to terminate. Clear the marker so runner teardown
+        # stays safe; preserve the PCAP and tcpdump log for failure evidence.
+        state.unlink()
+        raise RuntimeError(f'capture exited before stop: {early_exit}; '
+                           f'see {data["pcap"]}.tcpdump.log')
+    # All permitted exit paths have completed the stop. Do not leave a stale
+    # marker that would make independent runner cleanup fail a second time.
+    state.unlink()
     pcap = Path(data['pcap'])
     if not pcap.is_file() or pcap.stat().st_size < 24:
         raise RuntimeError('capture file missing or truncated')
     if require_packets and pcap.stat().st_size == 24:
         raise RuntimeError('capture has no packets; evidence unavailable')
-    state.unlink()
     return data
 
 

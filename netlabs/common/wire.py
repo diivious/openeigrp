@@ -98,13 +98,27 @@ def ip_payload(frame, linktype):
     return None
 
 
-def route_tlv(kind, body):
-    """Decode a route TLV's framing, metrics and destination prefixes.
+def decode_prefix(body, pos, family):
+    """Decode exactly one wire destination, returning (prefix, end offset)."""
+    if pos >= len(body):
+        raise DecodeError('route TLV without destination prefix')
+    bits = body[pos]
+    maxbits = 32 if family == 4 else 128
+    if bits > maxbits:
+        raise DecodeError('invalid route prefix length')
+    # IOS XE follows RFC 7868's IPv6 extra-octet boundary encoding.
+    used = (0 if bits == 0 else 16 if bits == 128 else bits // 8 + 1) if family == 6 else (bits + 7) // 8
+    start = pos + 1
+    if start + used > len(body):
+        raise DecodeError('short route prefix')
+    width = 4 if family == 4 else 16
+    raw = body[start:start + used] + b'\x00' * (width - used)
+    prefix = ipaddress.ip_network((ipaddress.ip_address(raw), bits), strict=False)
+    return str(prefix), start + used
 
-    Classic route layout and multiprotocol header/metric sizes follow RFC
-    7868 section 6 and the portable TLV1/TLV2 codecs. Keep opaque extended
-    attributes intact rather than guessing their meaning.
-    """
+
+def route_tlv(kind, body):
+    """Decode classic and Cisco multiprotocol route TLV fields and prefixes."""
     mp = kind in (0x0602, 0x0603)
     external = kind in (0x0103, 0x0403, 0x0603)
     if kind not in (0x0102, 0x0103, 0x0402, 0x0403, 0x0602, 0x0603):
@@ -114,7 +128,7 @@ def route_tlv(kind, body):
     if mp:
         if len(body) < 8 + 24:
             raise DecodeError('short multiprotocol route metric')
-        afi, topology, rid = struct.unpack_from('!HHI', body)
+        topology, afi, rid = struct.unpack_from('!HHI', body)
         if afi not in (1, 2):
             raise DecodeError(f'unsupported multiprotocol AFI {afi}')
         family = 4 if afi == 1 else 6
@@ -130,13 +144,32 @@ def route_tlv(kind, body):
                           'hops': metric[7], 'delay': int.from_bytes(metric[8:14], 'big'),
                           'bandwidth': int.from_bytes(metric[14:20], 'big'),
                           'flags': int.from_bytes(metric[22:24], 'big')}
+        addr_len = 4 if family == 4 else 16
+        if len(body) < pos + addr_len:
+            raise DecodeError('short multiprotocol next-hop address')
+        item['next_hop'] = str(ipaddress.ip_address(body[pos:pos+addr_len]))
+        pos += addr_len
+        # Cisco's tagged 20-byte exterior is the only supported MP
+        # external layout. Exactly one destination must follow it.
         if external:
-            if len(body) < pos + 16:
-                raise DecodeError('short multiprotocol external data')
-            origin, asn, value, reserved, protocol, flags = struct.unpack_from('!IIIHBB', body, pos)
-            item['external'] = {'origin': origin, 'as': asn, 'metric': value,
-                                'reserved': reserved, 'protocol': protocol, 'flags': flags}
-            pos += 16
+            if len(body) < pos + 21:
+                raise DecodeError('short Cisco multiprotocol exterior')
+            origin, asn, tag, value, reserved, protocol, flags = struct.unpack_from(
+                '!IIIIHBB', body, pos)
+            if reserved:
+                raise DecodeError('invalid Cisco multiprotocol exterior reserved field')
+            destination, end = decode_prefix(body, pos + 20, family)
+            if end != len(body):
+                raise DecodeError('trailing multiprotocol destination bytes')
+            item['external'] = {'origin': origin, 'as': asn, 'tag': tag,
+                                'metric': value, 'reserved': reserved,
+                                'protocol': protocol, 'flags': flags}
+        else:
+            destination, end = decode_prefix(body, pos, family)
+            if end != len(body):
+                raise DecodeError('trailing multiprotocol destination bytes')
+        item['prefixes'] = [destination]
+        return item
     else:
         family = 4 if kind >> 8 == 1 else 6
         addr_len = 4 if family == 4 else 16
@@ -157,20 +190,9 @@ def route_tlv(kind, body):
                           'load': metric[13], 'tag': metric[14], 'flags': metric[15]}
         pos += 16
     prefixes = []
-    maxbits = 32 if family == 4 else 128
-    width = 4 if family == 4 else 16
     while pos < len(body):
-        bits = body[pos]
-        pos += 1
-        if bits > maxbits:
-            raise DecodeError('invalid route prefix length')
-        used = (bits + 7) // 8
-        if pos + used > len(body):
-            raise DecodeError('short route prefix')
-        raw = body[pos:pos + used] + b'\x00' * (width - used)
-        prefix = ipaddress.ip_network((ipaddress.ip_address(raw), bits), strict=False)
-        prefixes.append(str(prefix))
-        pos += used
+        destination, pos = decode_prefix(body, pos, family)
+        prefixes.append(destination)
     if not prefixes:
         raise DecodeError('route TLV without destination prefix')
     item['prefixes'] = prefixes

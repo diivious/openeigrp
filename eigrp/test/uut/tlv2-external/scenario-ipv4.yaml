@@ -1,0 +1,22 @@
+schema: eigrp-uut-test/v1
+topology: ../examples/two-router.yaml
+name: TLV2 external IPv4 provenance withdrawal and re-advertisement
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, interface: eth0, state: up, timeout: 15}
+  - redistribute-add: {uut: r1, source: static}
+  - packet-mark: first-external
+  - source-route-add: {uut: r1, prefix: '198.18.22.1/32', metric: 20}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.22.1/32', since: first-external, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.22.1/32', table: rib, present: true, timeout: 15}
+  - packet-mark: withdraw
+  - source-route-remove: {uut: r1, prefix: '198.18.22.1/32'}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.22.1/32', since: withdraw, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.22.1/32', table: rib, present: false, timeout: 15}
+  - packet-mark: re-advertise
+  - source-route-add: {uut: r1, prefix: '198.18.22.1/32', metric: 30}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.22.1/32', since: re-advertise, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.22.1/32', table: rib, present: true, timeout: 15}
+  - source-route-remove: {uut: r1, prefix: '198.18.22.1/32'}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

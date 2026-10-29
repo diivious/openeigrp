@@ -1,0 +1,36 @@
+schema: eigrp-uut-test/v1
+topology: ../examples/two-router.yaml
+name: Config changes propagate into existing IPv4 redistributed topology
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: "10.0.0.2", interface: eth0, state: up, timeout: 15}
+  - redistribute-add: {uut: r1, source: static}
+  - source-route-add: {uut: r1, prefix: '198.18.39.1/32', metric: 20}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: true, timeout: 15}
+  - packet-mark: explicit-update
+  - redistribute-metric: {uut: r1, bandwidth: 100000, delay: 175, reliability: 255, load: 1, mtu: 1500}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.39.1/32', since: explicit-update, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: true, timeout: 15}
+  - packet-mark: explicit-reset
+  - redistribute-metric: {uut: r1, reset: true}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.39.1/32', since: explicit-reset, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: false, timeout: 15}
+  - packet-mark: default-set
+  - default-metric: {uut: r1, bandwidth: 100000, delay: 125, reliability: 255, load: 1, mtu: 1500}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.39.1/32', since: default-set, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: true, timeout: 15}
+  - packet-mark: default-update
+  - default-metric: {uut: r1, bandwidth: 100000, delay: 195, reliability: 255, load: 1, mtu: 1500}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.39.1/32', since: default-update, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: true, timeout: 15}
+  - packet-mark: default-reset
+  - default-metric: {uut: r1, reset: true}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.39.1/32', since: default-reset, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: false, timeout: 15}
+  - packet-mark: explicit-recover
+  - redistribute-metric: {uut: r1, bandwidth: 100000, delay: 90, reliability: 255, load: 1, mtu: 1500}
+  - validate-packet: {uut: r1, interface: eth0, opcode: update, prefix: '198.18.39.1/32', since: explicit-recover, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '198.18.39.1/32', table: rib, present: true, timeout: 15}
+  - source-route-remove: {uut: r1, prefix: '198.18.39.1/32'}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

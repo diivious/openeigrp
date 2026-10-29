@@ -10,10 +10,11 @@ usage() {
     cat <<'HELP'
 Usage: netlabs/tools/remote-uut.sh --list
        netlabs/tools/remote-uut.sh --update
-       netlabs/tools/remote-uut.sh --all
-       netlabs/tools/remote-uut.sh --rtp
-       netlabs/tools/remote-uut.sh --dual
-       netlabs/tools/remote-uut.sh --scenario 2R-neighbor
+       netlabs/tools/remote-uut.sh --all [--image TAG]
+       netlabs/tools/remote-uut.sh --rtp [--image TAG]
+       netlabs/tools/remote-uut.sh --dual [--image TAG]
+       netlabs/tools/remote-uut.sh --scenario 2R-neighbor [--image TAG]
+       netlabs/tools/remote-uut.sh --purge
        netlabs/tools/remote-uut.sh --abort
 
 --list       List discoverable complete 2R-6R live scenarios.
@@ -22,6 +23,8 @@ Usage: netlabs/tools/remote-uut.sh --list
 --rtp        Run infra/RTP regressions, then all runnable RTP live cases.
 --dual       Run infra/DUAL regressions, then all runnable DUAL live cases.
 --scenario   Run exactly one live scenario without the local regression suite.
+--image TAG  Use locally built openeigrp:TAG (no build); transfer only if image ID differs.
+--purge      Remove netlabs reports and development images on client and server.
 --abort      Stop an interrupted run, restore faults, and tear down its lab.
 
 New live scenarios: netlabs/test/{rtp,dual}/<case>/{driver.py,scenario.yaml,topology.yml}
@@ -118,6 +121,93 @@ run_image_update() {
     fi
 }
 
+# --image selects an existing local build. Never rename/publish a development
+# image under a GHCR release tag. The server-side importer takes the session
+# lock and rejects active labs before modifying any Docker image.
+DEV_IMAGE=''
+DEV_ID=''
+run_image_sync() {
+    local tag="$1" local_id local_platform stage status=0 remote_id
+    DEV_IMAGE="openeigrp:$tag"
+    command -v docker >/dev/null 2>&1 || {
+        echo 'ERROR: local Docker is required for --image' >&2; return 1;
+    }
+    local_id="$(docker image inspect --format '{{.Id}}' "$DEV_IMAGE")" || {
+        echo "ERROR: local image not found: $DEV_IMAGE (build with make docker first)" >&2
+        return 1
+    }
+    [[ "$local_id" =~ ^sha256:[a-f0-9]{64}$ ]] || {
+        echo "ERROR: invalid local image ID for $DEV_IMAGE" >&2; return 1;
+    }
+    local_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$DEV_IMAGE")" || return 1
+    [[ "$local_platform" == linux/amd64 ]] || {
+        echo "ERROR: $DEV_IMAGE is $local_platform; StormTrooper requires linux/amd64" >&2
+        return 1
+    }
+    DEV_ID="$local_id"
+    printf 'Development image: %s (%s)\n' "$DEV_IMAGE" "$DEV_ID"
+    stage="$(remote_new_stage)" || return 1
+    if ! remote_stage "$stage" netlabs/tools/remote/dev-image.sh; then
+        status=1
+    else
+        remote_id="$(remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' inspect '$DEV_IMAGE'")" || status=1
+        if (( status == 0 )); then
+            if [[ "$remote_id" == "$DEV_ID" ]]; then
+                echo 'PASS: development image unchanged; transfer skipped'
+            else
+                echo 'Transferring updated development image to StormTrooper...'
+                # Capture both halves of the pipeline. In particular, Docker
+                # save failures must not be mistaken for a successful import.
+                set +e
+                docker save "$DEV_IMAGE" | gzip -1 | \
+                    remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' import '$DEV_IMAGE' '$DEV_ID'"
+                local -a steps=("${PIPESTATUS[@]}")
+                set -e
+                if (( steps[0] != 0 || steps[1] != 0 || steps[2] != 0 )); then
+                    echo 'ERROR: Docker image transfer/import failed' >&2
+                    status=1
+                fi
+            fi
+        fi
+    fi
+    remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || status=1
+    return "$status"
+}
+
+run_purge() {
+    local stage rc=0 local_images image
+    remote_transport_prepare || return 1
+    stage="$(remote_new_stage)" || return 1
+    if ! remote_stage "$stage" netlabs/tools/remote/dev-image.sh; then
+        remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || :
+        return 1
+    fi
+    # The remote helper holds the lab lock and refuses active/orphaned labs.
+    if ! remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' purge"; then
+        rc=1
+    fi
+    remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || rc=1
+    (( rc == 0 )) || return "$rc"
+    # Client image removal is scoped to development tags, not GHCR releases.
+    if command -v docker >/dev/null 2>&1; then
+        local_images="$(docker image ls --format '{{.Repository}}:{{.Tag}}')" || return 1
+        while IFS= read -r image; do
+            [[ "$image" == openeigrp:* ]] || continue
+            docker image rm "$image" || rc=1
+        done <<<"$local_images"
+    fi
+    # Delete known report artifacts only. Preserve unrelated files and config.
+    local f results="$REMOTE_REPO_ROOT/netlabs/results"
+    if [[ -d "$results" ]]; then
+        for f in "$results"/uut-* "$results"/batch-*.json; do
+            [[ -e "$f" ]] || continue
+            rm -rf -- "$f" || rc=1
+        done
+    fi
+    (( rc == 0 )) && echo 'PASS: netlabs development images and historical reports purged'
+    return "$rc"
+}
+
 # LAST_SAFE=1 means a retrieved structured result attests clean teardown.
 # A failed scenario can still be safe for the next independent test.
 run_live() {
@@ -148,6 +238,11 @@ run_live() {
         return 1
     fi
 
+    # The image choice lives only in this disposable stage. Default release
+    # selection therefore cannot accidentally inherit an earlier dev run.
+    if [[ -n "$DEV_IMAGE" ]]; then
+        remote_ssh "printf '%s\\n%s\\n' '$DEV_IMAGE' '$DEV_ID' > '$stage/dev-image.txt'" || return 1
+    fi
     transcript="$(mktemp)"
     set +e
     if [[ "$layout" == grouped ]]; then
@@ -341,38 +436,47 @@ if (( $# < 1 )); then
     usage >&2
     exit 2
 fi
-case "$1" in
-    --help|-h)
-        [[ $# == 1 ]] || exit 2
-        usage
-        exit 0
-        ;;
-    --update)
-        [[ $# == 1 ]] || { usage >&2; exit 2; }
-        run_image_update
-        exit $?
-        ;;
-    --abort)
-        [[ $# == 1 ]] || { usage >&2; exit 2; }
-        run_abort
-        exit $?
-        ;;
-    --list|--all|--rtp|--dual)
-        [[ $# == 1 ]] || { usage >&2; exit 2; }
-        requested="${1#--}"
-        ;;
-    --scenario)
-        if [[ $# != 2 || ! "$2" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]]; then
-            usage >&2
-            exit 2
-        fi
-        requested=scenario
-        target="$2"
-        ;;
-    *)
-        usage >&2
-        exit 2
-        ;;
+# Use an explicit, simple parser so the image option may follow any selection.
+requested=''
+target=''
+image_tag=''
+while (( $# )); do
+    case "$1" in
+        --help|-h)
+            [[ $# == 1 && -z "$requested" ]] || exit 2
+            usage
+            exit 0 ;;
+        --update|--abort|--list|--all|--rtp|--dual|--purge)
+            [[ -z "$requested" ]] || { usage >&2; exit 2; }
+            requested="${1#--}"
+            shift ;;
+        --scenario)
+            [[ -z "$requested" && $# -ge 2 && "$2" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || {
+                usage >&2; exit 2;
+            }
+            requested=scenario
+            target="$2"
+            shift 2 ;;
+        --image)
+            [[ -z "$image_tag" && $# -ge 2 && "$2" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || {
+                usage >&2; exit 2;
+            }
+            image_tag="$2"
+            shift 2 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
+[[ -n "$requested" ]] || { usage >&2; exit 2; }
+if [[ -n "$image_tag" ]]; then
+    case "$requested" in
+        scenario|all|rtp|dual) ;;
+        *) echo 'ERROR: --image requires a live test selection' >&2; exit 2 ;;
+    esac
+fi
+case "$requested" in
+    update) run_image_update; exit $? ;;
+    abort) run_abort; exit $? ;;
+    purge) run_purge; exit $? ;;
 esac
 
 discover
@@ -398,6 +502,9 @@ fi
 
 if [[ "$requested" == scenario ]]; then
     remote_transport_prepare
+    if [[ -n "$image_tag" ]]; then
+        run_image_sync "$image_tag" || exit $?
+    fi
     run_live "${selected[0]}"
     exit $?
 fi
@@ -431,6 +538,18 @@ if (( ${#selected[@]} == 0 )); then
         record live all-live BLOCKED
     fi
 else
+    if [[ -n "$image_tag" ]]; then
+        if ! run_image_sync "$image_tag"; then
+            echo 'BLOCKED: development image transfer failed' >&2
+            for i in "${selected[@]}"; do
+                record live "${CASE_NAMES[i]}" BLOCKED
+            done
+            printf '\nRegression summary: %d PASS, %d FAIL, %d BLOCKED/NOT_IMPLEMENTED\n' \
+                "$PASSED" "$FAILED" "$BLOCKED"
+            write_summary "$requested" || exit 1
+            exit 1
+        fi
+    fi
     stop_batch=0
     for i in "${selected[@]}"; do
         case_name="${CASE_NAMES[i]}"

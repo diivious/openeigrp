@@ -40,8 +40,8 @@ def function_body(source: str, name: str) -> str:
 
 def test_zebra_subscription_uses_exact_afi_type_instance_and_vrf():
     zebra = read(ZEBRA_C)
-    update = function_body(zebra, "eigrp_zebra_redistribute_update")
-    delete = function_body(zebra, "eigrp_zebra_redistribute_delete")
+    update = function_body(zebra, "eigrp_zebra_redistribute_update_locked")
+    delete = function_body(zebra, "eigrp_zebra_redistribute_delete_locked")
     params = function_body(zebra, "eigrp_zebra_subscription_params_build")
     valid = function_body(zebra, "eigrp_zebra_source_instance_valid")
 
@@ -49,7 +49,7 @@ def test_zebra_subscription_uses_exact_afi_type_instance_and_vrf():
     assert "params->type = eigrp_zebra_redistribute_type(source->protocol);" in params
     assert "params->instance = (unsigned short)source->route_instance;" in params
     assert "params->vrf_id = (vrf_id_t)eigrp_instance_vrf_id(eigrp);" in params
-    assert "params.afi, params.type, params.instance" in update
+    assert re.search(r"params\.afi,\s*params\.type,\s*params\.instance", update)
     assert "params.vrf_id" in update
     assert "params.type, params.instance" in delete
     assert "params.vrf_id" in delete

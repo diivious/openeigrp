@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2026 Donnie V. Savage
 #
-# Behavioral coverage for RFC 7868 multiprotocol/v2 IPv6 wide route TLVs.
+# Behavioral coverage for Cisco IOS XE multiprotocol/v2 IPv6 wide route TLVs.
 
 from pathlib import Path
 import os
@@ -23,8 +23,8 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
             #include <arpa/inet.h>
             #include <assert.h>
             #include <stdbool.h>
-            #include <stdio.h>
             #include <stdarg.h>
+            #include <stdio.h>
             #include <stdint.h>
             #include <string.h>
 
@@ -128,6 +128,13 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 return NULL;
             }
 
+            eigrp_intf_t *eigrp_intf_lookup_by_local_addr(eigrp_instance_t *eigrp,
+                                                         const eigrp_addr_t *source)
+            {
+                (void)eigrp; (void)source;
+                return NULL;
+            }
+
             static unsigned int ipv6_prefix_octets(uint8_t prefix_length)
             {
                 if (prefix_length == 0)
@@ -205,8 +212,7 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 eigrp_stream_t *stream = eigrp_stream_create(128);
                 unsigned int prefix_octets = ipv6_prefix_octets(prefix_length);
                 uint16_t expected_type = external ? EIGRP_TLV_MP_EXT : EIGRP_TLV_MP_INT;
-                uint16_t addpath_len = external ? 28 : 26;
-                uint16_t expected_length = 4 + 8 + 24 + addpath_len + (external ? 16 : 0) + 1 + prefix_octets;
+                uint16_t expected_length = 4 + 8 + 24 + 16 + (external ? 20 : 0) + 1 + prefix_octets;
 
                 assert(stream != NULL);
                 route_set(&route, external, prefix_length);
@@ -216,12 +222,15 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 assert(stream->data[1] == (expected_type & 0xff));
                 assert(stream->data[2] == (expected_length >> 8));
                 assert(stream->data[3] == (expected_length & 0xff));
-                assert(stream->data[4] == 0x00 && stream->data[5] == EIGRP_AF_IPv6);
-                assert(stream->data[6] == 0x00 && stream->data[7] == EIGRP_TOPOLOGY_ID_BASE);
-                assert(stream->data[12] == (uint8_t)(addpath_len / 2));
-                assert(stream->data[36] == 0x07);
-                assert(stream->data[37] == (external ? 13 : 12));
-                assert(memcmp(stream->data + 38, &route.nexthop.ip.v6, 16) == 0);
+                assert(stream->data[4] == 0x00 && stream->data[5] == EIGRP_TOPOLOGY_ID_BASE);
+                assert(stream->data[6] == 0x00 && stream->data[7] == EIGRP_AF_IPv6);
+                assert(stream->data[12] == 0);
+                if (external) {
+                    assert(stream->data[60] == 0x12 && stream->data[61] == 0x34);
+                    assert(stream->data[62] == 0x56 && stream->data[63] == 0x78);
+                }
+                assert(memcmp(stream->data + 36,
+                              &route.nexthop.ip.v6, 16) == 0);
                 assert(stream->data[expected_length - (1 + prefix_octets)] == prefix_length);
 
                 printf("VECTOR|%s|%u|", external ? "external" : "internal", prefix_length);
@@ -239,9 +248,14 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 assert(decoded->dest.prefix_length == prefix_length);
                 assert(memcmp(decoded->dest.address.bytes, route.dest.address.bytes, 16) == 0);
                 assert_metric(&decoded->metric);
-                if (external)
-                    assert(memcmp(&decoded->extdata, &route.extdata,
-                                  sizeof(route.extdata)) == 0);
+                if (external) {
+                    assert(decoded->extdata.orig == route.extdata.orig);
+                    assert(decoded->extdata.tag == route.extdata.tag);
+                    assert(decoded->extdata.as == route.extdata.as);
+                    assert(decoded->extdata.metric == route.extdata.metric);
+                    assert(decoded->extdata.protocol == route.extdata.protocol);
+                    assert(decoded->extdata.flags == route.extdata.flags);
+                }
                 assert(stream->getp == stream->endp);
                 eigrp_stream_free(stream);
             }
@@ -301,22 +315,72 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 reject_bytes(&eigrp, &neighbor, &codec, too_long, sizeof(too_long));
 
 
+
+                /* Actual Cisco CSR1000v 17.03.06 multiprotocol UPDATE TLVs,
+                 * captured during OE/Cisco 2R reinitialization on 2026-10-27.
+                 * Decode the production bytes, not a synthetic OE round trip.
+                 */
+                static const uint8_t cisco_v4[] = { 0x06, 0x02, 0x00, 0x2d, 0x00, 0x00, 0x00, 0x01, 0x0a, 0xff, 0x00, 0x02, 0x00, 0x00, 0xff, 0x01, 0x00, 0x05, 0xea, 0x00, 0x00, 0x00, 0x00, 0x13, 0x12, 0xd0, 0x00, 0x00, 0x00, 0x7a, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x0a, 0xff, 0x00, 0x02 };
+                static const uint8_t cisco_v6[] = { 0x06, 0x02, 0x00, 0x45, 0x00, 0x00, 0x00, 0x02, 0x0a, 0xff, 0x00, 0x02, 0x00, 0x00, 0xff, 0x01, 0x00, 0x05, 0xea, 0x00, 0x00, 0x00, 0x00, 0x13, 0x12, 0xd0, 0x00, 0x00, 0x00, 0x7a, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x44, 0x73, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 };
+                eigrp_stream_t *capture;
+                eigrp_ipv4_init(&eigrp.af_vectors);
+                memset(&neighbor.src, 0, sizeof(neighbor.src));
+                neighbor.src.afi = AF_INET;
+                assert(inet_pton(AF_INET, "10.44.53.2", &neighbor.src.ip.v4) == 1);
+                capture = eigrp_stream_create(sizeof(cisco_v4));
+                assert(capture != NULL);
+                assert(eigrp_stream_put(capture, cisco_v4, sizeof(cisco_v4)) == sizeof(cisco_v4));
+                decoded = codec.decoder(&eigrp, &neighbor, capture, sizeof(cisco_v4));
+                assert(decoded != NULL);
+                assert(decoded->dest.prefix_length == 32);
+                assert(decoded->dest.address.afi == EIGRP_AFI_IPV4);
+                assert(memcmp(decoded->dest.address.bytes, "\x0a\xff\x00\x02", 4) == 0);
+                assert(decoded->nexthop.afi == AF_INET);
+                assert(memcmp(&decoded->nexthop.ip.v4, &neighbor.src.ip.v4, 4) == 0);
+                assert(capture->getp == capture->endp);
+                eigrp_stream_free(capture);
+
+                eigrp_ipv6_init(&eigrp.af_vectors);
+                memset(&neighbor.src, 0, sizeof(neighbor.src));
+                neighbor.src.afi = AF_INET6;
+                assert(inet_pton(AF_INET6, "fe80::2", &neighbor.src.ip.v6) == 1);
+                capture = eigrp_stream_create(sizeof(cisco_v6));
+                assert(capture != NULL);
+                assert(eigrp_stream_put(capture, cisco_v6, sizeof(cisco_v6)) == sizeof(cisco_v6));
+                decoded = codec.decoder(&eigrp, &neighbor, capture, sizeof(cisco_v6));
+                assert(decoded != NULL);
+                assert(decoded->dest.prefix_length == 128);
+                assert(decoded->dest.address.afi == EIGRP_AFI_IPV6);
+                assert(decoded->topology_id == 0);
+                assert(decoded->nexthop.afi == AF_INET6);
+                assert(memcmp(&decoded->nexthop.ip.v6, &neighbor.src.ip.v6, 16) == 0);
+                assert(capture->getp == capture->endp);
+                eigrp_stream_free(capture);
+
+                /* Unsupported AFIs and missing next hops must not enter DUAL. */
+                capture = eigrp_stream_create(sizeof(cisco_v6));
+                assert(capture != NULL);
+                assert(eigrp_stream_put(capture, cisco_v6, sizeof(cisco_v6)) == sizeof(cisco_v6));
+                capture->data[7] = 3;
+                assert(codec.decoder(&eigrp, &neighbor, capture, sizeof(cisco_v6)) == NULL);
+                eigrp_stream_free(capture);
                 /* A mixed-capability interface emits one classic and one MP TLV. */
                 mixed = eigrp_stream_create(256);
                 assert(mixed != NULL);
                 route_set(&route, false, 64);
                 assert(eigrp_packet_encoder_both(&eigrp, &interface, NULL, mixed, &route)
-                       == 46 + 72);
+                       == 46 + 62);
                 assert(mixed->data[0] == 0x04 && mixed->data[1] == 0x02);
                 assert(mixed->data[46] == 0x06 && mixed->data[47] == 0x02);
                 eigrp_stream_free(mixed);
 
-                /* Corrupt AddPath's data-word count: decoder must terminate safely. */
+                /* Truncate the mandatory IPv6 next-hop field. */
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 64);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 72);
-                valid->data[37] = 13;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 62);
+                valid->endp = 51; /* TLV header, metric and only 15 next-hop bytes */
+                valid->data[3] = 51;
                 assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp) == NULL);
                 assert(valid->getp == valid->endp);
                 eigrp_stream_free(valid);
@@ -326,8 +390,8 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 assert(valid != NULL);
                 route_set(&route, false, 64);
                 route.topology_id = 1;
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 72);
-                assert(valid->data[6] == 0x00 && valid->data[7] == 0x01);
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 62);
+                assert(valid->data[4] == 0x00 && valid->data[5] == 0x01);
                 valid->getp = 0;
                 decoded = codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp);
                 assert(decoded != NULL);
@@ -339,8 +403,8 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 64);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 72);
-                valid->data[5] = EIGRP_AF_IPv4;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 62);
+                valid->data[7] = EIGRP_AF_IPv4;
                 assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp) == NULL);
                 assert(valid->getp == valid->endp);
                 eigrp_stream_free(valid);
@@ -349,7 +413,7 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 128);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 79);
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 69);
                 valid->endp--;
                 valid->data[2] = (uint8_t)(valid->endp >> 8);
                 valid->data[3] = (uint8_t)(valid->endp & 0xff);
@@ -362,12 +426,183 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 64);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 72);
-                prefix_offset = 4 + 8 + 24 + 26;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 62);
+                prefix_offset = 4 + 8 + 24 + 16;
                 valid->data[prefix_offset] = 129;
                 assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp) == NULL);
                 assert(valid->getp == valid->endp);
                 eigrp_stream_free(valid);
+
+                /* Real 2026-10-28 CSR1000v 17.03.06 and OE captures.
+                 * Include Cisco-tagged 20-byte and RFC 16-byte exteriors
+                 * in both address families, not just round trips.
+                 */
+                static const uint8_t external_csr4[] = {0x06, 0x03, 0x00, 0x47, 0x00, 0x00, 0x00, 0x01, 0x0a, 0xff, 0x00, 0x02, 0x03, 0x00, 0xff, 0x01, 0x00, 0x05, 0xdc, 0x00, 0x00, 0x00, 0x05, 0xf5, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x86, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xff, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x20, 0xc6, 0x13, 0xff, 0x02};
+                static const uint8_t external_legacy4[] = {0x06, 0x03, 0x00, 0x3d, 0x00, 0x00, 0x00, 0x01, 0x0a, 0xff, 0x00, 0x01, 0x00, 0x00, 0xff, 0x01, 0x00, 0x05, 0xdc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xff, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x20, 0xc6, 0x12, 0xff, 0x01};
+                static const uint8_t external_csr6[] = {0x06, 0x03, 0x00, 0x59, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x01, 0x00, 0x05, 0xdc, 0x00, 0x00, 0x00, 0x05, 0xf5, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x86, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xff, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x44, 0x73, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff};
+                static const uint8_t external_legacy6[] = {0x06, 0x03, 0x00, 0x71, 0x00, 0x00, 0x00, 0x02, 0x0a, 0xff, 0x00, 0x01, 0x0e, 0x00, 0xff, 0x01, 0x00, 0x05, 0xdc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xff, 0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xff, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x44, 0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff};
+                {
+                    struct captured_external {
+                        const uint8_t *bytes;
+                        size_t length;
+                        int family;
+                        uint32_t tag;
+                        uint8_t prefix_length;
+                    } cases[] = {
+                        {external_csr4, sizeof(external_csr4), AF_INET, 7, 32},
+                        {external_csr6, sizeof(external_csr6), AF_INET6, 7, 128},
+                    };
+                    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
+                        uint8_t malformed[sizeof(external_legacy6) + 1];
+                        const struct captured_external *c = &cases[i];
+                        eigrp_stream_t *frame = eigrp_stream_create(c->length);
+                        if (c->family == AF_INET) {
+                            eigrp_ipv4_init(&eigrp.af_vectors);
+                            neighbor.src.afi = AF_INET;
+                            assert(inet_pton(AF_INET, "10.44.53.2",
+                                             &neighbor.src.ip.v4) == 1);
+                        } else {
+                            eigrp_ipv6_init(&eigrp.af_vectors);
+                            neighbor.src.afi = AF_INET6;
+                            assert(inet_pton(AF_INET6, "fe80::2",
+                                             &neighbor.src.ip.v6) == 1);
+                        }
+                        assert(frame != NULL);
+                        assert(eigrp_stream_put(frame, c->bytes, c->length) == c->length);
+                        decoded = codec.decoder(&eigrp, &neighbor, frame, c->length);
+                        assert(decoded != NULL);
+                        assert(decoded->dest.prefix_length == c->prefix_length);
+                        assert(decoded->extdata.tag == c->tag);
+                        assert(decoded->extdata.protocol == 3);
+                        assert(decoded->extdata.reserved == 0);
+                        assert(decoded->metric.delay != EIGRP_MAX_METRIC);
+                        eigrp_stream_free(frame);
+
+                        /* A wide-metric withdrawal has inaccessible delay,
+                         * but retains the same destination/provenance.
+                         */
+                        memcpy(malformed, c->bytes, c->length);
+                        memset(malformed + 20, 0xff, 6);
+                        frame = eigrp_stream_create(c->length);
+                        assert(eigrp_stream_put(frame, malformed, c->length) == c->length);
+                        decoded = codec.decoder(&eigrp, &neighbor, frame, c->length);
+                        assert(decoded != NULL);
+                        assert(decoded->dest.prefix_length == c->prefix_length);
+                        assert(decoded->extdata.tag == c->tag);
+                        assert(decoded->metric.delay == EIGRP_MAX_METRIC);
+                        eigrp_stream_free(frame);
+
+                        /* All these malformed frames must retire their
+                         * temporary route and consume the bounded packet.
+                         */
+                        for (size_t trim = 1; trim <= 4; trim++) {
+                            size_t length = c->length - trim;
+                            memcpy(malformed, c->bytes, length);
+                            malformed[2] = (uint8_t)(length >> 8);
+                            malformed[3] = (uint8_t)length;
+                            reject_bytes(&eigrp, &neighbor, &codec, malformed, length);
+                        }
+                        memcpy(malformed, c->bytes, c->length);
+                        malformed[2] = 0;
+                        malformed[3] = (uint8_t)(c->length + 1);
+                        reject_bytes(&eigrp, &neighbor, &codec, malformed, c->length);
+                        memcpy(malformed, c->bytes, c->length);
+                        malformed[2] = 0;
+                        malformed[3] = (uint8_t)(c->length - 1);
+                        reject_bytes(&eigrp, &neighbor, &codec, malformed, c->length);
+                        memcpy(malformed, c->bytes, c->length);
+                        malformed[12] = 0xff; /* impossible attr words */
+                        reject_bytes(&eigrp, &neighbor, &codec, malformed, c->length);
+                        memcpy(malformed, c->bytes, c->length);
+                        malformed[c->length - (c->prefix_length == 128 ? 17 : 5)] =
+                            c->prefix_length == 128 ? 129 : 33;
+                        reject_bytes(&eigrp, &neighbor, &codec, malformed, c->length);
+                    }
+                }
+
+                /* AddPath is deferred. A well-framed additional-path
+                 * attribute must not overwrite the primary next hop or
+                 * Cisco exterior provenance for either address family.
+                 */
+                {
+                    struct attribute_case {
+                        const uint8_t *bytes;
+                        size_t length;
+                        int family;
+                    } cases[] = {
+                        {external_csr4, sizeof(external_csr4), AF_INET},
+                        {external_csr6, sizeof(external_csr6), AF_INET6},
+                    };
+                    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+                        const struct attribute_case *c = &cases[i];
+                        size_t attr_size = c->family == AF_INET ? 16 : 28;
+                        size_t insert_at = 36 + (size_t)c->bytes[12] * 2U;
+                        size_t total = c->length + attr_size;
+                        eigrp_extdata_t saved_extdata;
+                        eigrp_addr_t saved_nexthop;
+                        eigrp_stream_t *frame;
+                        if (c->family == AF_INET) {
+                            eigrp_ipv4_init(&eigrp.af_vectors);
+                            neighbor.src.afi = AF_INET;
+                            assert(inet_pton(AF_INET, "10.44.53.2",
+                                             &neighbor.src.ip.v4) == 1);
+                        } else {
+                            eigrp_ipv6_init(&eigrp.af_vectors);
+                            neighbor.src.afi = AF_INET6;
+                            assert(inet_pton(AF_INET6, "fe80::2",
+                                             &neighbor.src.ip.v6) == 1);
+                        }
+                        frame = eigrp_stream_create(total);
+                        assert(frame != NULL);
+                        assert(eigrp_stream_put(frame, c->bytes, c->length) == c->length);
+                        decoded = codec.decoder(&eigrp, &neighbor, frame, c->length);
+                        assert(decoded != NULL);
+                        saved_extdata = decoded->extdata;
+                        saved_nexthop = decoded->nexthop;
+                        eigrp_stream_set_getp(frame, 0);
+                        eigrp_stream_set_endp(frame, total);
+                        memmove(frame->data + insert_at + attr_size,
+                                frame->data + insert_at, c->length - insert_at);
+                        memset(frame->data + insert_at + 2, 0x55, attr_size - 2);
+                        frame->data[insert_at] = 7; /* AddPath */
+                        frame->data[insert_at + 1] = (uint8_t)((attr_size - 2) / 2);
+                        frame->data[12] += (uint8_t)(attr_size / 2);
+                        frame->data[2] = (uint8_t)(total >> 8);
+                        frame->data[3] = (uint8_t)total;
+                        decoded = codec.decoder(&eigrp, &neighbor, frame, total);
+                        assert(decoded != NULL);
+                        assert(memcmp(&decoded->extdata, &saved_extdata,
+                                      sizeof(saved_extdata)) == 0);
+                        assert(memcmp(&decoded->nexthop, &saved_nexthop,
+                                      sizeof(saved_nexthop)) == 0);
+                        eigrp_stream_set_getp(frame, 0);
+                        frame->data[insert_at + 1] = 0xff; /* excessive attribute length */
+                        assert(codec.decoder(&eigrp, &neighbor, frame, total) == NULL);
+                        assert(frame->getp == frame->endp);
+                        eigrp_stream_free(frame);
+                    }
+                }
+
+                /* Legacy 16-byte exterior is not accepted in either AF. */
+                {
+                    struct legacy_case {
+                        const uint8_t *bytes;
+                        size_t length;
+                        int family;
+                    } legacy[] = {
+                        {external_legacy4, sizeof(external_legacy4), AF_INET},
+                        {external_legacy6, sizeof(external_legacy6), AF_INET6},
+                    };
+                    for (size_t i = 0; i < sizeof(legacy)/sizeof(legacy[0]); i++) {
+                        if (legacy[i].family == AF_INET) {
+                            eigrp_ipv4_init(&eigrp.af_vectors);
+                        } else {
+                            eigrp_ipv6_init(&eigrp.af_vectors);
+                        }
+                        reject_bytes(&eigrp, &neighbor, &codec,
+                                     legacy[i].bytes, legacy[i].length);
+                    }
+                }
 
                 return 0;
             }
@@ -389,6 +624,7 @@ def test_ipv6_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
             str(ROOT / "eigrp" / "code" / "eigrp_tlv2.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_packet.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_ipv6.c"),
+            str(ROOT / "eigrp" / "code" / "eigrp_ipv4.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_stream.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
             *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ),

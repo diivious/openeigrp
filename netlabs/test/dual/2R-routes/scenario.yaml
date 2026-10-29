@@ -1,0 +1,28 @@
+schema: openeigrp-live-dual-2r/v1
+name: 2R-routes
+group: dual
+process: OpenEIGRP
+asn: 4473
+families: [ipv4, ipv6]
+objectives: [DUAL-01, DUAL-02, DUAL-03, DUAL-04]
+
+# DUAL-01: capture the OE interface reset on the surviving Cisco endpoint;
+# neighbor-loss checks use the link-local identities recorded before reset.
+# DUAL-02/03: accept observed IOS XE IPv4 /32 subnet headings and IPv6 EX
+# route entries, but still require an exact prefix, EIGRP source, and wire TLV.
+# DUAL-04: query the actual named-AF topology command and verify FD/CD/RD.
+# DUAL-03: a metric increase must change current CD/RD; Cisco may retain the
+# historical feasible distance (FD) even with one successor. Do not require
+# FD == CD or force FD to change on a metric update.
+
+# DUAL-02/03: capture live per-AF running configuration, RIB and topology
+# before transient routes/seed metrics are restored on failure.
+
+# On DUAL-02/03 failure, preserve the live OE EIGRP redistribution event log
+# and the daemon FRR file log, distinguishing missing Zebra input from a
+# portable redistribution rejection or topology/DUAL failure.
+
+# DUAL-03: Cisco may withdraw an external route by entering ACTIVE and
+# sending an unreachable-metric QUERY instead of a poisoned UPDATE. Require
+# a reachable UPDATE before the withdrawal, verified peer RIB removal,
+# and a subsequent reachable UPDATE plus peer RIB recovery in either case.

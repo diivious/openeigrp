@@ -18,6 +18,8 @@ eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
 eigrp_result_t eigrp_redist_remove(eigrp_instance_context_t *context,
 				   const eigrp_redist_source_t *source);
 void eigrp_redist_config_delete_all(eigrp_af_config_t *af);
+void eigrp_redist_runtime_clear(eigrp_instance_t *runtime);
+eigrp_result_t eigrp_redist_default_refresh(eigrp_instance_t *runtime);
 void eigrp_redist_policy_update_all(void);
 
 eigrp_result_t

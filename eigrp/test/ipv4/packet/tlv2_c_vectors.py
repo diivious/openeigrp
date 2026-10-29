@@ -212,8 +212,7 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 eigrp_stream_t *stream = eigrp_stream_create(128);
                 unsigned int prefix_octets = ipv4_prefix_octets(prefix_length);
                 uint16_t expected_type = external ? EIGRP_TLV_MP_EXT : EIGRP_TLV_MP_INT;
-                uint16_t addpath_len = external ? 22 : 20;
-                uint16_t expected_length = 4 + 8 + 24 + (external ? 16 : 0) + 1 + prefix_octets;
+                uint16_t expected_length = 4 + 8 + 24 + 4 + (external ? 20 : 0) + 1 + prefix_octets;
 
                 assert(stream != NULL);
                 route_set(&route, external, prefix_length);
@@ -223,10 +222,14 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 assert(stream->data[1] == (expected_type & 0xff));
                 assert(stream->data[2] == (expected_length >> 8));
                 assert(stream->data[3] == (expected_length & 0xff));
-                assert(stream->data[4] == 0x00 && stream->data[5] == EIGRP_AF_IPv4);
-                assert(stream->data[6] == 0x00 && stream->data[7] == EIGRP_TOPOLOGY_ID_BASE);
+                assert(stream->data[4] == 0x00 && stream->data[5] == EIGRP_TOPOLOGY_ID_BASE);
+                assert(stream->data[6] == 0x00 && stream->data[7] == EIGRP_AF_IPv4);
                 assert(stream->data[12] == 0);
-                assert(stream->data[36 + (external ? 16 : 0)] == prefix_length);
+                assert(stream->data[40 + (external ? 20 : 0)] == prefix_length);
+                if (external) {
+                    assert(stream->data[48] == 0x12 && stream->data[49] == 0x34);
+                    assert(stream->data[50] == 0x56 && stream->data[51] == 0x78);
+                }
                 assert(stream->data[expected_length - (1 + prefix_octets)] == prefix_length);
 
                 printf("VECTOR|%s|%u|", external ? "external" : "internal", prefix_length);
@@ -317,7 +320,7 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 assert(mixed != NULL);
                 route_set(&route, false, 24);
                 assert(eigrp_packet_encoder_both(&eigrp, &interface, NULL, mixed, &route)
-                       == 28 + 40);
+                       == 28 + 44);
                 assert(mixed->data[0] == 0x01 && mixed->data[1] == 0x02);
                 assert(mixed->data[28] == 0x06 && mixed->data[29] == 0x02);
                 eigrp_stream_free(mixed);
@@ -326,7 +329,7 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 24);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 40);
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 44);
                 valid->data[12] = 13;
                 assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp) == NULL);
                 assert(valid->getp == valid->endp);
@@ -337,8 +340,8 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 assert(valid != NULL);
                 route_set(&route, false, 24);
                 route.topology_id = 1;
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 40);
-                assert(valid->data[6] == 0x00 && valid->data[7] == 0x01);
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 44);
+                assert(valid->data[4] == 0x00 && valid->data[5] == 0x01);
                 valid->getp = 0;
                 decoded = codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp);
                 assert(decoded != NULL);
@@ -350,8 +353,8 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 24);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 40);
-                valid->data[5] = EIGRP_AF_IPv6;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 44);
+                valid->data[7] = EIGRP_AF_IPv6;
                 assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp) == NULL);
                 assert(valid->getp == valid->endp);
                 eigrp_stream_free(valid);
@@ -360,7 +363,7 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 32);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 41);
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 45);
                 valid->endp--;
                 valid->data[2] = (uint8_t)(valid->endp >> 8);
                 valid->data[3] = (uint8_t)(valid->endp & 0xff);
@@ -373,8 +376,8 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 valid = eigrp_stream_create(128);
                 assert(valid != NULL);
                 route_set(&route, false, 24);
-                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 40);
-                prefix_offset = 4 + 8 + 24;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 44);
+                prefix_offset = 4 + 8 + 24 + 4;
                 valid->data[prefix_offset] = 33;
                 assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp) == NULL);
                 assert(valid->getp == valid->endp);

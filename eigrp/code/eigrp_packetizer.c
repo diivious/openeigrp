@@ -294,7 +294,8 @@ static void eigrp_packetizer_builder_init(eigrp_packetizer_builder_t *builder,
 	builder->nbr = nbr;
 	builder->opcode = opcode;
 	builder->flags = flags;
-	builder->packet_limit = eigrp_packet_payload_limit(ei->curr_mtu);
+	builder->packet_limit = eigrp_packet_payload_limit(
+		ei->curr_mtu, ei->eigrp->af_vectors.packet_ip_header_bytes);
 	builder->encoder = nbr ? nbr->encoder : ei->encoder;
 }
 

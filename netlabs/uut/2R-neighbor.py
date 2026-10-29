@@ -256,9 +256,10 @@ def main():
         topo = yaml.safe_load(a.topology.read_text(encoding='utf8'))
         if topo.get('name') != 'eigrp-neighbor' or set(topo.get('nodes', {})) != {'oe', 'csr'}:
             raise RuntimeError('Unexpected native netlab topology')
-        # The server pins the selected installed release in this staged topology.
+        # The server pins the selected release or explicitly staged development image.
         image = topo['defaults']['devices.frr.clab.image']
-        if not re.fullmatch(r'ghcr\.io/diivious/openeigrp-frr:[0-9]+\.[0-9]+\.[0-9]+', image):
+        if not (re.fullmatch(r'ghcr\.io/diivious/openeigrp-frr:[0-9]+\.[0-9]+\.[0-9]+', image)
+                or re.fullmatch(r'openeigrp:[a-zA-Z0-9][a-zA-Z0-9_.-]*', image)):
             raise RuntimeError(f'Unexpected OpenEIGRP image reference: {image}')
         report['openeigrp_image'] = image
         for image in [image, 'vrnetlab/vr-csr:17.03.06']:

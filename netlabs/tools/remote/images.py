@@ -3,8 +3,9 @@
 # Copyright (C) 2026 Donnie V. Savage
 """Select installed OpenEIGRP releases, update from GHCR, and pin a staged UUT.
 
-Only complete X.Y.Z release tags are eligible. Never use a mutable `latest`
-alias or relabel an old image under a newer version number.
+Only complete X.Y.Z release tags are eligible for default selection. A staged
+--image run may select an explicitly verified local development image instead.
+Never relabel development images as published releases.
 """
 
 import argparse
@@ -20,6 +21,8 @@ import yaml
 
 REPOSITORY = 'ghcr.io/diivious/openeigrp-frr'
 VERSION = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+$')
+DEV_IMAGE = re.compile(r'^openeigrp:[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+IMAGE_ID = re.compile(r'^sha256:[0-9a-f]{64}$')
 REGISTRY = 'https://ghcr.io'
 TAGS_URL = REGISTRY + '/v2/diivious/openeigrp-frr/tags/list?n=100'
 TOKEN_URL = REGISTRY + '/token?service=ghcr.io&scope=repository:diivious/openeigrp-frr:pull'
@@ -99,12 +102,40 @@ def update():
     return image
 
 
+def staged_image(topology_path):
+    """Read a development pin only from the current disposable test stage."""
+    for parent in topology_path.resolve().parents:
+        if parent.name.startswith('upload.') and parent.parent.name == 'runs':
+            marker = parent / 'dev-image.txt'
+            if not marker.exists():
+                return None
+            values = marker.read_text(encoding='utf8').splitlines()
+            if len(values) != 2 or not DEV_IMAGE.fullmatch(values[0]) or not IMAGE_ID.fullmatch(values[1]):
+                raise RuntimeError('Invalid staged development image selection')
+            return values
+    return None
+
+
 def prepare(topology_path, artifact_path):
-    """Pin the highest locally installed release in a disposable staged topology."""
-    tag = installed()
-    image = f'{REPOSITORY}:{tag}'
-    image_data = json.loads(docker('image', 'inspect', image))[0]
+    """Pin a verified image in the staged topology, never the source fixture."""
     topology_path = Path(topology_path)
+    dev = staged_image(topology_path)
+    if dev:
+        image, expected_id = dev
+        repository, tag = image.split(':', 1)
+        source = 'development'
+    else:
+        tag = installed()
+        image = f'{REPOSITORY}:{tag}'
+        repository = REPOSITORY
+        expected_id = None
+        source = 'release'
+    image_data = json.loads(docker('image', 'inspect', image))[0]
+    if expected_id is not None:
+        if image_data['Id'] != expected_id:
+            raise RuntimeError(f'Development image changed after transfer: {image}')
+        if (image_data.get('Os'), image_data.get('Architecture')) != ('linux', 'amd64'):
+            raise RuntimeError(f'Expected linux/amd64 development image: {image}')
     topology = yaml.safe_load(topology_path.read_text(encoding='utf8'))
     if not isinstance(topology, dict) or not isinstance(topology.get('defaults'), dict):
         raise RuntimeError('Invalid netlab topology defaults')
@@ -113,10 +144,11 @@ def prepare(topology_path, artifact_path):
     topology['defaults']['devices.frr.clab.image'] = image
     topology_path.write_text(yaml.safe_dump(topology, sort_keys=False), encoding='utf8')
     evidence = {
-        'repository': REPOSITORY,
+        'repository': repository,
         'tag': tag,
         'image': image,
         'id': image_data['Id'],
+        'source': source,
         'created': image_data.get('Created'),
         'repo_digests': image_data.get('RepoDigests') or [],
     }

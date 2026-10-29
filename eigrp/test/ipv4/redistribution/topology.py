@@ -314,12 +314,17 @@ static eigrp_af_config_t *test_runtime_af;
                 seed.delay = 250;
                 assert(eigrp_redist_add(&context, &source_id, &seed, NULL)
                        == EIGRP_RESULT_SUCCESS);
+                /* Config must update the existing path and trigger a new
+                 * advertisement without a further host route event. */
+                assert(update_work == 2);
+                assert(only_route(&runtime, &candidate.prefix)->metric.delay
+                       == 250U);
                 candidate.metric = 1234;
                 candidate.tag = 0xaabbccddU;
                 set_ipv4(&candidate_nexthop.gateway, 203, 0, 113, 9);
                 assert(eigrp_rib_redist_add(&runtime, &candidate)
                        == EIGRP_RESULT_SUCCESS);
-                assert(update_work == 2);
+                assert(update_work == 3);
                 pd = eigrp_topology_table_lookup(runtime.topology_table,
                                                  &candidate.prefix);
                 assert(pd->external_routes->count == 1);
@@ -508,6 +513,7 @@ static eigrp_af_config_t *test_runtime_af;
                     assert(local_route->reported_distance == 0);
                 }
 
+                eigrp_redist_config_delete_all(&af);
                 eigrp_topology_table_delete(&runtime, runtime.topology_table);
                 eigrp_list_delete(&runtime.topology_changes);
                 return 0;

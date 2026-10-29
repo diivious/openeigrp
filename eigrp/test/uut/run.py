@@ -168,6 +168,8 @@ STEP_FIELDS = {
     "redist-limit-clear": {"uut"}, "redist-limit-expire": {"uut"}, "validate-redist-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "timeout"},
     "source-route-add": {"uut", "prefix", "metric"}, "source-route-remove": {"uut", "prefix"},
     "redistribute-add": {"uut", "source"}, "redistribute-remove": {"uut", "source"},
+    "redistribute-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
+    "default-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "wait": {"seconds"}, "fault-add": {"name", "action", "source_uut", "destination_uut",
                "source_interface", "destination_interface", "segment", "afi", "multicast",
                "opcode", "prefix", "sequence", "ack", "cr", "delay_ms", "copies", "count"},
@@ -235,7 +237,7 @@ def validate_scenario(s):
     if s.get("schema")!=TEST_SCHEMA: raise SpecError(f"scenario schema must be {TEST_SCHEMA}")
     if not isinstance(s.get("topology"),str) or not s["topology"]: raise SpecError("scenario.topology must name its topology YAML")
     if not isinstance(s.get("steps"),list) or not s["steps"]: raise SpecError("scenario.steps must be a non-empty list")
-    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
+    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
     marks=set()
     for idx,step in enumerate(s["steps"],1):
         if not isinstance(step,dict) or len(step)!=1: raise SpecError(f"step {idx}: exactly one operation required")
@@ -301,10 +303,22 @@ def validate_scenario(s):
                     "redist-limit-clear":("uut",),"redist-limit-expire":("uut",),"validate-redist-limit":("uut","state"),
                     "source-route-add":("uut","prefix"),"source-route-remove":("uut","prefix"),
                     "redistribute-add":("uut","source"),"redistribute-remove":("uut","source"),
+                    "redistribute-metric":("uut",),"default-metric":("uut",),
                     "fault-add":("action",),"fault-remove":("name",),"validate-fault":("name",),
                     "validate-event":("uut","contains"),
                     "validate-log":("uut","contains")}.get(op,())
             if any(k not in arg for k in needed): raise SpecError(f"{where}: missing required fields {needed}")
+            if op in ("redistribute-metric", "default-metric"):
+                if "reset" in arg and type(arg["reset"]) is not bool:
+                    raise SpecError(f"{where}: reset must be boolean")
+                if not arg.get("reset", False):
+                    for field in ("bandwidth", "delay", "reliability", "load", "mtu"):
+                        if field not in arg: raise SpecError(f"{where}: missing {field}")
+                        _count(arg[field], f"{where}.{field}", 1 if field in ("bandwidth", "load", "mtu") else 0)
+                    if arg["reliability"] > 255 or arg["load"] > 255:
+                        raise SpecError(f"{where}: reliability/load must be <= 255")
+                elif any(field in arg for field in ("bandwidth", "delay", "reliability", "load", "mtu")):
+                    raise SpecError(f"{where}: reset must not specify metric values")
             if op == "validate-log":
                 if not isinstance(arg["contains"], str) or not arg["contains"]:
                     raise SpecError(f"{where}: contains must be a nonempty string")
@@ -506,6 +520,17 @@ class Node:
         result = self.cmd(f"REDIST-{'ON' if add else 'OFF'} {source}", timeout=10)
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: redistribution change failed: {result}")
+
+    def metric_config_change(self, operation, args):
+        verb = "REDIST-DEFAULT" if operation == "default-metric" else "REDIST-METRIC"
+        if args.get("reset", False):
+            command = f"{verb} off"
+        else:
+            command = " ".join([verb] + [str(args[name]) for name in
+                ("bandwidth", "delay", "reliability", "load", "mtu")])
+        result = self.cmd(command, timeout=10)
+        if result != "RESULT|0":
+            raise RuntimeError(f"{self.name}: metric configuration failed: {result}")
 
     def stop(self):
         if not self.p: return
@@ -830,6 +855,9 @@ class Runner:
         elif op in ("redistribute-add", "redistribute-remove"):
             self.nodes[arg["uut"]].redistribute_change(
                 arg["source"], op=="redistribute-add")
+        elif op in ("redistribute-metric", "default-metric"):
+            self.nodes[arg["uut"]].metric_config_change(
+                op, arg)
         elif op=="wait": time.sleep(float(arg if isinstance(arg,(int,float)) else arg.get("seconds",1)))
         elif op=="packet-mark":
             self.packet_marks[str(arg)]=len(self.broker.journal)

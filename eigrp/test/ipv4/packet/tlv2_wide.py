@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Donnie V. Savage
 #
 # Portable multiprotocol/wide TLV wire-format sanity tests.
-# These tests validate the RFC 7868 byte layout used by eigrp_tlv2.c.
+# These tests validate the Cisco CSR1000v TLV2 layout used by eigrp_tlv2.c.
 
 import ipaddress
 import struct
@@ -18,7 +18,7 @@ EIGRP_BASE_TOPOLOGY = 0
 EIGRP_TLV_HEADER_LEN = 4
 EIGRP_TLV2_HEADER_EXT_LEN = 8
 EIGRP_TLV2_METRIC_LEN = 24
-EIGRP_TLV2_EXTDATA_LEN = 16
+EIGRP_TLV2_EXTDATA_LEN = 20
 EIGRP_TLV2_INACCESSIBLE = 0xFFFFFFFFFFFF
 
 
@@ -61,7 +61,7 @@ def decode_destination(raw: bytes) -> tuple[str, int]:
 
 
 def header_ext(router_id: int = 0x0A000001) -> bytes:
-    return struct.pack("!HHI", EIGRP_AF_IPV4, EIGRP_BASE_TOPOLOGY, router_id)
+    return struct.pack("!HHI", EIGRP_BASE_TOPOLOGY, EIGRP_AF_IPV4, router_id)
 
 
 def metric_fixture(delay: int = 0x000000123456, bandwidth: int = 0x000000ABCDEF) -> bytes:
@@ -93,39 +93,42 @@ def test_inaccessible_wide_metric_is_six_octets():
 
 def test_internal_mp_tlv_length_includes_header_extension_metric_and_destination():
     dest = encode_destination("192.168.1.0/24")
-    value = header_ext() + metric_fixture() + dest
+    value = header_ext() + metric_fixture() + bytes(4) + dest
     raw = struct.pack("!HH", EIGRP_TLV_MP_INTERNAL, EIGRP_TLV_HEADER_LEN + len(value)) + value
     tlv_type, tlv_len = struct.unpack("!HH", raw[:EIGRP_TLV_HEADER_LEN])
 
     assert tlv_type == EIGRP_TLV_MP_INTERNAL
-    assert tlv_len == 40
+    assert tlv_len == 44
     assert len(raw) == tlv_len
     assert raw[4:12] == header_ext()
     assert raw[12:36] == metric_fixture()
-    assert raw[36:] == bytes.fromhex("18 c0 a8 01")
+    assert raw[36:40] == bytes(4)  # Cisco mandatory next-hop field
+    assert raw[40:] == bytes.fromhex("18 c0 a8 01")
 
 
 def test_external_mp_tlv_places_exterior_after_metric_before_destination():
     extdata = struct.pack(
-        "!IIIHBB",
+        "!IIIIHBB",
         0x0A000002,  # external router id
         100,  # external as
+        7,  # Cisco administrative tag
         20,  # external protocol metric
         0,  # reserved
         6,  # ospf
         0,  # flags
     )
     dest = encode_destination("198.51.100.0/24")
-    value = header_ext() + metric_fixture() + extdata + dest
+    value = header_ext() + metric_fixture() + bytes(4) + extdata + dest
     raw = struct.pack("!HH", EIGRP_TLV_MP_EXTERNAL, EIGRP_TLV_HEADER_LEN + len(value)) + value
     tlv_type, tlv_len = struct.unpack("!HH", raw[:EIGRP_TLV_HEADER_LEN])
 
     assert tlv_type == EIGRP_TLV_MP_EXTERNAL
-    assert tlv_len == 56
+    assert tlv_len == 64
     assert len(raw) == tlv_len
     assert raw[12:36] == metric_fixture()
-    assert raw[36:52] == extdata
-    assert raw[52:] == bytes.fromhex("18 c6 33 64")
+    assert raw[36:40] == bytes(4)
+    assert raw[40:60] == extdata
+    assert raw[60:] == bytes.fromhex("18 c6 33 64")
 
 
 @pytest.mark.parametrize(
