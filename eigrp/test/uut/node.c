@@ -443,12 +443,14 @@ static eigrp_result_t uut_nbr_limit_update(eigrp_instance_t *e, void *arg)
 	eigrp_nbr_t *nbr;
 	int family = strchr(request->address, ':') ? AF_INET6 : AF_INET;
 
-	if (!ei
-	    || inet_pton(family, request->address,
-			 family == AF_INET ? (void *)&src.ip.v4
-					   : (void *)&src.ip.v6)
-		       != 1)
+	if (!ei)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (family == AF_INET) {
+		if (inet_pton(AF_INET, request->address, &src.ip.v4) != 1)
+			return EIGRP_RESULT_INVALID_ARGUMENT;
+	} else if (inet_pton(AF_INET6, request->address, &src.ip.v6) != 1) {
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	}
 	src.afi = family;
 	nbr = eigrp_nbr_lookup(ei, NULL, &src);
 	if (!nbr)
