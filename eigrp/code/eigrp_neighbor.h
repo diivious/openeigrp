@@ -77,6 +77,10 @@ typedef struct eigrp_neighbor {
 				     lifetimes. */
 	uint64_t multicast_epoch; /* Changes on every UP transition. */
 
+	/* A withdrawn RDB retains its advertising peer until packetization. */
+	size_t topo_refs;
+	bool retiring;
+
 	/* EIGRP neighbor Information */
 	uint8_t state;			     /* normal adjacency FSM status */
 	eigrp_nbr_limit_state_t limit_state; /* prefix-limit admission status */

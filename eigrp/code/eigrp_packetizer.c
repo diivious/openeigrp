@@ -130,6 +130,7 @@ eigrp_packetizer_route_select(eigrp_prefix_descriptor_t *prefix,
 		if (!wire_route)
 			return NULL;
 		*wire_route = *route;
+		wire_route->owner_ref = false;
 		wire_route->metric = route->total_metric;
 		route = wire_route;
 		*owned = true;

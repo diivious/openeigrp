@@ -1151,6 +1151,8 @@ static void test_process_batch_dual(void)
 	peer_path_b = eigrp_topology_route_create(&intf);
 	assert(peer_path_b);
 	*peer_path_b = *peer_path;
+	/* A new DRDB must acquire its own peer reference on insertion. */
+	peer_path_b->owner_ref = false;
 	peer_path_b->adv_router = &b;
 	eigrp_route_descriptor_add(&f.runtime, owned, peer_path_b);
 	assert(eigrp_prefix_descriptor_lookup(owned, &b) == peer_path_b);

@@ -23,7 +23,7 @@ static void uut_abort_trace(int sig)
 	(void)write(STDERR_FILENO, heading, sizeof(heading) - 1);
 	count = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
 	backtrace_symbols_fd(frames, count, STDERR_FILENO);
-	/* SA_RESETHAND makes the re-raised signal terminate the child normally. */
+	/* SA_RESETHAND restores the default SIGABRT disposition. */
 	(void)raise(sig);
 	_exit(128 + sig);
 }

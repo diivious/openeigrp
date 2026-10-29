@@ -805,6 +805,7 @@ eigrp_fsm_active_non_successor_reply_send(eigrp_instance_t *eigrp,
 		if (!reply_route)
 			break;
 		*reply_route = *route;
+		reply_route->owner_ref = false;
 		reply_route->metric = prefix->reported_metric;
 		break;
 	}
