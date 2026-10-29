@@ -391,6 +391,11 @@ class Node:
     def start(self):
         if self.p and self.p.poll() is None: return
         env=os.environ.copy(); env["EIGRP_UNIX_WIRE_SOCKET"]=self.sock
+        # Only the C UUT nodes need synthetic uptime.  Preloading the shim
+        # into this Python runner corrupts sleep and timeout clock domains.
+        node_preload = env.pop("EIGRP_UUT_NODE_LD_PRELOAD", None)
+        if node_preload:
+            env["LD_PRELOAD"] = " ".join(filter(None, (node_preload, env.get("LD_PRELOAD"))))
         self.p=subprocess.Popen([str(NODE),str(self.config)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1,env=env)
         self.stderr=[]
         stderr_stream=self.p.stderr
