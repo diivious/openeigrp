@@ -227,14 +227,18 @@ def test_stable_convergence_rejects_transient_satisfaction():
     spec=importlib.util.spec_from_file_location("uut_stable", Path(__file__).resolve().parents[1]/"run.py")
     m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
     runner=m.Runner({}, {}, Path("."))
+    class Node:
+        def state(self):
+            return {"rib": [], "source": [], "topology": [], "paths": []}
+    runner.nodes["r1"] = Node()
     checks=[True,True,False,True,True,False,True,False]
-    def flapping(_):
+    def flapping(_, snapshot=None):
         return checks.pop(0) if checks else False
     runner.route_ok=flapping
     check={"timeout":0.7,"stable_for":0.4,"expect":[{"route":{"uut":"r1","prefix":"10.0.0.0/24"}}]}
     with pytest.raises(AssertionError,match="stable_for=0.4"):
         runner.step("validate-convergence",check)
-    runner.route_ok=lambda e:True
+    runner.route_ok=lambda e,snapshot=None:True
     runner.step("validate-convergence", {**check,"timeout":0.7,"stable_for":0.2})
 
 
