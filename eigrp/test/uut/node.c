@@ -407,6 +407,27 @@ static eigrp_result_t uut_redist_change(bool add)
 		   : eigrp_redist_remove(&context, &source);
 }
 
+/* Apply real configuration targets after source routes are already present. */
+static eigrp_result_t
+uut_redist_metric_update(bool is_default, bool reset,
+			 const eigrp_metric_values_t *metric)
+{
+	eigrp_instance_context_t context = {0};
+	eigrp_redist_source_t source = {
+		.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_STATIC,
+	};
+	eigrp_result_t result = eigrp_af_config_context_read(
+		instance_name, afi, EIGRP_UNIX_DEFAULT_VRF_NAME, asn, &context);
+
+	if (result != EIGRP_RESULT_SUCCESS)
+		return result;
+	if (is_default)
+		return eigrp_metric_default_update(
+			reset ? EIGRP_RESET : EIGRP_SET, &context,
+			reset ? NULL : metric);
+	return eigrp_redist_add(&context, &source, reset ? NULL : metric, NULL);
+}
+
 /* Test-only control: run lifecycle operations on the owning AF thread. */
 typedef struct uut_limit_args {
 	char ifname[256];
@@ -422,12 +443,14 @@ static eigrp_result_t uut_nbr_limit_update(eigrp_instance_t *e, void *arg)
 	eigrp_nbr_t *nbr;
 	int family = strchr(request->address, ':') ? AF_INET6 : AF_INET;
 
-	if (!ei
-	    || inet_pton(family, request->address,
-			 family == AF_INET ? (void *)&src.ip.v4
-					   : (void *)&src.ip.v6)
-		       != 1)
+	if (!ei)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (family == AF_INET) {
+		if (inet_pton(AF_INET, request->address, &src.ip.v4) != 1)
+			return EIGRP_RESULT_INVALID_ARGUMENT;
+	} else if (inet_pton(AF_INET6, request->address, &src.ip.v6) != 1) {
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	}
 	src.afi = family;
 	nbr = eigrp_nbr_lookup(ei, NULL, &src);
 	if (!nbr)
@@ -1064,6 +1087,27 @@ int main(int argc, char **argv)
 			       (int)uut_source_route_change(
 				       ifname, (uint64_t)metric,
 				       !strcmp(verb, "SOURCE-ADD")));
+			fflush(stdout);
+		} else if (!strcmp(verb, "REDIST-DEFAULT")
+			   || !strcmp(verb, "REDIST-METRIC")) {
+			eigrp_metric_values_t values = {0};
+			unsigned bw, delay, reliability, load, mtu;
+			bool reset = strcmp(ifname, "off") == 0;
+			eigrp_result_t result = EIGRP_RESULT_INVALID_ARGUMENT;
+			if (reset
+			    || sscanf(line, "%*s %u %u %u %u %u", &bw, &delay,
+				      &reliability, &load, &mtu)
+				       == 5) {
+				values.bandwidth = bw;
+				values.delay = delay;
+				values.reliability = reliability;
+				values.load = load;
+				values.mtu = mtu;
+				result = uut_redist_metric_update(
+					!strcmp(verb, "REDIST-DEFAULT"), reset,
+					&values);
+			}
+			printf("RESULT|%d\n", (int)result);
 			fflush(stdout);
 		} else if (!strcmp(verb, "REDIST-ON")
 			   || !strcmp(verb, "REDIST-OFF")) {

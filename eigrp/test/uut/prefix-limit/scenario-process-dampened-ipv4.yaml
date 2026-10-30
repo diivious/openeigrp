@@ -4,6 +4,9 @@ name: Process dampening accrues across retry violations and preserves lockout
 steps:
   - start: all
   - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, interface: eth0, state: up, timeout: 15}
+  # Verify hold-time and HELLO scheduling against synthetic low uptime.
+  - wait: {seconds: 16}
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, interface: eth0, state: up, timeout: 15}
   - process-limit-config: {uut: r1, maximum: 4, dampened: true}
   - redistribute-add: {uut: r1, source: static}
   - source-route-add: {uut: r1, prefix: '192.0.2.253/32', metric: 20}

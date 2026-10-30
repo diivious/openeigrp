@@ -83,6 +83,13 @@ static unsigned query_work;
 static unsigned update_work;
 static unsigned redist_subscriptions;
 static unsigned redist_unsubscriptions;
+
+/* Metric-version configuration is not exercised by the redistribution
+ * lifecycle fixture, which has no live neighbor codecs. */
+void eigrp_nbr_codec_update(eigrp_instance_t *eigrp)
+{
+	(void)eigrp;
+}
 static eigrp_prefix_descriptor_t *deferred_prefix;
 
 /* This FSM-only harness has no packetizer worker. Capture the retired
@@ -160,17 +167,17 @@ eigrp_result_t eigrp_sys_redistribute_route_map_evaluate(
 	const eigrp_rib_route_t *route, eigrp_filter_decision_t *decision)
 {
 	(void)eigrp;
-	(void)name;
 	(void)route;
 	if (decision)
-		*decision = EIGRP_FILTER_DECISION_PERMIT;
+		*decision = name && strcmp(name, "deny-all") == 0
+				    ? EIGRP_FILTER_DECISION_DENY
+				    : EIGRP_FILTER_DECISION_PERMIT;
 	return EIGRP_RESULT_SUCCESS;
 }
 
 eigrp_afi_t eigrp_instance_afi(const eigrp_instance_t *runtime)
 {
-	(void)runtime;
-	return EIGRP_AFI_IPV4;
+	return runtime ? runtime->af_vectors.afi : EIGRP_AFI_IPV4;
 }
 
 eigrp_af_config_t *eigrp_af_config_runtime_read(eigrp_instance_t *runtime)
@@ -319,7 +326,7 @@ struct fixture {
 	eigrp_rib_route_t candidate;
 };
 
-static void fixture_init(struct fixture *f)
+static void fixture_init_afi(struct fixture *f, eigrp_afi_t afi)
 {
 	eigrp_metric_values_t seed = {
 		.bandwidth = 100000,
@@ -332,7 +339,7 @@ static void fixture_init(struct fixture *f)
 
 	memset(f, 0, sizeof(*f));
 	f->vr.vrid = 1;
-	f->af.afi = EIGRP_AFI_IPV4;
+	f->af.afi = afi;
 	f->af.asn = 4453;
 	f->runtime.virt_router = &f->vr;
 	f->runtime.AS = 4453;
@@ -341,8 +348,9 @@ static void fixture_init(struct fixture *f)
 	f->runtime.max_hops = 100;
 	f->runtime.k_values[0] = 1;
 	f->runtime.k_values[2] = 1;
-	f->runtime.af_vectors.afi = EIGRP_AFI_IPV4;
-	f->runtime.af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
+	f->runtime.af_vectors.afi = afi;
+	f->runtime.af_vectors.classic_external_tlv_type =
+		afi == EIGRP_AFI_IPV4 ? EIGRP_TLV_IPv4_EXT : EIGRP_TLV_IPv6_EXT;
 	f->runtime.topology_table = eigrp_topology_table_create();
 	f->runtime.topology_changes = eigrp_list_create();
 	f->runtime.neighbor_self = &f->self;
@@ -358,8 +366,16 @@ static void fixture_init(struct fixture *f)
 	};
 	assert(eigrp_redist_add(&context, &f->source, &seed, NULL)
 	       == EIGRP_RESULT_SUCCESS);
-	set_ipv4(&f->candidate.prefix.address, 10, 77, 0, 0);
-	f->candidate.prefix.prefix_length = 24;
+	if (afi == EIGRP_AFI_IPV4) {
+		set_ipv4(&f->candidate.prefix.address, 10, 77, 0, 0);
+		f->candidate.prefix.prefix_length = 24;
+	} else {
+		f->candidate.prefix.address.afi = EIGRP_AFI_IPV6;
+		assert(inet_pton(AF_INET6, "2001:db8:4453::77",
+				 f->candidate.prefix.address.bytes)
+		       == 1);
+		f->candidate.prefix.prefix_length = 128;
+	}
 	f->candidate.redist.source = f->source;
 	f->candidate.tag = 0x11223344;
 	neighbor_count = 0;
@@ -368,6 +384,11 @@ static void fixture_init(struct fixture *f)
 	assert(eigrp_rib_redist_add(&f->runtime, &f->candidate)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(update_work == 1);
+}
+
+static void fixture_init(struct fixture *f)
+{
+	fixture_init_afi(f, EIGRP_AFI_IPV4);
 }
 
 static eigrp_prefix_descriptor_t *fixture_prefix(struct fixture *f)
@@ -390,6 +411,7 @@ static void fixture_drain_initial_update(struct fixture *f)
 
 static void fixture_delete(struct fixture *f)
 {
+	eigrp_redist_config_delete_all(&f->af);
 	eigrp_topology_table_delete(&f->runtime, f->runtime.topology_table);
 	eigrp_list_delete(&f->runtime.topology_changes);
 	if (deferred_prefix) {
@@ -904,6 +926,117 @@ static void test_redist_prefix_volume(void)
 	eigrp_redist_policy_delete_all(&f.af);
 }
 
+/* A configuration mutation must operate on retained source snapshots,
+ * not wait for a new Zebra ADD. Verify the actual DUAL metric and scheduled
+ * advertisement, no-op idempotency, fallback, withdrawal and recovery. */
+static void test_config_refresh(eigrp_afi_t afi)
+{
+	struct fixture f;
+	eigrp_instance_context_t context;
+	eigrp_metric_values_t seed = {100000, 100, 255, 1, 1500};
+	eigrp_metric_values_t changed = {100000, 150, 255, 1, 1500};
+	eigrp_route_descriptor_t *route;
+	eigrp_rib_route_t source_vector;
+	unsigned subscribed;
+
+	fixture_init_afi(&f, afi);
+	fixture_drain_initial_update(&f);
+	context = (eigrp_instance_context_t){
+		.config = &f.af,
+		.runtime = &f.runtime,
+		.topology_id = EIGRP_TOPOLOGY_ID_BASE,
+	};
+	subscribed = redist_subscriptions;
+	route = only_route(&f.runtime, &f.candidate.prefix);
+	assert(route->metric.delay == 100);
+	assert(eigrp_redist_add(&context, &f.source, &changed, NULL)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(redist_subscriptions == subscribed);
+	assert(route->metric.delay == 150);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_redist_add(&context, &f.source, &changed, NULL)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(update_work == 0);
+
+	/* The default must not override an explicit source metric. */
+	assert(eigrp_metric_default_update(EIGRP_SET, &context, &seed)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 150);
+	assert(update_work == 0);
+
+	/* Remove the override: the cached host vector (or default) must be
+	 * selected immediately without a new route event. */
+	assert(eigrp_redist_add(&context, &f.source, NULL, NULL)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 100);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_metric_default_update(EIGRP_SET, &context, &changed)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 150);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+
+	/* An inherent source vector takes precedence over the default metric.
+	 */
+	source_vector = f.candidate;
+	source_vector.redist.vecmetric = route->metric;
+	source_vector.redist.vecmetric.delay = 73;
+	assert(eigrp_rib_redist_add(&f.runtime, &source_vector)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 73);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_metric_default_update(EIGRP_SET, &context, &seed)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 73);
+	assert(update_work == 0);
+
+	/* Clearing the source vector falls back to the selected default.
+	 * Clearing that default must poison the existing topology path. */
+	assert(eigrp_rib_redist_add(&f.runtime, &f.candidate)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 100);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_metric_default_update(EIGRP_RESET, &context, NULL)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->distance == EIGRP_MAX_METRIC);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_metric_default_update(EIGRP_SET, &context, &changed)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->metric.delay == 150);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+
+	/* Updating a route-map on an existing source must withdraw and
+	 * re-advertise the cached candidate without resubscribing to RIB. */
+	assert(eigrp_redist_add(&context, &f.source, NULL, "deny-all")
+	       == EIGRP_RESULT_SUCCESS);
+	assert(redist_subscriptions == subscribed);
+	assert(route->distance == EIGRP_MAX_METRIC);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_redist_add(&context, &f.source, NULL, "permit-all")
+	       == EIGRP_RESULT_SUCCESS);
+	assert(redist_subscriptions == subscribed);
+	assert(route->metric.delay == 150);
+	assert(route->distance != EIGRP_MAX_METRIC);
+	assert(update_work >= 1);
+	fixture_drain_initial_update(&f);
+
+	/* Removal drops cached source state. Later config changes cannot
+	 * resurrect a withdrawn prefix. */
+	assert(eigrp_rib_redist_del(&f.runtime, &f.candidate)
+	       == EIGRP_RESULT_SUCCESS);
+	fixture_drain_initial_update(&f);
+	assert(eigrp_metric_default_update(EIGRP_SET, &context, &seed)
+	       == EIGRP_RESULT_SUCCESS);
+	assert(route->distance == EIGRP_MAX_METRIC);
+	assert(update_work == 0);
+	fixture_delete(&f);
+}
+
 #ifdef EIGRP_TEST_PROCESS_VOLUME
 /* Compare every semantic process-limit field even when padding differs.
  * Reapplying identical policy must not erase accumulated penalty history. */
@@ -1018,6 +1151,8 @@ static void test_process_batch_dual(void)
 	peer_path_b = eigrp_topology_route_create(&intf);
 	assert(peer_path_b);
 	*peer_path_b = *peer_path;
+	/* A new DRDB must acquire its own peer reference on insertion. */
+	peer_path_b->owner_ref = false;
 	peer_path_b->adv_router = &b;
 	eigrp_route_descriptor_add(&f.runtime, owned, peer_path_b);
 	assert(eigrp_prefix_descriptor_lookup(owned, &b) == peer_path_b);
@@ -1153,6 +1288,10 @@ int main(int argc, char **argv)
 		test_redist_prefix_accounting();
 	else if (strcmp(argv[1], "redist-volume") == 0)
 		test_redist_prefix_volume();
+	else if (strcmp(argv[1], "config-ipv4") == 0)
+		test_config_refresh(EIGRP_AFI_IPV4);
+	else if (strcmp(argv[1], "config-ipv6") == 0)
+		test_config_refresh(EIGRP_AFI_IPV6);
 #ifdef EIGRP_TEST_PROCESS_VOLUME
 	else if (strcmp(argv[1], "process-volume") == 0)
 		test_process_prefix_volume();

@@ -68,6 +68,8 @@ def withdrawal_binary(tmp_path_factory):
         "redist-prefix",
         "redist-limit-config",
         "redist-volume",
+        "config-ipv4",
+        "config-ipv6",
     ],
 )
 def test_redistributed_route_withdrawal_dual_fsm(withdrawal_binary, scenario):

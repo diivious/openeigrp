@@ -1,0 +1,24 @@
+{# Extend the branch's proven named-mode template without changing it. #}
+{% include 'eigrp-named.j2' %}
+{% set rid = loopback.ipv4.split('/')[0] %}
+{% set transport = interfaces | selectattr('type', 'equalto', 'p2p') | list | first %}
+{% set lo = 'lo' if transport.ifname.startswith('eth') else 'Loopback0' %}
+router eigrp OpenEIGRP
+ address-family ipv4 unicast autonomous-system 4473
+  network {{ rid }} 0.0.0.0
+  topology base
+   default-metric 100000 10 255 1 1500
+   redistribute static
+  exit-af-topology
+ exit-address-family
+ address-family ipv6 unicast autonomous-system 4473
+  af-interface {{ lo }}
+   passive-interface
+   no shutdown
+  exit-af-interface
+  topology base
+   default-metric 100000 10 255 1 1500
+   redistribute static
+  exit-af-topology
+ exit-address-family
+!

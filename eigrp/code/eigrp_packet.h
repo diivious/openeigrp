@@ -32,11 +32,14 @@ typedef struct eigrp_tlv_header {
 	uint16_t length;
 } eigrp_tlv_header_t;
 
-static inline size_t eigrp_packet_payload_limit(size_t interface_mtu)
+/* The IP envelope is selected once by the address-family vector.  A full
+ * EIGRP wire image must fit the network MTU without IPv6 fragmentation. */
+static inline size_t eigrp_packet_payload_limit(size_t interface_mtu,
+						size_t ip_header_bytes)
 {
-	if (interface_mtu <= EIGRP_IPV4_HEADER_LEN)
+	if (!ip_header_bytes || interface_mtu <= ip_header_bytes)
 		return 0;
-	return interface_mtu - EIGRP_IPV4_HEADER_LEN;
+	return interface_mtu - ip_header_bytes;
 }
 
 /* RTP sequence numbers are monotonic modulo 2^32.  A live queue never

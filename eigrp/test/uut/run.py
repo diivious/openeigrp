@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Donnie V. Savage
 """Declarative portable EIGRP UUT topology/scenario runner."""
 from __future__ import annotations
-import argparse, collections, ipaddress, os, queue, socket, struct, subprocess, sys, tempfile, threading, time
+import argparse, collections, ipaddress, math, os, queue, socket, struct, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 import yaml
 
@@ -168,6 +168,8 @@ STEP_FIELDS = {
     "redist-limit-clear": {"uut"}, "redist-limit-expire": {"uut"}, "validate-redist-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "timeout"},
     "source-route-add": {"uut", "prefix", "metric"}, "source-route-remove": {"uut", "prefix"},
     "redistribute-add": {"uut", "source"}, "redistribute-remove": {"uut", "source"},
+    "redistribute-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
+    "default-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "wait": {"seconds"}, "fault-add": {"name", "action", "source_uut", "destination_uut",
                "source_interface", "destination_interface", "segment", "afi", "multicast",
                "opcode", "prefix", "sequence", "ack", "cr", "delay_ms", "copies", "count"},
@@ -230,12 +232,42 @@ def validate_packet_assertion(e, where, marks=None):
         try: ipaddress.ip_network(e["prefix"],strict=False)
         except (TypeError,ValueError) as exc: raise SpecError(f"{where}: invalid packet prefix") from exc
 
+# Convergence conditions are evaluated from one STATE snapshot per UUT and
+# sample. The same fields are used by the standalone limit assertions.
+LIMIT_FIELDS = {"state", "restarts", "count", "restart_active", "reset_active", "penalty"}
+
+
+def validate_limit_condition(value, where):
+    if not isinstance(value, dict):
+        raise SpecError(f"{where}: limit assertion must be a mapping")
+    check_keys(value, LIMIT_FIELDS | {"uut"}, where)
+    if not isinstance(value.get("uut"), str) or not value["uut"]:
+        raise SpecError(f"{where}: uut is required")
+    if not (set(value) & LIMIT_FIELDS):
+        raise SpecError(f"{where}: at least one limit field is required")
+    for field in LIMIT_FIELDS:
+        if field not in value:
+            continue
+        expected = value[field]
+        if field.endswith("_active"):
+            if type(expected) is not bool:
+                raise SpecError(f"{where}: {field} must be boolean")
+        elif type(expected) is not int or expected < 0:
+            raise SpecError(f"{where}: {field} must be a non-negative integer")
+    if "state" in value and value["state"] not in (0, 1, 2):
+        raise SpecError(f"{where}: state must be 0, 1 or 2")
+
+
+def limit_condition_ok(actual, expected):
+    return actual is not None and all(actual.get(k) == v for k, v in expected.items() if k != "uut")
+
+
 def validate_scenario(s):
     check_keys(s,{"schema","name","topology","steps"},"scenario")
     if s.get("schema")!=TEST_SCHEMA: raise SpecError(f"scenario schema must be {TEST_SCHEMA}")
     if not isinstance(s.get("topology"),str) or not s["topology"]: raise SpecError("scenario.topology must name its topology YAML")
     if not isinstance(s.get("steps"),list) or not s["steps"]: raise SpecError("scenario.steps must be a non-empty list")
-    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
+    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
     marks=set()
     for idx,step in enumerate(s["steps"],1):
         if not isinstance(step,dict) or len(step)!=1: raise SpecError(f"step {idx}: exactly one operation required")
@@ -253,8 +285,11 @@ def validate_scenario(s):
         elif op=="validate-convergence":
             if not isinstance(arg,dict): raise SpecError(f"{where}: must be a mapping")
             check_keys(arg,{"timeout","expect","stable_for"},where)
-            if "stable_for" in arg and (type(arg["stable_for"]) not in (float,int) or arg["stable_for"] < 0):
-                raise SpecError(f"{where}: stable_for must be nonnegative seconds")
+            timeout=arg.get("timeout",10); stable_for=arg.get("stable_for",0)
+            if type(timeout) not in (float,int) or not math.isfinite(timeout) or timeout <= 0:
+                raise SpecError(f"{where}: timeout must be finite and positive")
+            if type(stable_for) not in (float,int) or not math.isfinite(stable_for) or stable_for < 0 or stable_for >= timeout:
+                raise SpecError(f"{where}: stable_for must be finite and less than timeout")
             if not isinstance(arg.get("expect"),list) or not arg["expect"]: raise SpecError(f"{where}: expect must be non-empty")
             for n,check in enumerate(arg["expect"],1):
                 if not isinstance(check,dict) or len(check)!=1: raise SpecError(f"{where} expectation {n}: exactly one check required")
@@ -262,6 +297,9 @@ def validate_scenario(s):
                 if kind=="neighbor": validate_neighbor_assertion(value,f"{where} expectation {n}")
                 elif kind=="route": validate_route_assertion(value,f"{where} expectation {n}")
                 elif kind=="packet": validate_packet_assertion(value,f"{where} expectation {n}",marks)
+                elif kind in ("redist-limit", "process-limit"):
+                    validate_limit_condition(value, f"{where} expectation {n}")
+                elif kind=="accounting": validate_accounting_assertion(value,f"{where} expectation {n}")
                 else: raise SpecError(f"{where} expectation {n}: unsupported {kind!r}")
         elif op in ("links-up","links-down"):
             if isinstance(arg,dict):
@@ -301,10 +339,22 @@ def validate_scenario(s):
                     "redist-limit-clear":("uut",),"redist-limit-expire":("uut",),"validate-redist-limit":("uut","state"),
                     "source-route-add":("uut","prefix"),"source-route-remove":("uut","prefix"),
                     "redistribute-add":("uut","source"),"redistribute-remove":("uut","source"),
+                    "redistribute-metric":("uut",),"default-metric":("uut",),
                     "fault-add":("action",),"fault-remove":("name",),"validate-fault":("name",),
                     "validate-event":("uut","contains"),
                     "validate-log":("uut","contains")}.get(op,())
             if any(k not in arg for k in needed): raise SpecError(f"{where}: missing required fields {needed}")
+            if op in ("redistribute-metric", "default-metric"):
+                if "reset" in arg and type(arg["reset"]) is not bool:
+                    raise SpecError(f"{where}: reset must be boolean")
+                if not arg.get("reset", False):
+                    for field in ("bandwidth", "delay", "reliability", "load", "mtu"):
+                        if field not in arg: raise SpecError(f"{where}: missing {field}")
+                        _count(arg[field], f"{where}.{field}", 1 if field in ("bandwidth", "load", "mtu") else 0)
+                    if arg["reliability"] > 255 or arg["load"] > 255:
+                        raise SpecError(f"{where}: reliability/load must be <= 255")
+                elif any(field in arg for field in ("bandwidth", "delay", "reliability", "load", "mtu")):
+                    raise SpecError(f"{where}: reset must not specify metric values")
             if op == "validate-log":
                 if not isinstance(arg["contains"], str) or not arg["contains"]:
                     raise SpecError(f"{where}: contains must be a nonempty string")
@@ -377,6 +427,11 @@ class Node:
     def start(self):
         if self.p and self.p.poll() is None: return
         env=os.environ.copy(); env["EIGRP_UNIX_WIRE_SOCKET"]=self.sock
+        # Only the C UUT nodes need synthetic uptime.  Preloading the shim
+        # into this Python runner corrupts sleep and timeout clock domains.
+        node_preload = env.pop("EIGRP_UUT_NODE_LD_PRELOAD", None)
+        if node_preload:
+            env["LD_PRELOAD"] = " ".join(filter(None, (node_preload, env.get("LD_PRELOAD"))))
         self.p=subprocess.Popen([str(NODE),str(self.config)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1,env=env)
         self.stderr=[]
         stderr_stream=self.p.stderr
@@ -507,6 +562,17 @@ class Node:
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: redistribution change failed: {result}")
 
+    def metric_config_change(self, operation, args):
+        verb = "REDIST-DEFAULT" if operation == "default-metric" else "REDIST-METRIC"
+        if args.get("reset", False):
+            command = f"{verb} off"
+        else:
+            command = " ".join([verb] + [str(args[name]) for name in
+                ("bandwidth", "delay", "reliability", "load", "mtu")])
+        result = self.cmd(command, timeout=10)
+        if result != "RESULT|0":
+            raise RuntimeError(f"{self.name}: metric configuration failed: {result}")
+
     def stop(self):
         if not self.p: return
         if self.p.poll() is None:
@@ -617,9 +683,10 @@ class Runner:
         for key in sorted(set(packet)-set(keys)):
             fields.append(f"{key}={packet[key]}")
         return "PACKET|"+"|".join(fields)
-    def neighbor_ok(self,e):
+    def neighbor_ok(self,e,st=None):
         validate_neighbor_assertion(e, "validate-neighbor")
-        st=self.nodes[e["uut"]].state(); addr=e["neighbor"]; iface=e.get("interface"); state=e.get("state","up").lower()
+        if st is None: st=self.nodes[e["uut"]].state()
+        addr=e["neighbor"]; iface=e.get("interface"); state=e.get("state","up").lower()
         matches=[n for n in st["neighbors"] if (not addr or n["address"].lower()==str(addr).lower()) and (not iface or n["interface"]==iface)]
         if state == "down":
             return not matches
@@ -634,9 +701,9 @@ class Runner:
         if state == "limit-locked" and any(n["state"] != "Prefix-limit Locked" for n in matches):
             return False
         return all(k not in e or n.get(k)==e[k] for n in matches for k in ("reliable_q","rto","srtt_valid","srtt","retransmissions"))
-    def accounting_ok(self,e):
+    def accounting_ok(self,e,st=None):
         validate_accounting_assertion(e, "validate-accounting")
-        st=self.nodes[e["uut"]].state()
+        if st is None: st=self.nodes[e["uut"]].state()
         for row in st["accounting"]:
             if row["address"].lower()!=e["neighbor"].lower():
                 continue
@@ -647,9 +714,10 @@ class Runner:
             if all(k not in e or row[k]==e[k] for k in ("restart_count", "prefix_count", "restart_active", "reset_active")):
                 return True
         return False
-    def route_ok(self,e):
+    def route_ok(self,e,st=None):
         validate_route_assertion(e,"validate-route")
-        st=self.nodes[e["uut"]].state(); prefix=str(ipaddress.ip_network(e["prefix"],strict=False)); table=e.get("table","rib"); rows=st["rib"] if table=="rib" else st["source"] if table=="source" else st["paths"] if table=="path" else st["topology"]
+        if st is None: st=self.nodes[e["uut"]].state()
+        prefix=str(ipaddress.ip_network(e["prefix"],strict=False)); table=e.get("table","rib"); rows=st["rib"] if table=="rib" else st["source"] if table=="source" else st["paths"] if table=="path" else st["topology"]
         keys=("next_hop","metric","distance") if table=="rib" else (("active","fd","successors") if table=="topology" else (("next_hop","interface","connected","successor","feasible_successor","distance","rd") if table=="path" else ("protocol","metric")))
         matches=[r for r in rows if r["prefix"].lower()==prefix.lower() and all(k not in e or r.get(k)==e[k] for k in keys)]
         if not e.get("present",True): return not matches
@@ -830,6 +898,9 @@ class Runner:
         elif op in ("redistribute-add", "redistribute-remove"):
             self.nodes[arg["uut"]].redistribute_change(
                 arg["source"], op=="redistribute-add")
+        elif op in ("redistribute-metric", "default-metric"):
+            self.nodes[arg["uut"]].metric_config_change(
+                op, arg)
         elif op=="wait": time.sleep(float(arg if isinstance(arg,(int,float)) else arg.get("seconds",1)))
         elif op=="packet-mark":
             self.packet_marks[str(arg)]=len(self.broker.journal)
@@ -860,17 +931,71 @@ class Runner:
         elif op=="validate-event":
             if not self.event_ok(arg): raise AssertionError(f"validate-event failed: {arg}")
         elif op=="validate-convergence":
-            timeout=float(arg.get("timeout",10)); deadline=time.monotonic()+timeout; expectations=arg.get("expect",[])
-            stable_for=float(arg.get("stable_for",0)); stable_since=None
-            while time.monotonic()<deadline:
-                now=time.monotonic()
-                if all((self.neighbor_ok(v) if k=="neighbor" else self.route_ok(v) if k=="route" else self.packet_ok(v)) for x in expectations for k,v in x.items()):
-                    if stable_since is None: stable_since=now
-                    if now-stable_since>=stable_for: return
+            self.expect_convergence(arg)
+
+    def expect_convergence(self, arg):
+        """Wait for related predicates to remain true in coherent AF snapshots.
+
+        A single route withdrawal or remote RIB absence is not a barrier for
+        deferred topology retirement. Scenarios must name the actual local
+        ownership and state predicates required by the following operation.
+        """
+        timeout = float(arg.get("timeout", 10))
+        stable_for = float(arg.get("stable_for", 0))
+        deadline = time.monotonic() + timeout
+        stable_since = None
+        expected = [(kind, value) for item in arg["expect"]
+                    for kind, value in item.items()]
+        last_unmet = []
+        last_limits = {}
+        last_routes = {}
+        while True:
+            now = time.monotonic()
+            if now >= deadline:
+                break
+            # STATE is an AF-thread snapshot, not separate reads for each
+            # assertion. The same router is sampled only once per attempt.
+            snapshots = {}
+            for kind, value in expected:
+                if kind != "packet" and value["uut"] not in snapshots:
+                    snapshots[value["uut"]] = self.nodes[value["uut"]].state()
+            unmet = []
+            last_limits = {name: {key: state.get(key)
+                                  for key in ("redist_limit", "process_limit")}
+                           for name, state in snapshots.items()}
+            prefixes = {value["prefix"] for kind, value in expected if kind == "route"}
+            last_routes = {name: {kind: [row for row in snapshot.get(kind, [])
+                                          if row.get("prefix") in prefixes][:10]
+                                  for kind in ("topology", "paths", "rib", "source")}
+                           for name, snapshot in snapshots.items()}
+            for kind, value in expected:
+                state = snapshots.get(value["uut"])
+                if kind == "route": ok = self.route_ok(value, state)
+                elif kind == "neighbor": ok = self.neighbor_ok(value, state)
+                elif kind == "accounting": ok = self.accounting_ok(value, state)
+                elif kind == "packet": ok = self.packet_ok(value)
+                elif kind == "redist-limit":
+                    ok = limit_condition_ok(state.get("redist_limit"), value)
+                elif kind == "process-limit":
+                    ok = limit_condition_ok(state.get("process_limit"), value)
                 else:
-                    stable_since=None
-                time.sleep(.1)
-            raise AssertionError(f"validate-convergence failed (stable_for={stable_for}): {arg}")
+                    raise SpecError(f"unsupported convergence condition {kind!r}")
+                if not ok:
+                    unmet.append({kind: value})
+            last_unmet = unmet
+            if not unmet:
+                if stable_since is None:
+                    stable_since = time.monotonic()
+                if time.monotonic() - stable_since >= stable_for:
+                    return
+            else:
+                stable_since = None
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+        reason = "unmet predicates" if last_unmet else "stability window not reached"
+        raise AssertionError(f"validate-convergence timed out (stable_for={stable_for}, "
+                             f"reason={reason}): unmet={last_unmet}; "
+                             f"limit_state={last_limits}; routes={last_routes}")
+
     def unexpected_wire_errors(self):
         """No passing scenario may conceal a failed broker send on the test fabric."""
         errors=[p for p in self.broker.journal if p.get("event")=="send-error"]

@@ -114,6 +114,38 @@ class MakeTargetsTest(unittest.TestCase):
         result, _ = self.make("check", "SOURCE=anything")
         self.assertNotEqual(result.returncode, 0)
 
+    def test_clean_removes_netlabs_artifacts_but_preserves_sources(self):
+        """Only generated local evidence is disposable; scenario sources survive."""
+        results = self.root / "netlabs/results"
+        results.mkdir(parents=True)
+        (results / ".gitignore").write_text("*\n!.gitignore\n")
+        (results / "batch-all.json").write_text("{}\n")
+        evidence = results / "uut-123"
+        evidence.mkdir()
+        (evidence / "capture.pcap").write_bytes(b"pcap")
+
+        scenario = self.root / "netlabs/test/rtp/2R-neighbor"
+        scenario.mkdir(parents=True)
+        (scenario / "scenario.yaml").write_text("name: 2R-neighbor\n")
+        cache = scenario / "__pycache__"
+        cache.mkdir()
+        (cache / "test.pyc").write_bytes(b"cache")
+        pytest_cache = self.root / "netlabs/.pytest_cache"
+        pytest_cache.mkdir()
+
+        result, events = self.make("clean")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sum("CHILD" in e for e in events), 4)
+        self.assertEqual(sorted(p.name for p in results.iterdir()), [".gitignore"])
+        self.assertTrue((scenario / "scenario.yaml").exists())
+        self.assertFalse(cache.exists())
+        self.assertFalse(pytest_cache.exists())
+
+        # Repeated clean must not fail or remove the preserved source files.
+        result, _ = self.make("clean")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((scenario / "scenario.yaml").exists())
+
     def test_uut_suite_and_single_scenario(self):
         result, events = self.make("uut", "SUITE=rtp-core")
         self.assertEqual(result.returncode, 0, result.stderr)

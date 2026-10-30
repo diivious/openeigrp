@@ -17,7 +17,7 @@ def _tlv(kind, body):
 def test_ipv6_classic_and_mp_truncated_and_cross_afi_are_not_routes():
     prefix=bytes([64])+ipaddress.ip_address("2001:db8:abcd::").packed[:9]
     classic=_tlv(0x0402,bytes(16)+bytes(16)+prefix)
-    mp=_tlv(0x0602,struct.pack("!HHI",2,0,0)+bytes(24)+prefix)
+    mp=_tlv(0x0602,struct.pack("!HHI",0,2,0)+bytes(24)+bytes(16)+prefix)
     header=bytes(20)
     target="2001:db8:abcd::/64"
     assert _route_prefixes(header+classic,6)==[target]
@@ -33,7 +33,7 @@ def test_ipv6_classic_and_mp_truncated_and_cross_afi_are_not_routes():
         assert _route_prefixes(header+bad,6)==[]
         bad=bytearray(good); bad[-len(prefix)]=129
         assert _route_prefixes(header+bad,6)==[]
-    wrong_af=bytearray(mp);wrong_af[4:6]=struct.pack("!H",1)
+    wrong_af=bytearray(mp);wrong_af[6:8]=struct.pack("!H",1)
     assert _route_prefixes(header+wrong_af,6)==[]
 
 

@@ -10,6 +10,7 @@
  *   Peter Paluch
  */
 #include <stdio.h>
+#include <pthread.h>
 #include <zebra.h>
 
 #include "frrevent.h"
@@ -44,7 +45,82 @@
 /* Zebra structure to hold current status. */
 struct zclient *eigrp_zclient = NULL;
 
+/* Protect the instance subscription list against the Zebra receive loop. */
+static pthread_mutex_t eigrp_zebra_instances_lock = PTHREAD_MUTEX_INITIALIZER;
+
 DEFINE_MTYPE_STATIC(EIGRPD, EIGRP_ZEBRA_INSTANCE, "EIGRP Zebra instance state");
+
+/* zclient owns one shared output stream and must be written only from the
+ * FRR event loop. AF worker threads enqueue immutable requests instead. */
+struct eigrp_zebra_route_tx {
+	uint8_t command;
+	struct zapi_route route;
+};
+
+struct eigrp_zebra_redist_tx {
+	int command;
+	afi_t afi;
+	int type;
+	unsigned short instance;
+	vrf_id_t vrf_id;
+};
+
+extern struct event_loop *master;
+
+static void eigrp_zebra_route_tx_run(struct event *event)
+{
+	struct eigrp_zebra_route_tx *tx = EVENT_ARG(event);
+
+	if (eigrp_zclient)
+		(void)zclient_route_send(tx->command, eigrp_zclient,
+					 &tx->route);
+	XFREE(MTYPE_EIGRP_ZEBRA_INSTANCE, tx);
+}
+
+static eigrp_result_t eigrp_zebra_route_tx_add(uint8_t command,
+					       const struct zapi_route *route)
+{
+	struct eigrp_zebra_route_tx *tx;
+
+	if (!eigrp_zclient)
+		return EIGRP_RESULT_INTERNAL_FAILURE;
+	tx = XCALLOC(MTYPE_EIGRP_ZEBRA_INSTANCE, sizeof(*tx));
+	if (!tx)
+		return EIGRP_RESULT_INTERNAL_FAILURE;
+	tx->command = command;
+	tx->route = *route;
+	event_add_event(master, eigrp_zebra_route_tx_run, tx, 0, NULL);
+	return EIGRP_RESULT_SUCCESS;
+}
+
+static void eigrp_zebra_redist_tx_run(struct event *event)
+{
+	struct eigrp_zebra_redist_tx *tx = EVENT_ARG(event);
+
+	if (eigrp_zclient)
+		zclient_redistribute(tx->command, eigrp_zclient, tx->afi,
+				     tx->type, tx->instance, tx->vrf_id);
+	XFREE(MTYPE_EIGRP_ZEBRA_INSTANCE, tx);
+}
+
+/* Call with eigrp_zebra_instances_lock held, preserving subscription order. */
+static void eigrp_zebra_redist_tx_add(int command, afi_t afi, int type,
+				      unsigned short instance, vrf_id_t vrf_id)
+{
+	struct eigrp_zebra_redist_tx *tx;
+
+	if (!eigrp_zclient)
+		return;
+	tx = XCALLOC(MTYPE_EIGRP_ZEBRA_INSTANCE, sizeof(*tx));
+	if (!tx)
+		return;
+	tx->command = command;
+	tx->afi = afi;
+	tx->type = type;
+	tx->instance = instance;
+	tx->vrf_id = vrf_id;
+	event_add_event(master, eigrp_zebra_redist_tx_run, tx, 0, NULL);
+}
 
 struct eigrp_zebra_redistribute {
 	int type;
@@ -171,7 +247,7 @@ eigrp_zebra_redistribute_list_free(struct eigrp_zebra_instance_state *state)
 	}
 }
 
-void eigrp_zebra_instance_delete(eigrp_instance_t *eigrp)
+static void eigrp_zebra_instance_delete_locked(eigrp_instance_t *eigrp)
 {
 	struct eigrp_zebra_instance_state **cursor;
 	struct eigrp_zebra_instance_state *state;
@@ -197,19 +273,17 @@ void eigrp_zebra_instance_delete(eigrp_instance_t *eigrp)
 					continue;
 				if (!eigrp_zebra_source_in_use(afi, type, 0,
 							       vrf_id))
-					zclient_redistribute(
-						ZEBRA_REDISTRIBUTE_DELETE,
-						eigrp_zclient, afi, type, 0,
-						vrf_id);
+					eigrp_zebra_redist_tx_add(
+						ZEBRA_REDISTRIBUTE_DELETE, afi,
+						type, 0, vrf_id);
 			}
 			for (redist = state->redistributions; redist;
 			     redist = redist->next) {
 				if (!eigrp_zebra_source_in_use(
 					    afi, redist->type,
 					    redist->route_instance, vrf_id))
-					zclient_redistribute(
-						ZEBRA_REDISTRIBUTE_DELETE,
-						eigrp_zclient, afi,
+					eigrp_zebra_redist_tx_add(
+						ZEBRA_REDISTRIBUTE_DELETE, afi,
 						redist->type,
 						(unsigned short)
 							redist->route_instance,
@@ -223,7 +297,14 @@ void eigrp_zebra_instance_delete(eigrp_instance_t *eigrp)
 	}
 }
 
-static void eigrp_zebra_instance_delete_all(void)
+void eigrp_zebra_instance_delete(eigrp_instance_t *eigrp)
+{
+	pthread_mutex_lock(&eigrp_zebra_instances_lock);
+	eigrp_zebra_instance_delete_locked(eigrp);
+	pthread_mutex_unlock(&eigrp_zebra_instances_lock);
+}
+
+static void eigrp_zebra_instance_delete_all_locked(void)
 {
 	struct eigrp_zebra_instance_state *state;
 
@@ -234,8 +315,15 @@ static void eigrp_zebra_instance_delete_all(void)
 	}
 }
 
+static void eigrp_zebra_instance_delete_all(void)
+{
+	pthread_mutex_lock(&eigrp_zebra_instances_lock);
+	eigrp_zebra_instance_delete_all_locked();
+	pthread_mutex_unlock(&eigrp_zebra_instances_lock);
+}
+
+
 /* For registering events. */
-extern struct event_loop *master;
 struct in_addr router_id_zebra;
 
 static const char *eigrp_zebra_prefix_string(const struct prefix *prefix)
@@ -501,6 +589,7 @@ static int eigrp_zebra_redistribute_route(ZAPI_CALLBACK_ARGS)
 	protocol_name = eigrp_zebra_redistribute_protocol_name(
 		route.redist.source.protocol);
 
+	pthread_mutex_lock(&eigrp_zebra_instances_lock);
 	for (state = eigrp_zebra_instances; state; state = state->next) {
 		if (!state->eigrp
 		    || eigrp_instance_vrf_id(state->eigrp)
@@ -541,6 +630,8 @@ static int eigrp_zebra_redistribute_route(ZAPI_CALLBACK_ARGS)
 				(unsigned)route.redist.source.route_instance,
 				(unsigned)result);
 	}
+
+	pthread_mutex_unlock(&eigrp_zebra_instances_lock);
 
 	if ((term_debug_eigrp_notifications & EIGRP_DEBUG_NOTIFICATION_RIB))
 		eigrp_log(EIGRP_LOG_DEBUG,
@@ -742,8 +833,7 @@ eigrp_result_t eigrp_zebra_route_add(eigrp_instance_t *eigrp,
 		eigrp_log(EIGRP_LOG_DEBUG, "Zebra: Route add %s",
 			  eigrp_zebra_prefix_string(&host_prefix));
 
-	zclient_route_send(ZEBRA_ROUTE_ADD, eigrp_zclient, &api);
-	return EIGRP_RESULT_SUCCESS;
+	return eigrp_zebra_route_tx_add(ZEBRA_ROUTE_ADD, &api);
 }
 
 eigrp_result_t eigrp_zebra_route_del(eigrp_instance_t *eigrp,
@@ -766,14 +856,16 @@ eigrp_result_t eigrp_zebra_route_del(eigrp_instance_t *eigrp,
 	api.instance = eigrp_instance_asn(eigrp);
 	api.safi = SAFI_UNICAST;
 	api.prefix = host_prefix;
-	zclient_route_send(ZEBRA_ROUTE_DELETE, eigrp_zclient, &api);
+	eigrp_result_t sent;
+
+	sent = eigrp_zebra_route_tx_add(ZEBRA_ROUTE_DELETE, &api);
 
 	if ((term_debug_eigrp_notifications & EIGRP_DEBUG_NOTIFICATION_RIB)
 	    || eigrp_debug_af_enabled(eigrp, EIGRP_DEBUG_AF_NOTIFICATIONS,
 				      NULL))
 		eigrp_log(EIGRP_LOG_DEBUG, "Zebra: Route del %s",
 			  eigrp_zebra_prefix_string(&host_prefix));
-	return EIGRP_RESULT_SUCCESS;
+	return sent;
 }
 
 static int eigrp_zebra_redistribute_type(eigrp_redist_protocol_t protocol)
@@ -854,15 +946,16 @@ static eigrp_result_t eigrp_zebra_subscription_params_build(
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t
-eigrp_zebra_redistribute_update(eigrp_instance_t *eigrp,
-				const eigrp_redist_source_t *source)
+static eigrp_result_t
+eigrp_zebra_redistribute_update_locked(eigrp_instance_t *eigrp,
+				       const eigrp_redist_source_t *source)
 {
 	struct eigrp_zebra_subscription_params params;
 	struct eigrp_zebra_instance_state *state;
 	struct eigrp_zebra_redistribute *redist;
 	eigrp_result_t result;
 	bool was_in_use;
+
 	result = eigrp_zebra_subscription_params_build(eigrp, source, &params);
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
@@ -888,16 +981,28 @@ eigrp_zebra_redistribute_update(eigrp_instance_t *eigrp,
 	 * events still carry VRF and are filtered to the target runtime below.
 	 */
 	if (!was_in_use) {
-		zclient_redistribute(ZEBRA_REDISTRIBUTE_ADD, eigrp_zclient,
-				     params.afi, params.type, params.instance,
-				     params.vrf_id);
+		eigrp_zebra_redist_tx_add(ZEBRA_REDISTRIBUTE_ADD, params.afi,
+					  params.type, params.instance,
+					  params.vrf_id);
 	}
 	return EIGRP_RESULT_SUCCESS;
 }
 
 eigrp_result_t
-eigrp_zebra_redistribute_delete(eigrp_instance_t *eigrp,
+eigrp_zebra_redistribute_update(eigrp_instance_t *eigrp,
 				const eigrp_redist_source_t *source)
+{
+	eigrp_result_t result;
+
+	pthread_mutex_lock(&eigrp_zebra_instances_lock);
+	result = eigrp_zebra_redistribute_update_locked(eigrp, source);
+	pthread_mutex_unlock(&eigrp_zebra_instances_lock);
+	return result;
+}
+
+static eigrp_result_t
+eigrp_zebra_redistribute_delete_locked(eigrp_instance_t *eigrp,
+				       const eigrp_redist_source_t *source)
 {
 	struct eigrp_zebra_subscription_params params;
 	struct eigrp_zebra_instance_state *state;
@@ -925,18 +1030,29 @@ eigrp_zebra_redistribute_delete(eigrp_instance_t *eigrp,
 		XFREE(MTYPE_EIGRP_ZEBRA_INSTANCE, redist);
 		if (!eigrp_zebra_source_in_use(params.afi, params.type,
 					       params.instance, params.vrf_id))
-			zclient_redistribute(ZEBRA_REDISTRIBUTE_DELETE,
-					     eigrp_zclient, params.afi,
-					     params.type, params.instance,
-					     params.vrf_id);
+			eigrp_zebra_redist_tx_add(
+				ZEBRA_REDISTRIBUTE_DELETE, params.afi,
+				params.type, params.instance, params.vrf_id);
 		return EIGRP_RESULT_SUCCESS;
 	}
 	return EIGRP_RESULT_NOT_FOUND;
 }
 
-int eigrp_redistribute_update(eigrp_operation_t operation,
-			      eigrp_instance_t *eigrp, int type,
-			      struct eigrp_metrics metric)
+eigrp_result_t
+eigrp_zebra_redistribute_delete(eigrp_instance_t *eigrp,
+				const eigrp_redist_source_t *source)
+{
+	eigrp_result_t result;
+
+	pthread_mutex_lock(&eigrp_zebra_instances_lock);
+	result = eigrp_zebra_redistribute_delete_locked(eigrp, source);
+	pthread_mutex_unlock(&eigrp_zebra_instances_lock);
+	return result;
+}
+
+static int eigrp_redistribute_update_locked(eigrp_operation_t operation,
+					    eigrp_instance_t *eigrp, int type,
+					    struct eigrp_metrics metric)
 {
 	struct eigrp_zebra_instance_state *state;
 	vrf_id_t vrf_id;
@@ -960,9 +1076,8 @@ int eigrp_redistribute_update(eigrp_operation_t operation,
 		if (state->redistribute_count > 0)
 			--state->redistribute_count;
 		if (!eigrp_zebra_source_in_use(afi, type, 0, vrf_id))
-			zclient_redistribute(ZEBRA_REDISTRIBUTE_DELETE,
-					     eigrp_zclient, afi, type, 0,
-					     vrf_id);
+			eigrp_zebra_redist_tx_add(ZEBRA_REDISTRIBUTE_DELETE,
+						  afi, type, 0, vrf_id);
 		return CMD_SUCCESS;
 	}
 	if (operation != EIGRP_SET)
@@ -978,9 +1093,22 @@ int eigrp_redistribute_update(eigrp_operation_t operation,
 	state->classic_redistribute[type] = true;
 	++state->redistribute_count;
 	if (!was_in_use)
-		zclient_redistribute(ZEBRA_REDISTRIBUTE_ADD, eigrp_zclient, afi,
-				     type, 0, vrf_id);
+		eigrp_zebra_redist_tx_add(ZEBRA_REDISTRIBUTE_ADD, afi, type, 0,
+					  vrf_id);
 	return CMD_SUCCESS;
+}
+
+int eigrp_redistribute_update(eigrp_operation_t operation,
+			      eigrp_instance_t *eigrp, int type,
+			      struct eigrp_metrics metric)
+{
+	int result;
+
+	pthread_mutex_lock(&eigrp_zebra_instances_lock);
+	result = eigrp_redistribute_update_locked(operation, eigrp, type,
+						  metric);
+	pthread_mutex_unlock(&eigrp_zebra_instances_lock);
+	return result;
 }
 
 static zclient_handler *const eigrp_handlers[] = {

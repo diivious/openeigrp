@@ -661,7 +661,9 @@ bool eigrp_hello_sequence_fits(eigrp_intf_t *ei, uint32_t sequence,
 		    && eigrp_packet_reliable_prior_count(nbr, sequence))
 			length += address_length;
 	}
-	return length <= eigrp_packet_payload_limit(ei->curr_mtu);
+	return length <= eigrp_packet_payload_limit(
+		       ei->curr_mtu,
+		       ei->eigrp->af_vectors.packet_ip_header_bytes);
 }
 
 static uint16_t eigrp_sequence_encode(eigrp_intf_t *ei, eigrp_stream_t *s,
@@ -802,8 +804,11 @@ eigrp_hello_encode(eigrp_intf_t *ei, const eigrp_addr_t *destination,
 	uint16_t length = EIGRP_HEADER_LEN;
 
 	// allocate a new packet to be sent
-	packet = eigrp_packet_create(eigrp_packet_payload_limit(ei->curr_mtu),
-				     NULL);
+	packet = eigrp_packet_create(
+		eigrp_packet_payload_limit(
+			ei->curr_mtu,
+			ei->eigrp->af_vectors.packet_ip_header_bytes),
+		NULL);
 
 	if (packet) {
 		// encode common header feilds

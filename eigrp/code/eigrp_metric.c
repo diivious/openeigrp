@@ -11,6 +11,7 @@
 #include "eigrp.h"
 #include "eigrp_structs.h"
 #include "eigrp_metric.h"
+#include "eigrp_redistribute.h"
 #include "eigrp_neighbor.h"
 #include "eigrp_topology.h"
 
@@ -266,6 +267,9 @@ eigrp_result_t eigrp_metric_default_update(eigrp_operation_t operation,
 	if (operation == EIGRP_RESET) {
 		if (!eigrp_metric_context_valid(context))
 			return EIGRP_RESULT_NOT_FOUND;
+		bool changed = context->config && context->config->metric_config
+			       && context->config->metric_config
+					  ->default_metric_configured;
 		if (context->config && context->config->metric_config) {
 			context->config->metric_config
 				->default_metric_configured = false;
@@ -274,7 +278,9 @@ eigrp_result_t eigrp_metric_default_update(eigrp_operation_t operation,
 			       sizeof(context->config->metric_config
 					      ->default_metric));
 		}
-		return EIGRP_RESULT_SUCCESS;
+		return changed && context->runtime
+			       ? eigrp_redist_default_refresh(context->runtime)
+			       : EIGRP_RESULT_SUCCESS;
 	}
 
 	if (operation != EIGRP_SET)
@@ -286,14 +292,25 @@ eigrp_result_t eigrp_metric_default_update(eigrp_operation_t operation,
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (!eigrp_metric_context_valid(context))
 		return EIGRP_RESULT_NOT_FOUND;
+	bool changed = false;
 	if (context->config) {
 		config = eigrp_metric_config_create(context->config);
 		if (!config)
 			return EIGRP_RESULT_INTERNAL_FAILURE;
+		changed =
+			!config->default_metric_configured
+			|| config->default_metric.bandwidth != metric->bandwidth
+			|| config->default_metric.delay != metric->delay
+			|| config->default_metric.reliability
+				   != metric->reliability
+			|| config->default_metric.load != metric->load
+			|| config->default_metric.mtu != metric->mtu;
 		config->default_metric = *metric;
 		config->default_metric_configured = true;
 	}
-	return EIGRP_RESULT_SUCCESS;
+	return changed && context->runtime
+		       ? eigrp_redist_default_refresh(context->runtime)
+		       : EIGRP_RESULT_SUCCESS;
 }
 
 /*

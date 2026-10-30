@@ -1375,7 +1375,10 @@ void eigrp_nbr_delete(eigrp_nbr_t *nbr)
 	eigrp_nbr_limit_timers_cancel(nbr);
 	eigrp_nbr_down(nbr);
 	eigrp_packet_queue_free(nbr->retrans_queue);
-	free(nbr);
+	nbr->retrans_queue = NULL;
+	nbr->retiring = true;
+	if (!nbr->topo_refs)
+		free(nbr);
 }
 
 void eigrp_nbr_holddown_expired(void *arg)

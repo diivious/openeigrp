@@ -182,6 +182,8 @@ typedef struct eigrp_af_vectors {
 	 * representation.
 	 */
 	uint8_t packet_address_bytes;
+	/* Base IP header overhead used to bound a complete EIGRP wire image. */
+	uint8_t packet_ip_header_bytes;
 	uint16_t (*packet_address_decode)(eigrp_stream_t *stream,
 					  eigrp_addr_t *address);
 	uint16_t (*packet_address_encode)(eigrp_stream_t *stream,

@@ -50,14 +50,14 @@ def _route_prefixes(payload, afi):
             candidate=off+4+nexthop+(20 if typ & 0xf == 3 else 0)+16
             if candidate < end: poff=candidate
         elif typ in (0x0602,0x0603) and off+13 <= end:
-            # MP header: 8 bytes (AFI, topology, flags). The AFI is a
-            # 16-bit EIGRP AF identity, not the outer Unix transport AFI.
-            protocol_afi=struct.unpack_from("!H",payload,off+4)[0]
+            # Cisco MP: 16-bit TID then AFI, metric, explicit next hop,
+            # optional exterior and destination.
+            protocol_afi=struct.unpack_from("!H",payload,off+6)[0]
             if protocol_afi==(1 if afi==4 else 2):
                 metric=off+12
                 if metric+24<=end:
                     attr_len=payload[metric]*2
-                    candidate=metric+24+attr_len+(16 if typ==0x0603 else 0)
+                    candidate=metric+24+attr_len+addr_bytes+(20 if typ==0x0603 else 0)
                     if candidate < end: poff=candidate
         if poff is not None:
             plen=payload[poff]

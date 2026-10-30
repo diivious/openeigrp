@@ -227,6 +227,7 @@ eigrp_ipv6_summary_auto_prefix(const eigrp_prefix_t *component,
 	return EIGRP_RESULT_UNSUPPORTED;
 }
 
+
 void eigrp_ipv6_init(eigrp_af_vectors_t *vectors)
 {
 	assert(vectors);
@@ -238,6 +239,7 @@ void eigrp_ipv6_init(eigrp_af_vectors_t *vectors)
 	vectors->packet_receive = eigrp_ipv6_packet_receive;
 	vectors->packet_source_on_link = eigrp_ipv6_packet_source_on_link;
 	vectors->packet_address_bytes = EIGRP_IPV6_ADDRESS_BYTES;
+	vectors->packet_ip_header_bytes = EIGRP_IPV6_HEADER_LEN;
 	vectors->packet_address_decode = eigrp_ipv6_packet_address_decode;
 	vectors->packet_address_encode = eigrp_ipv6_packet_address_encode;
 	vectors->packet_prefix_decode = eigrp_ipv6_packet_prefix_decode;

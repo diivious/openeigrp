@@ -84,10 +84,44 @@ this cannot create neighbor relationships using global source addresses.
 ## Medium-severity qualification guards
 
 `validate-convergence` can specify `stable_for` (seconds) to require **every**
-neighbor and route expectation to remain true continuously over the specified
-observation interval. Any failed poll resets the interval. This is different
-from a one-time successful snapshot and is applied to the basic IPv4, diamond,
-mesh, and two-router recovery gates. `timeout` includes the stable interval.
+expectation to remain true throughout the observation interval. Each poll uses
+one owning-AF `STATE` snapshot per router, so related assertions cannot mix
+route and counter values from different snapshots. Any failed poll resets the
+interval. `timeout` includes the stable interval; neither duration changes
+protocol timers nor automatically turns a failing condition into a pass.
+
+The supported convergence predicates are `neighbor`, `route` (including
+`table: topology`, `table: path`, `table: rib`, and `table: source`), `accounting`,
+`redist-limit`, `process-limit`, and `packet`. The limit predicates accept the
+same fields shown in `STATE`: `state`, `restarts`, `count`, `restart_active`,
+`reset_active`, and `penalty`. Unknown filters, boolean/integer mismatches,
+and invalid observation windows fail schema validation. When a convergence
+window expires, diagnostics report unmatched predicates, recent per-AF limit
+states, and relevant topology, path, RIB, and source rows.
+
+For operations dependent on deferred DUAL/packetizer cleanup, synchronize on
+**local lifecycle invariants** before replaying or reconfiguring. A remote
+RIB withdrawal is not proof that the originating router has retired its
+poisoned route descriptor. For example, after removing the offending static
+route from a redistribution lockout test:
+
+```yaml
+- validate-convergence:
+    timeout: 20
+    stable_for: 0.3
+    expect:
+      - redist-limit: {uut: r1, state: 2, restarts: 3, count: 0}
+      - route: {uut: r1, prefix: '192.0.2.221/32', table: path, present: false}
+      - route: {uut: r1, prefix: '192.0.2.221/32', table: topology, present: false}
+      - route: {uut: r2, prefix: '192.0.2.221/32', table: rib, present: false}
+```
+
+Avoid fixed sleeps as synchronization barriers. Do not wait for global
+router idleness: periodic HELLOs, timers, and reliable transport can remain
+active during a correctly converged topology. The assertions must name the
+specific lifecycle condition that makes the next operation safe. A distinct
+test of *immediate* manual recovery remains necessary if the protocol is
+required to recover before deferred advertisements finish.
 
 `checkpoint: <phase-name>` captures each running UUT's raw `STATE` and `EVENTS`
 responses and the incremental broker packet journal **at that phase**. In `--report` mode, every existing `packet-mark` also creates an automatic

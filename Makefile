@@ -23,7 +23,7 @@ help: ## Show developer commands and selectors.
 	  '  uut            Portable unit tests and YAML scenarios' \
 	  '  scale          Quick pacing and backpressure qualification' \
 	  '  docker         Build a local or GitHub-sourced Docker image' \
-	  '  clean          Remove generated build and UUT files' \
+	  '  clean          Remove generated build, UUT and local Netlabs results' \
 	  '  help           Show this help' '' 'Options:' \
 	  '  check SOURCE=all                Check entire tree (default: changed)' \
 	  '  uut SUITE=ipv4-basic-core      Run a named UUT suite' \
@@ -120,7 +120,20 @@ endif
 frr-smoke:
 	$(MAKE) -C frr/test/build
 
-clean: ## Remove generated build and UUT artifacts.
+clean: ## Remove generated build, UUT and local Netlabs artifacts.
 	$(MAKE) -C eigrp/code clean
 	$(MAKE) -C unix/code clean
 	$(MAKE) -C eigrp/test/uut clean
+	$(MAKE) -C frr/test/build clean
+	@# Preserve the results directory and its checked-in .gitignore, while
+	@# removing every locally generated report, capture and batch summary.
+	@if [ -d netlabs/results ]; then \
+	  find netlabs/results -mindepth 1 -maxdepth 1 \
+	    ! -name .gitignore -exec rm -rf -- {} +; \
+	fi
+	@# Python unit tests may leave caches under Netlabs source directories.
+	@if [ -d netlabs ]; then \
+	  find netlabs -type d \
+	    \( -name __pycache__ -o -name .pytest_cache \) \
+	    -prune -exec rm -rf -- {} +; \
+	fi

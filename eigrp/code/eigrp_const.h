@@ -204,6 +204,7 @@ enum eigrp_fsm_events {
  * EIGRP Fixed header
  */
 #define EIGRP_IPV4_HEADER_LEN 20U
+#define EIGRP_IPV6_HEADER_LEN 40U
 #define EIGRP_HEADER_LEN 20U
 #define EIGRP_PACKET_MAX_LEN 65535U /* includes IP Header size. */
 

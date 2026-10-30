@@ -16,8 +16,9 @@ def test_ipv6_zebra_redistribution_is_af_scoped_and_subscribed():
     assert "return AFI_IP6;" in zebra
     assert "eigrp_instance_afi(state->eigrp)" in zebra
     assert "!= route.prefix.address.afi" in zebra
-    assert "zclient_redistribute(ZEBRA_REDISTRIBUTE_ADD" in zebra
-    assert "zclient_redistribute(ZEBRA_REDISTRIBUTE_DELETE" in zebra
+    assert "eigrp_zebra_redist_tx_add(ZEBRA_REDISTRIBUTE_ADD" in zebra
+    assert "eigrp_zebra_redist_tx_add(ZEBRA_REDISTRIBUTE_DELETE" in zebra
+    assert "zclient_redistribute(tx->command, eigrp_zclient" in zebra
 
 
 def test_ipv6_external_candidate_uses_default_metric_and_policy_boundary():

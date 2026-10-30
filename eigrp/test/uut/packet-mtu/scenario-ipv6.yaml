@@ -1,0 +1,36 @@
+schema: eigrp-uut-test/v1
+topology: topology-ipv6.yaml
+name: IPv6 packet MTU budget during multiprotocol full table sync
+steps:
+  - start: r1
+  - redistribute-add: {uut: r1, source: static}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::1/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::2/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::3/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::4/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::5/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::6/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::7/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::8/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::9/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::a/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::b/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::c/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::d/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::e/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::f/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::10/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::11/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::12/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::13/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::14/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::15/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::16/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::17/128', metric: 20}
+  - source-route-add: {uut: r1, prefix: '2001:db8:1234::18/128', metric: 20}
+  - packet-mark: sync
+  - start: r2
+  - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: up, timeout: 15}
+  - validate-packet: {since: sync, source_uut: r1, destination_uut: r2, opcode: update, event: delivered, group_by: sequence, min_groups: 6, timeout: 15}
+  - validate-route: {uut: r2, prefix: '2001:db8:1234::18/128', table: rib, present: true, timeout: 15}
+  - stop: all

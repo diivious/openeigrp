@@ -171,6 +171,18 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                        && prefix->prefix_length <= 32;
             }
 
+            void eigrp_prefix_normalize(eigrp_prefix_t *prefix)
+            {
+                if (!eigrp_prefix_valid(prefix))
+                    return;
+                unsigned bytes = (prefix->prefix_length + 7) / 8;
+                if (prefix->prefix_length % 8)
+                    prefix->address.bytes[bytes - 1] &=
+                        0xff << (8 - prefix->prefix_length % 8);
+                memset(prefix->address.bytes + bytes, 0,
+                       sizeof(prefix->address.bytes) - bytes);
+            }
+
             static void assert_seed_values(const eigrp_metrics_t *metric,
                                            const eigrp_metric_values_t *values)
             {
@@ -337,6 +349,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
             f"-I{ROOT}",
             f"-I{ROOT / 'test' / 'build' / 'include'}",
             str(source),
+            str(ROOT / "eigrp/code/eigrp_table.c"),
             *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ),
             "-o",
             str(binary),

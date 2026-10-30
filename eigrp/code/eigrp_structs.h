@@ -601,6 +601,9 @@ typedef struct eigrp_route_descriptor {
 	eigrp_prefix_descriptor_t *prefix; // prefix this route is part of
 	eigrp_nbr_t *adv_router;	   // peer who sent me the route
 
+	/* An installed RDB retains its peer through withdrawal. */
+	bool owner_ref;
+
 	eigrp_metrics_t reported_metric; // neighbors vector metrics
 	uint32_t reported_distance;	 // neighbors distance (RD)
 

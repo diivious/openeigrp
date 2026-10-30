@@ -1,0 +1,9 @@
+schema: openeigrp-live-neighbor/v1
+name: 2R-neighbor
+group: rtp
+process: OpenEIGRP
+asn: 4473
+families:
+  - ipv4
+  - ipv6
+neighbor_timeout: 120

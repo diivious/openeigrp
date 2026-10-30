@@ -12,6 +12,7 @@
 #include "eigrp_redistribute.h"
 #include "eigrp_structs.h"
 #include "eigrp_table.h"
+#include "eigrp_prefix.h"
 #include "eigrp_rib.h"
 #include "eigrp_topology.h"
 #include "eigrp.h"
@@ -32,11 +33,22 @@ eigrp_result_t
 eigrp_topology_redistributed_source_remove(eigrp_instance_t *eigrp,
 					   const eigrp_redist_source_t *source);
 
+/* Retain the original host snapshot: an installed topology metric alone cannot
+ * reconstruct an overridden seed after configuration changes. Each source has
+ * its own indexed prefix table, so ingress does not walk the entire topology.
+ */
+struct eigrp_redist_route_cache {
+	eigrp_rib_route_t route;
+	eigrp_rib_nexthop_t *nexthops;
+};
+
 struct eigrp_redist_config {
 	eigrp_redist_source_t source;
 	bool metric_configured;
+	bool subscribed;
 	eigrp_metric_values_t metric;
 	char *route_map;
+	eigrp_table_t *routes;
 	eigrp_redist_config_t *next;
 };
 
@@ -112,15 +124,164 @@ eigrp_redist_config_lookup(eigrp_af_config_t *af,
 	return NULL;
 }
 
-static bool eigrp_redist_runtime_result_committable(eigrp_result_t result)
-{
-	return result == EIGRP_RESULT_SUCCESS;
-}
-
 static bool eigrp_redist_vecmetric_usable(const eigrp_rib_route_t *route)
 {
 	return route && route->redist.vecmetric.bandwidth != 0
 	       && route->redist.vecmetric.delay != 0;
+}
+
+static void
+eigrp_redist_route_cache_free(struct eigrp_redist_route_cache *entry)
+{
+	if (!entry)
+		return;
+	free(entry->nexthops);
+	free(entry);
+}
+
+static void eigrp_redist_cache_clear(eigrp_redist_config_t *config)
+{
+	eigrp_table_node_t *node;
+
+	if (!config || !config->routes)
+		return;
+	for (node = eigrp_table_first(config->routes); node;
+	     node = eigrp_table_next(node))
+		eigrp_redist_route_cache_free(node->info);
+	eigrp_table_free(config->routes);
+	config->routes = NULL;
+}
+
+static eigrp_result_t eigrp_redist_cache_store(eigrp_redist_config_t *config,
+					       const eigrp_rib_route_t *route)
+{
+	struct eigrp_redist_route_cache *entry, *old;
+	eigrp_table_node_t *node;
+
+	if (!config || !route || !eigrp_prefix_valid(&route->prefix)
+	    || (route->nexthop_count && !route->nexthops)
+	    || route->nexthop_count > SIZE_MAX / sizeof(*entry->nexthops))
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	entry = calloc(1, sizeof(*entry));
+	if (!entry)
+		return EIGRP_RESULT_INTERNAL_FAILURE;
+	entry->route = *route;
+	if (route->nexthop_count) {
+		entry->nexthops =
+			malloc(route->nexthop_count * sizeof(*entry->nexthops));
+		if (!entry->nexthops) {
+			free(entry);
+			return EIGRP_RESULT_INTERNAL_FAILURE;
+		}
+		memcpy(entry->nexthops, route->nexthops,
+		       route->nexthop_count * sizeof(*entry->nexthops));
+	}
+	entry->route.nexthops = entry->nexthops;
+	if (!config->routes) {
+		config->routes = eigrp_table_create();
+		if (!config->routes) {
+			eigrp_redist_route_cache_free(entry);
+			return EIGRP_RESULT_INTERNAL_FAILURE;
+		}
+	}
+	node = eigrp_table_node_lookup_or_create(config->routes,
+						 &route->prefix);
+	if (!node) {
+		eigrp_redist_route_cache_free(entry);
+		return EIGRP_RESULT_INTERNAL_FAILURE;
+	}
+	old = node->info;
+	node->info = entry;
+	eigrp_redist_route_cache_free(old);
+	return EIGRP_RESULT_SUCCESS;
+}
+
+static void eigrp_redist_cache_remove(eigrp_redist_config_t *config,
+				      const eigrp_rib_route_t *route)
+{
+	eigrp_table_node_t *node;
+
+	if (!config || !config->routes || !route)
+		return;
+	node = eigrp_table_node_lookup(config->routes, &route->prefix);
+	if (!node)
+		return;
+	eigrp_redist_route_cache_free(node->info);
+	eigrp_table_node_remove(config->routes, node);
+}
+
+/* The AF's owner thread performs the replay through ordinary redistribution
+ * ingress; each route then follows DUAL and the packetizer/RIB paths. */
+static eigrp_result_t
+eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
+				  const eigrp_rib_route_t *route,
+				  bool importing);
+
+static eigrp_result_t eigrp_redist_cache_refresh(eigrp_instance_t *runtime,
+						 eigrp_redist_config_t *config,
+						 bool defaults_only)
+{
+	eigrp_table_node_t *node;
+	eigrp_result_t result = EIGRP_RESULT_SUCCESS;
+
+	if (!runtime || !config || !config->routes)
+		return EIGRP_RESULT_SUCCESS;
+	for (node = eigrp_table_first(config->routes); node;
+	     node = eigrp_table_next(node)) {
+		struct eigrp_redist_route_cache *entry = node->info;
+		eigrp_result_t next;
+
+		if (defaults_only
+		    && (config->metric_configured
+			|| eigrp_redist_vecmetric_usable(&entry->route)))
+			continue;
+		/* Re-enter the selector, NOT the RIB event handler: a replay
+		 * must not replace its own cached object or invalidate this
+		 * iterator. */
+		next = eigrp_redist_source_route_receive(runtime, &entry->route,
+							 true);
+		if (next != EIGRP_RESULT_SUCCESS
+		    && result == EIGRP_RESULT_SUCCESS)
+			result = next;
+	}
+	return result;
+}
+
+/* Clearing runtime-owned snapshots must not delete retained configuration. */
+void eigrp_redist_runtime_clear(eigrp_instance_t *runtime)
+{
+	eigrp_af_config_t *af = eigrp_af_config_runtime_read(runtime);
+	eigrp_redist_config_t *config;
+
+	if (af)
+		for (config = af->redistributions; config;
+		     config = config->next) {
+			eigrp_redist_cache_clear(config);
+			config->subscribed = false;
+		}
+}
+
+eigrp_result_t eigrp_redist_default_refresh(eigrp_instance_t *runtime)
+{
+	eigrp_af_config_t *af = eigrp_af_config_runtime_read(runtime);
+	eigrp_redist_config_t *config;
+	eigrp_result_t result = EIGRP_RESULT_SUCCESS;
+
+	if (!af)
+		return EIGRP_RESULT_SUCCESS;
+	for (config = af->redistributions; config; config = config->next) {
+		eigrp_result_t next =
+			eigrp_redist_cache_refresh(runtime, config, true);
+		if (next != EIGRP_RESULT_SUCCESS
+		    && result == EIGRP_RESULT_SUCCESS)
+			result = next;
+	}
+	return result;
+}
+
+static bool eigrp_redist_runtime_result_committable(eigrp_result_t result)
+{
+	return result == EIGRP_RESULT_SUCCESS;
 }
 
 static eigrp_redist_metric_origin_t eigrp_redist_metric_select(
@@ -191,6 +352,7 @@ eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
 	char *new_route_map = NULL;
 	char *old_route_map = NULL;
 	bool old_metric_configured = false;
+	bool changed = true;
 	eigrp_result_t result;
 
 	if (context && eigrp_instance_thread_dispatch_needed(context->runtime))
@@ -213,6 +375,19 @@ eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
 	if (context->config) {
 		config = eigrp_redist_config_lookup(context->config, source);
 		if (config) {
+			changed =
+				config->metric_configured != (metric != NULL)
+				|| (metric
+				    && (config->metric.bandwidth
+						!= metric->bandwidth
+					|| config->metric.delay != metric->delay
+					|| config->metric.reliability
+						   != metric->reliability
+					|| config->metric.load != metric->load
+					|| config->metric.mtu != metric->mtu))
+				|| (!!config->route_map != !!route_map)
+				|| (route_map && config->route_map
+				    && strcmp(route_map, config->route_map));
 			old_route_map = config->route_map;
 			old_metric = config->metric;
 			old_metric_configured = config->metric_configured;
@@ -237,12 +412,16 @@ eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
 			config->metric = *metric;
 	}
 
-	result = context->runtime
+	/* The host subscription is stable across metric/route-map edits. Only
+	 * the first binding registers the source; existing routes are replayed
+	 * through the cached portable ingress below. */
+	result = context->runtime && (!config || !config->subscribed)
 			 ? eigrp_rib_redistribute_add(context->runtime, source)
 			 : EIGRP_RESULT_SUCCESS;
 	if (!eigrp_redist_runtime_result_committable(result)) {
 		if (new_config) {
 			context->config->redistributions = new_config->next;
+			eigrp_redist_cache_clear(new_config);
 			free(new_config->route_map);
 			free(new_config);
 		} else if (config) {
@@ -255,8 +434,13 @@ eigrp_result_t eigrp_redist_add(eigrp_instance_context_t *context,
 		return result;
 	}
 
+	if (config && context->runtime)
+		config->subscribed = true;
 	free(old_route_map);
 	free(new_route_map);
+	if (changed && context->runtime && !new_config)
+		return eigrp_redist_cache_refresh(context->runtime, config,
+						  false);
 	return result;
 }
 
@@ -312,6 +496,7 @@ eigrp_result_t eigrp_redist_remove(eigrp_instance_context_t *context,
 
 	if (config) {
 		*cursor = config->next;
+		eigrp_redist_cache_clear(config);
 		free(config->route_map);
 		free(config);
 		if (result == EIGRP_RESULT_NOT_FOUND || !context->runtime)
@@ -670,16 +855,24 @@ eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
 				runtime,
 				EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_FILTERED,
 				route, 0);
-			return eigrp_topology_redistributed_route_remove(
-				runtime, route);
+			eigrp_result_t withdrawn =
+				eigrp_topology_redistributed_route_remove(
+					runtime, route);
+			return withdrawn == EIGRP_RESULT_NOT_FOUND
+				       ? EIGRP_RESULT_SUCCESS
+				       : withdrawn;
 		}
 	}
 	if (eigrp_redist_metric_select(af, config, route, &metric)
 	    == EIGRP_REDISTRIBUTE_METRIC_NONE) {
+		eigrp_result_t withdraw;
 		eigrp_redist_event_add(
 			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
 			route, EIGRP_REDIST_REJECT_NO_METRIC);
-		return EIGRP_RESULT_SUCCESS;
+		withdraw = eigrp_topology_redistributed_route_remove(runtime,
+								     route);
+		return withdraw == EIGRP_RESULT_NOT_FOUND ? EIGRP_RESULT_SUCCESS
+							  : withdraw;
 	}
 	if (!eigrp_redist_prefix_admit(runtime, route)
 	    || !eigrp_topology_prefix_admit(runtime, &route->prefix)) {
@@ -706,6 +899,24 @@ eigrp_result_t eigrp_rib_event_process(eigrp_instance_t *runtime,
 			 ? EIGRP_EVENTLOG_OPCODE_RIB_ROUTE_DELETE
 			 : EIGRP_EVENTLOG_OPCODE_RIB_ROUTE_UPDATE;
 	eigrp_redist_event_add(runtime, opcode, &event->route, 0);
+	{
+		eigrp_af_config_t *af = eigrp_af_config_runtime_read(runtime);
+		eigrp_redist_config_t *config =
+			af ? eigrp_redist_config_lookup(
+				     af, &event->route.redist.source)
+			   : NULL;
+		if (config) {
+			if (event->type == EIGRP_RIB_EVENT_UPDATE) {
+				eigrp_result_t saved = eigrp_redist_cache_store(
+					config, &event->route);
+				if (saved != EIGRP_RESULT_SUCCESS)
+					return saved;
+			} else {
+				eigrp_redist_cache_remove(config,
+							  &event->route);
+			}
+		}
+	}
 	return eigrp_redist_source_route_receive(
 		runtime, &event->route, event->type == EIGRP_RIB_EVENT_UPDATE);
 }
@@ -752,18 +963,43 @@ void eigrp_redist_config_delete_all(eigrp_af_config_t *af)
 		return;
 	for (config = af->redistributions; config; config = next) {
 		next = config->next;
+		eigrp_redist_cache_clear(config);
 		free(config->route_map);
 		free(config);
 	}
 	af->redistributions = NULL;
 }
 
+/* A policy object can change without changing the redistribute command.
+ * Re-evaluate the retained candidates on their owning AF thread; a Zebra
+ * unsubscribe/resubscribe neither guarantees replay nor preserves stable
+ * subscriptions shared with other EIGRP instances. */
+static eigrp_result_t eigrp_redist_policy_refresh(eigrp_instance_t *runtime,
+						  void *arg)
+{
+	eigrp_af_config_t *af = eigrp_af_config_runtime_read(runtime);
+	eigrp_redist_config_t *config;
+	eigrp_result_t result = EIGRP_RESULT_SUCCESS;
+
+	(void)arg;
+	if (!af)
+		return EIGRP_RESULT_SUCCESS;
+	for (config = af->redistributions; config; config = config->next) {
+		eigrp_result_t next;
+
+		if (!config->route_map)
+			continue;
+		next = eigrp_redist_cache_refresh(runtime, config, false);
+		if (result == EIGRP_RESULT_SUCCESS)
+			result = next;
+	}
+	return result;
+}
+
 void eigrp_redist_policy_update_all(void)
 {
 	eigrp_virt_router_t *virt_router;
 	eigrp_instance_t *runtime;
-	eigrp_af_config_t *af;
-	eigrp_redist_config_t *config;
 	eigrp_list_item_t *vr_node, *af_node;
 
 	if (!eigrp_process.virt_router)
@@ -772,29 +1008,22 @@ void eigrp_redist_policy_update_all(void)
 				   virt_router)) {
 		for (EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node,
 					   runtime)) {
-			if (!runtime)
-				continue;
-			af = eigrp_af_config_runtime_read(runtime);
-			if (!af)
-				continue;
-			for (config = af->redistributions; config;
-			     config = config->next) {
-				if (!config->route_map)
-					continue;
-				/* Re-subscription makes Zebra replay the
-				 * current source RIB so route-map edits are
-				 * applied to already-existing IPv4/IPv6
-				 * candidates, not only to future route events.
-				 */
-				(void)eigrp_rib_redistribute_remove(
-					runtime, &config->source);
-				(void)eigrp_rib_redistribute_add(
-					runtime, &config->source);
-			}
+			eigrp_result_t result =
+				eigrp_instance_thread_dispatch_needed(runtime)
+					? eigrp_instance_message_call(
+						  runtime,
+						  eigrp_redist_policy_refresh,
+						  NULL)
+					: eigrp_redist_policy_refresh(runtime,
+								      NULL);
+			if (result != EIGRP_RESULT_SUCCESS)
+				eigrp_log(
+					EIGRP_LOG_WARNING,
+					"EIGRP redistribution policy refresh failed: %d",
+					(int)result);
 		}
 	}
 }
-
 
 /*
  * Syntax:

@@ -1,0 +1,11 @@
+schema: eigrp-uut-test/v1
+topology: ../examples/ipv6-basic-core.yaml
+name: IPv6 neighbor prefix-limit address decoding under fortified libc
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: up, timeout: 8}
+  - peer-limit: {uut: r1, interface: eth12, neighbor: 'fe80::2', operation: suspend}
+  - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: limit-suspended, timeout: 8}
+  - peer-limit: {uut: r1, interface: eth12, neighbor: 'fe80::2', operation: release}
+  - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: up, timeout: 12}
+  - stop: all

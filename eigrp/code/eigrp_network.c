@@ -287,8 +287,16 @@ static bool
 eigrp_network_interface_enabled(eigrp_instance_t *eigrp,
 				const eigrp_intf_runtime_state_t *state)
 {
+	bool passive_ipv6 = eigrp_network_ipv6_passive_connected(eigrp, state);
+
+	/* IPv4 secondary addresses do not create separate EIGRP interfaces.
+	 * A secondary IPv6 global address is different when its interface is
+	 * explicitly passive: it is the local route being originated.
+	 */
+	if (state->secondary)
+		return passive_ipv6;
 	return eigrp_network_runtime_matches(eigrp, &state->address)
-	       || eigrp_network_ipv6_passive_connected(eigrp, state);
+	       || passive_ipv6;
 }
 
 static void
@@ -297,8 +305,7 @@ eigrp_network_intf_walk_update(const eigrp_intf_runtime_state_t *state,
 {
 	eigrp_instance_t *eigrp = arg;
 
-	if (!eigrp || !state || state->secondary
-	    || eigrp->router_id.s_addr == INADDR_ANY
+	if (!eigrp || !state || eigrp->router_id.s_addr == INADDR_ANY
 	    || !eigrp_network_interface_enabled(eigrp, state))
 		return;
 	(void)eigrp_intf_runtime_update(EIGRP_SET, eigrp, state, NULL);
@@ -315,8 +322,7 @@ void eigrp_network_intfs_update(eigrp_instance_t *eigrp)
 void eigrp_network_intf_update(eigrp_instance_t *eigrp,
 			       const eigrp_intf_runtime_state_t *state)
 {
-	if (!eigrp || !state || state->secondary
-	    || !eigrp_prefix_valid(&state->address))
+	if (!eigrp || !state || !eigrp_prefix_valid(&state->address))
 		return;
 
 	if (eigrp->router_id.s_addr == INADDR_ANY)
@@ -334,7 +340,10 @@ void eigrp_sys_intf_update(eigrp_vrf_id_t vrf_id,
 	eigrp_instance_t *eigrp;
 	eigrp_list_item_t *vr_node, *af_node;
 
-	if (!state || state->secondary || !eigrp_prefix_valid(&state->address)
+	if (!state
+	    || (state->secondary
+		&& state->address.address.afi != EIGRP_AFI_IPV6)
+	    || !eigrp_prefix_valid(&state->address)
 	    || !eigrp_process.virt_router)
 		return;
 

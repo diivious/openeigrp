@@ -59,6 +59,7 @@ static bool eigrp_af_vectors_runtime_validate(const eigrp_af_vectors_t *vectors)
 
 	EIGRP_AF_VECTOR_REQUIRE(packet_source_on_link);
 	EIGRP_AF_VECTOR_REQUIRE(packet_address_bytes);
+	EIGRP_AF_VECTOR_REQUIRE(packet_ip_header_bytes);
 	EIGRP_AF_VECTOR_REQUIRE(packet_address_decode);
 	EIGRP_AF_VECTOR_REQUIRE(packet_address_encode);
 	EIGRP_AF_VECTOR_REQUIRE(packet_prefix_decode);
@@ -459,8 +460,9 @@ void eigrp_instance_delete_final(eigrp_instance_t *eigrp)
 	 * that binding before any runtime storage is released so later config
 	 * cleanup cannot dereference or attempt to destroy a stale instance.
 	 */
-	eigrp_af_config_runtime_remove(eigrp);
 	eigrp_instance_thread_stop(eigrp);
+	eigrp_redist_runtime_clear(eigrp);
+	eigrp_af_config_runtime_remove(eigrp);
 	eigrp_timer_cancel_all(eigrp);
 	eigrp_packet_input_queue_clear(eigrp);
 

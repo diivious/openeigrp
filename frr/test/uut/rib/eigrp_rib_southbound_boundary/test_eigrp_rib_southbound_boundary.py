@@ -73,8 +73,9 @@ def test_zebra_adapter_builds_host_rib_objects_from_portable_snapshot():
 
     assert "struct zapi_route api;" in zebra
     assert "struct zapi_nexthop *api_nh;" in zebra
-    assert "zclient_route_send(ZEBRA_ROUTE_ADD" in zebra
-    assert "zclient_route_send(ZEBRA_ROUTE_DELETE" in zebra
+    assert "eigrp_zebra_route_tx_add(ZEBRA_ROUTE_ADD" in zebra
+    assert "eigrp_zebra_route_tx_add(ZEBRA_ROUTE_DELETE" in zebra
+    assert "zclient_route_send(tx->command, eigrp_zclient, &tx->route)" in zebra
     assert "const eigrp_rib_route_t *route" in zebra_h
     assert "struct list *successors" not in zebra_h
     assert "eigrp_route_descriptor_t" not in zebra_h

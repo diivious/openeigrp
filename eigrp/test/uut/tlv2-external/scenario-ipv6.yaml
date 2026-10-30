@@ -1,0 +1,22 @@
+schema: eigrp-uut-test/v1
+topology: ../examples/ipv6-basic-core.yaml
+name: TLV2 external IPv6 provenance withdrawal and re-advertisement
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: up, timeout: 15}
+  - redistribute-add: {uut: r1, source: static}
+  - packet-mark: first-external
+  - source-route-add: {uut: r1, prefix: '2001:db8:ff::221/128', metric: 20}
+  - validate-packet: {uut: r1, interface: eth12, opcode: update, prefix: '2001:db8:ff::221/128', since: first-external, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '2001:db8:ff::221/128', table: rib, present: true, timeout: 15}
+  - packet-mark: withdraw
+  - source-route-remove: {uut: r1, prefix: '2001:db8:ff::221/128'}
+  - validate-packet: {uut: r1, interface: eth12, opcode: update, prefix: '2001:db8:ff::221/128', since: withdraw, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '2001:db8:ff::221/128', table: rib, present: false, timeout: 15}
+  - packet-mark: re-advertise
+  - source-route-add: {uut: r1, prefix: '2001:db8:ff::221/128', metric: 30}
+  - validate-packet: {uut: r1, interface: eth12, opcode: update, prefix: '2001:db8:ff::221/128', since: re-advertise, event: delivered, min: 1, timeout: 15}
+  - validate-route: {uut: r2, prefix: '2001:db8:ff::221/128', table: rib, present: true, timeout: 15}
+  - source-route-remove: {uut: r1, prefix: '2001:db8:ff::221/128'}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

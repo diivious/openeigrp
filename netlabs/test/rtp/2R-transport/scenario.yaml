@@ -1,0 +1,48 @@
+schema: openeigrp-live-rtp-2r/v1
+name: 2R-transport
+group: rtp
+process: OpenEIGRP
+asn: 4473
+families: [ipv4, ipv6]
+burst_prefixes: 128
+objectives: [RTP-01, RTP-02, RTP-03, RTP-04, RTP-05, RTP-06, RTP-07, RTP-08, RTP-11]
+# Per-AF TLV2 RTP-03 tests are required. The combined RTP-03/codec-matrix
+# remains informational/BLOCKED when TLV1 is absent; qualify TLV1 separately
+# in the next increment, without treating missing evidence as a PASS.
+# Capture from the surviving Cisco namespace while the OE transit link cycles.
+# Cache IPv6 peer link-local identities before taking the link down.
+# Burst checks require all 128 learned routes in both RIBs (bulk polling).
+# RTP-04 explicitly originates one isolated external prefix per sender after
+# draining the burst; adjacency EOT packets need not contain just one TLV.
+# RTP-02 capture starts before link-down; K mismatch is asserted from the
+# changed-K1 HELLO, not goodbye traffic. RTP-04 uses controlled one-prefix
+# captures plus the burst; RTP-06 uses those live-adjacency prefix updates
+# as additional multicast evidence. Neither objective infers a packet mode.
+# RTP-08 verifies the actual Cisco/FRR RIB spelling before evaluating
+# retransmission and final ACK evidence; missing captures still fail closed.
+# RTP-BURST/IPv6 requires every EIGRP packet to fit the 1500-byte path MTU;
+# IPv6 fragments are rejected by strict wire evidence, never hidden as PASS.
+# Failed origination now preserves OE topology, event history and FRR logs.
+# RTP-08 drops route UPDATEs at receiver ingress so the sender capture
+# remains observable; exact ACK suppression uses receiver egress. Each case
+# requires a healthy adjacency before fault setup.
+# RTP-08 retains each selective UPDATE/ACK fault until both a matching
+# route-bearing UPDATE and a real tc drop are observed. HELLO packets must
+# pass through the packet-loss filter so the peer hold timer is unaffected.
+# Empty captures, mistimed filters, and unmatched ACK sequences are failures.
+# RTP-08 attaches clsact alongside existing root qdiscs without replacing them;
+# existing clsact is reused with an unused priority chosen from the test's
+# bounded priority range. The exact chosen priority is recorded in the fault
+# state; cleanup removes only that filter and preserves unrelated filters.
+# An ingress-only qdisc or exhaustion of all safe priorities must fail closed.
+# IPv6 tc/u32 selectors match raw Next Header byte 6 (protocol 88) on
+# these direct EIGRP/IPv6 links; unsupported extension chains are excluded.
+
+# FRR Zebra regression gate: after RTP-01/RTP-02 interface resets,
+# the 128-route burst must reach EIGRP topology and the Cisco RIB for
+# BOTH AFs, not just the OE static RIB. Incomplete Zebra subscription
+# replay or malformed zclient writes must fail the existing burst objective.
+# The FRR adapter serializes zclient writes on its event loop; the matching
+# executable test exercises concurrent AF-worker requests and reconnect safety.
+# RTP-08 must preserve the original fault-installation exception when its
+# capture has no packets, recording secondary capture failures separately.

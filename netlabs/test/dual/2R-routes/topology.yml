@@ -1,0 +1,28 @@
+# Native netlab controls all initial addressing and EIGRP configuration.
+name: eigrp-2r-dual
+provider: clab
+
+defaults:
+  devices.frr.clab.image: ghcr.io/diivious/openeigrp-frr:0.3.0
+  devices.csr.clab.image: vrnetlab/vr-csr:17.03.06
+  devices.frr.clab.group_vars.netlab_config_exec: [ 'sleep 10' ]
+  paths.prepend.custom.dirs: [ 'topology:../../../config' ]
+nodes:
+  oe:
+    device: frr
+    frr.daemons: [ eigrpd ]
+    config: [ eigrp-2r-interop ]
+    loopback.ipv4: 10.255.0.1/32
+    loopback.ipv6: 2001:db8:4473:ff::1/128
+  csr:
+    device: csr
+    config: [ eigrp-2r-interop ]
+    loopback.ipv4: 10.255.0.2/32
+    loopback.ipv6: 2001:db8:4473:ff::2/128
+links:
+- oe:
+    ipv4: 10.44.53.1/30
+    ipv6: 2001:db8:4473:1::1/64
+  csr:
+    ipv4: 10.44.53.2/30
+    ipv6: 2001:db8:4473:1::2/64

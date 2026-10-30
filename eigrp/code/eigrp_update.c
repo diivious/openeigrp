@@ -678,8 +678,11 @@ static eigrp_packet_t *eigrp_update_neighbor_packet_create(eigrp_nbr_t *nbr,
 	ei = nbr->ei;
 	eigrp = ei->eigrp;
 	sequence = eigrp_packet_sequence_reserve(eigrp);
-	packet = eigrp_packet_create(eigrp_packet_payload_limit(ei->curr_mtu),
-				     nbr);
+	packet = eigrp_packet_create(
+		eigrp_packet_payload_limit(
+			ei->curr_mtu,
+			ei->eigrp->af_vectors.packet_ip_header_bytes),
+		nbr);
 	if (!packet)
 		return NULL;
 
@@ -816,7 +819,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 
 	ei = nbr->ei;
 	eigrp = ei->eigrp;
-	packet_limit = eigrp_packet_payload_limit(ei->curr_mtu);
+	packet_limit = eigrp_packet_payload_limit(
+		ei->curr_mtu, ei->eigrp->af_vectors.packet_ip_header_bytes);
 	/* The existing packet and summary de-duplication set survive ACK
 	 * stalls. */
 	packet = nbr->sync_packet;
@@ -1197,7 +1201,8 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 	ei = nbr->ei;
 	eigrp = ei->eigrp;
 	prefixes = nbr->nbr_gr_prefixes_send;
-	packet_limit = eigrp_packet_payload_limit(ei->curr_mtu);
+	packet_limit = eigrp_packet_payload_limit(
+		ei->curr_mtu, ei->eigrp->af_vectors.packet_ip_header_bytes);
 	first = nbr->nbr_gr_packet_type == EIGRP_PACKET_PART_FIRST;
 	flags = first ? (EIGRP_INIT_FLAG | EIGRP_RS_FLAG) : 0;
 	packet = eigrp_update_neighbor_packet_create(nbr, flags);

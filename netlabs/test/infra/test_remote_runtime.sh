@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+# Exercise runner lifecycle and streaming with isolated fake netlab/docker/SSH.
+
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+runner="$root/netlabs/tools/remote/runner.sh"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+mkdir -p "$tmp/bin" "$tmp/state/runs/upload.abc/netlabs/labs/101"
+
+# The real runner requires Linux flock/timeout. Mock missing utilities for
+# macOS tests; the flock shim must preserve actual advisory locking semantics.
+if ! command -v flock >/dev/null 2>&1; then
+    cat >"$tmp/bin/flock" <<'PY'
+#!/usr/bin/env python3
+import fcntl
+import sys
+
+if len(sys.argv) != 3 or sys.argv[1] not in ('-n', '-u'):
+    sys.exit(2)
+mode = fcntl.LOCK_UN if sys.argv[1] == '-u' else fcntl.LOCK_EX | fcntl.LOCK_NB
+try:
+    fcntl.flock(int(sys.argv[2]), mode)
+except BlockingIOError:
+    sys.exit(1)
+PY
+    chmod +x "$tmp/bin/flock"
+fi
+
+if ! command -v timeout >/dev/null 2>&1; then
+    cat >"$tmp/bin/timeout" <<'SH'
+#!/bin/sh
+# Test drivers are mocked; verify the invocation, then preserve its exit code.
+[ "$1" = '--foreground' ] && [ "$2" = '--signal=TERM' ] &&
+    [ "$3" = '--kill-after=20s' ] && [ "$4" = '1500s' ] || exit 2
+shift 4
+exec "$@"
+SH
+    chmod +x "$tmp/bin/timeout"
+fi
+cat >"$tmp/bin/docker" <<'SH'
+#!/bin/sh
+if [ "$1" = ps ] && [ -n "${DOCKER_MOCK_ORPHAN:-}" ]; then
+    printf '%s\n' "$DOCKER_MOCK_ORPHAN"
+fi
+exit 0
+SH
+cat >"$tmp/bin/netlab" <<'SH'
+#!/bin/sh
+case "$1" in
+    up|down|status|connect)
+        printf '%s\n' "$1" >> "$LAB_MOCK_LOG"
+        [ "$1" != status ] || echo 'Router R1 running'
+        ;;
+    *) exit 2 ;;
+esac
+SH
+chmod +x "$tmp/bin/docker" "$tmp/bin/netlab"
+printf 'nodes:\n  r1: {}\n' >"$tmp/state/runs/upload.abc/netlabs/labs/101/topology.yml"
+
+export PATH="$tmp/bin:$PATH"
+export REMOTE_LAB_DATA="$tmp/state"
+export REMOTE_LAB_STATE="$tmp/state/session"
+export LAB_MOCK_LOG="$tmp/actions.log"
+
+# The connectivity test only needs a node list, not a local PyYAML install.
+cat >"$tmp/bin/mock_nodes" <<'SH'
+#!/bin/sh
+[ "$1" = '-' ] && [ -r "$2" ] || exit 2
+cat >/dev/null
+printf 'r1\n'
+SH
+chmod +x "$tmp/bin/mock_nodes"
+export NETLAB_PYTHON="$tmp/bin/mock_nodes"
+
+# New scenario containers must block concurrent labs even without a state file.
+if DOCKER_MOCK_ORPHAN=clab-eigrp-internal-oe \
+        bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 >"$tmp/orphan.out" 2>&1; then
+    echo 'FAIL: orphaned eigrp-internal container did not block a new lab' >&2
+    exit 1
+fi
+grep -Fq 'Orphaned OpenEIGRP containerlab nodes detected' "$tmp/orphan.out"
+echo 'PASS: orphaned internal-route topology blocks new sessions'
+
+# Confirm the advisory lock excludes another process even with no session file.
+mkdir -p "$tmp/state/session"
+python3 - "$tmp/state/session/lock" "$tmp/lock-held" "$tmp/lock-release" <<'PY' &
+import fcntl
+import pathlib
+import sys
+import time
+
+lock, ready, release = map(pathlib.Path, sys.argv[1:])
+with lock.open('a') as stream:
+    fcntl.flock(stream, fcntl.LOCK_EX)
+    ready.touch()
+    for _ in range(200):
+        if release.exists():
+            break
+        time.sleep(0.025)
+PY
+lock_pid=$!
+for _ in {1..50}; do
+    [[ ! -f "$tmp/lock-held" ]] || break
+    sleep 0.1
+done
+[[ -f "$tmp/lock-held" ]] || {
+    echo 'FAIL: lock holder did not start' >&2
+    exit 1
+}
+set +e
+bash "$runner" status >"$tmp/locked-out" 2>&1
+lock_rc=$?
+set -e
+touch "$tmp/lock-release"
+wait "$lock_pid"
+[[ "$lock_rc" -eq 3 ]] && grep -Fq 'BUSY:' "$tmp/locked-out" || {
+    echo 'FAIL: runner did not reject an already-held lock' >&2
+    exit 1
+}
+echo 'PASS: remote runner enforces exclusive locking'
+
+# Instructional labs must retain ownership and reject concurrent starts.
+bash "$runner" status | grep -F 'No active lab'
+bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 | grep -F 'ACTIVE LAB 101'
+grep -Fqx up "$tmp/actions.log"
+if bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 2>"$tmp/busy"; then
+    echo 'FAIL: second lab was allowed' >&2
+    exit 1
+fi
+grep -F 'BUSY:' "$tmp/busy"
+bash "$runner" status | grep -F 'Active: lab 101 (running)'
+printf '1\n' | bash "$runner" connect | grep -F 'Routers:'
+grep -Fqx connect "$tmp/actions.log"
+bash "$runner" stop | grep -F 'Lab stopped'
+grep -Fqx down "$tmp/actions.log"
+test ! -e "$tmp/state/session/session"
+
+# A failed deployment must attempt teardown and release the session.
+python3 - "$tmp/bin/netlab" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding='utf8') as file:
+    source = file.read()
+source = source.replace('up|down|status|connect)', 'up) exit 1 ;;\n    down|status|connect)')
+with open(path, 'w', encoding='utf8') as file:
+    file.write(source)
+PY
+if bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101; then
+    echo 'FAIL: broken netlab up was accepted' >&2
+    exit 1
+fi
+test ! -e "$tmp/state/session/session"
+echo 'PASS: runner lifecycle, mutual exclusion, status, teardown and failed deploy cleanup'
+
+# The UUT mock supplies actual artifacts, output, exit codes, and an optional delay.
+make_uut_workspace() {
+    local workspace="$tmp/state/runs/upload.$1/netlabs/uut/2R-neighbor"
+    mkdir -p "$workspace" "${workspace%/netlabs/uut/2R-neighbor}/netlabs/tools/remote"
+    printf '# test image selector\n' >"${workspace%/netlabs/uut/2R-neighbor}/netlabs/tools/remote/images.py"
+    printf 'schema: openeigrp-live-neighbor/v1\n' >"$workspace/scenario.yaml"
+    printf '# test script\n' >"${workspace%/*}/2R-neighbor.py"
+    printf 'name: eigrp-neighbor\n' >"$workspace/topology.yml"
+}
+
+make_uut_workspace uut
+cat >"$tmp/bin/mock_python" <<'SH'
+#!/bin/sh
+case "$1" in
+    */netlabs/tools/remote/images.py)
+        if [ "$2" = update ]; then
+            echo 'Latest published OpenEIGRP release: 0.4.0'
+            exit "${MOCK_IMAGE_UPDATE_RC:-0}"
+        fi
+        [ "$2" = prepare ] || exit 72
+        [ -f "$3" ] || exit 72
+        if [ "${MOCK_IMAGE_PREPARE_RC:-0}" -ne 0 ]; then
+            echo 'ERROR: no versioned images installed' >&2
+            exit "$MOCK_IMAGE_PREPARE_RC"
+        fi
+        printf '{"image":"ghcr.io/diivious/openeigrp-frr:0.4.0"}\n' >"$4"
+        echo 'OpenEIGRP image: ghcr.io/diivious/openeigrp-frr:0.4.0'
+        exit 0 ;;
+    */netlabs/uut/2R-neighbor.py) ;;
+    *) echo "Incorrect scenario driver: $1" >&2; exit 72 ;;
+esac
+while [ $# -gt 0 ]; do
+    if [ "$1" = --artifacts ]; then
+        shift
+        artifacts="$1"
+    fi
+    shift
+done
+printf 'Deploying and configuring test routers...\n'
+if [ "${MOCK_PY_DELAY:-0}" != 0 ]; then sleep "$MOCK_PY_DELAY"; fi
+printf 'Validating test neighbors...\n'
+printf '{"ipv4":{"status":"PASS"},"ipv6":{"status":"PASS"}}\n' >"$artifacts/report.json"
+echo 'PASS IPv4 and IPv6'
+exit "${MOCK_PY_RC:-0}"
+SH
+chmod +x "$tmp/bin/mock_python"
+export NETLAB_PYTHON="$tmp/bin/mock_python"
+
+result="$(bash "$runner" uut-start "$tmp/state/runs/upload.uut" 2R-neighbor)"
+printf '%s\n' "$result" | grep -F 'PASS: 2R-neighbor'
+report="$(printf '%s\n' "$result" | sed -n 's/^REPORT_ID=//p')"
+[[ -f "$tmp/state/results/$report/report.json" ]]
+[[ -f "$tmp/state/results/$report/image.json" ]]
+[[ ! -f "$tmp/state/session/session" ]]
+
+# The first progress message must reach stdout before the UUT finishes.
+make_uut_workspace stream
+export MOCK_PY_DELAY=2
+bash "$runner" uut-start "$tmp/state/runs/upload.stream" 2R-neighbor >"$tmp/stream.txt" 2>&1 &
+pid=$!
+stream_started=0
+for _ in {1..50}; do
+    if grep -Fq 'Deploying and configuring test routers...' "$tmp/stream.txt"; then
+        stream_started=1
+        break
+    fi
+    sleep 0.1
+done
+if [[ "$stream_started" -ne 1 ]] || ! kill -0 "$pid" 2>/dev/null; then
+    echo 'FAIL: UUT did not stream progress while execution was running' >&2
+    wait "$pid" || :
+    exit 1
+fi
+wait "$pid"
+unset MOCK_PY_DELAY
+grep -F 'Validating test neighbors...' "$tmp/stream.txt"
+grep -F 'PASS: 2R-neighbor' "$tmp/stream.txt"
+[[ ! -f "$tmp/state/session/session" ]]
+echo 'PASS: remote runner streams progress before UUT completion'
+
+# Image refresh must use the same lock and remove its temporary staging area.
+update_stage="$tmp/state/runs/upload.update"
+mkdir -p "$update_stage/netlabs/tools/remote"
+printf '# mock image helper\n' >"$update_stage/netlabs/tools/remote/images.py"
+bash "$runner" image-update "$update_stage" | grep -F 'Latest published OpenEIGRP release: 0.4.0'
+[[ ! -d "$update_stage" ]]
+[[ ! -f "$tmp/state/session/session" ]]
+mkdir -p "$update_stage/netlabs/tools/remote"
+printf '# mock image helper\n' >"$update_stage/netlabs/tools/remote/images.py"
+if MOCK_IMAGE_UPDATE_RC=48 bash "$runner" image-update "$update_stage" >"$tmp/update-error.log"; then
+    echo 'FAIL: failed image update was reported as a success' >&2
+    exit 1
+else
+    update_rc=$?
+fi
+[[ "$update_rc" -eq 48 && ! -d "$update_stage" ]]
+echo 'PASS: image update success/failure and stage cleanup'
+
+# Selecting an image is a setup gate. Failure must still report and teardown.
+make_uut_workspace noimage
+if MOCK_IMAGE_PREPARE_RC=55 bash "$runner" uut-start \
+        "$tmp/state/runs/upload.noimage" 2R-neighbor >"$tmp/noimage.log" 2>&1; then
+    echo 'FAIL: missing image selection was reported as success' >&2
+    exit 1
+else
+    rc=$?
+fi
+[[ "$rc" == 55 && ! -d "$tmp/state/runs/upload.noimage" ]]
+failed_report="$(sed -n 's/^REPORT_ID=//p' "$tmp/noimage.log" | tail -n 1)"
+[[ -f "$tmp/state/results/$failed_report/run-status.txt" ]]
+grep -Fq 'status=55' "$tmp/state/results/$failed_report/run-status.txt"
+grep -Fq 'FAIL: OpenEIGRP image selection' "$tmp/noimage.log"
+echo 'PASS: missing images produce a failing report and teardown'
+
+# Exercise the real client entry point with a fake transport library.
+mkdir -p "$tmp/client/netlabs/tools/remote" "$tmp/client/netlabs/uut/2R-neighbor"
+cp "$root/netlabs/tools/remote-uut.sh" "$tmp/client/netlabs/tools/remote-uut.sh"
+printf 'name: 2R-neighbor\n' >"$tmp/client/netlabs/uut/2R-neighbor/scenario.yaml"
+printf 'name: eigrp-neighbor\n' >"$tmp/client/netlabs/uut/2R-neighbor/topology.yml"
+printf '# driver\n' >"$tmp/client/netlabs/uut/2R-neighbor.py"
+cat >"$tmp/client/netlabs/tools/remote/common.sh" <<'SH'
+#!/usr/bin/env bash
+REMOTE_REPO_ROOT="$LAB_TEST_ROOT"
+REMOTE_HOST=mock-StormTrooper
+remote_transport_prepare() { :; }
+remote_new_stage() { printf '/home/netlab-data/runs/upload.mock\n'; }
+remote_stage() { :; }
+remote_install_runner() { :; }
+remote_run() {
+    printf 'Deploying from remote...\n'
+    sleep 2
+    printf 'Validating from remote...\n'
+    printf 'REPORT_ID=uut-mocktest\n'
+    printf 'PASS: 2R-neighbor\n'
+    if [ "${MOCK_CLIENT_RC:-0}" -ne 0 ]; then return "$MOCK_CLIENT_RC"; fi
+}
+remote_fetch_report() {
+    mkdir -p "$2/$1"
+    printf 'ok\n' >"$2/$1/run-status.txt"
+    printf '{"cleanup":"PASS"}\n' >"$2/$1/result.json"
+}
+SH
+export LAB_TEST_ROOT="$tmp/client"
+"$tmp/client/netlabs/tools/remote-uut.sh" --scenario 2R-neighbor >"$tmp/client-out.txt" 2>&1 &
+pid=$!
+client_started=0
+for _ in {1..50}; do
+    if grep -Fq 'Deploying from remote...' "$tmp/client-out.txt"; then
+        client_started=1
+        break
+    fi
+    sleep 0.1
+done
+if [[ "$client_started" -ne 1 ]] || ! kill -0 "$pid" 2>/dev/null; then
+    echo 'FAIL: client buffered the remote stream until command completion' >&2
+    wait "$pid" || :
+    exit 1
+fi
+wait "$pid"
+grep -F 'PASS: 2R-neighbor' "$tmp/client-out.txt"
+grep -F 'Report: ' "$tmp/client-out.txt"
+[[ -f "$tmp/client/netlabs/results/uut-mocktest/run-status.txt" ]]
+echo 'PASS: remote client streams progress and retrieves reports'
+
+# SSH failures must survive tee and report retrieval without becoming a PASS.
+export MOCK_CLIENT_RC=42
+if "$tmp/client/netlabs/tools/remote-uut.sh" --scenario 2R-neighbor >"$tmp/client-failed.txt" 2>&1; then
+    echo 'FAIL: client replaced a remote UUT failure with success' >&2
+    exit 1
+else
+    client_rc=$?
+fi
+[[ "$client_rc" -eq 42 ]] || {
+    echo "FAIL: remote error became exit $client_rc" >&2
+    exit 1
+}
+grep -F 'Report: ' "$tmp/client-failed.txt"
+unset MOCK_CLIENT_RC
+echo 'PASS: client preserves failure status after report transfer'
+
+# Test failure must remain a failure, even if the final teardown succeeds.
+make_uut_workspace fail
+export MOCK_PY_RC=42
+if bash "$runner" uut-start "$tmp/state/runs/upload.fail" 2R-neighbor >"$tmp/uut-failed.txt"; then
+    echo 'FAIL: rejected UUT test exit was reported PASS' >&2
+    exit 1
+fi
+grep -F 'FAIL: 2R-neighbor' "$tmp/uut-failed.txt"
+[[ ! -f "$tmp/state/session/session" ]]
+[[ $(grep -c '^down$' "$tmp/actions.log") -ge 3 ]]
+echo 'PASS: UUT success/failure propagation, retained reports, and teardown'
+
+# The entry points, transport and config must remain encapsulated in netlabs/.
+[[ -r "$root/netlabs/remote-lab.cfg" ]]
+[[ -f "$root/netlabs/tools/remote/common.sh" ]]
+[[ -f "$root/netlabs/tools/remote/runner.sh" ]]
+grep -Fq 'COPYFILE_DISABLE=1 tar --format=ustar --no-xattrs' "$root/netlabs/tools/remote/common.sh"
+"$root/netlabs/tools/remote-lab.sh" --help | grep -F 'netlabs/tools/remote-lab.sh'
+# 2R-internal has a driver but no scenario/topology; never list it as runnable.
+# Future cases must not invalidate the historical fixture discovery test.
+"$root/netlabs/tools/remote-uut.sh" --list | grep -Fxq '2R-neighbor'
+! "$root/netlabs/tools/remote-uut.sh" --list | grep -Fxq '2R-internal'
+if "$root/netlabs/tools/remote-uut.sh" --scenario neighbor-two-router >"$tmp/legacy.txt" 2>&1; then
+    echo 'FAIL: legacy scenario identifier unexpectedly accepted' >&2
+    exit 1
+fi
+echo 'PASS: netlabs scenario discovery and dispatch naming'
+
+# A loopback appliance address is valid, but execution still uses SSH.
+cat >"$tmp/localhost.cfg" <<'CFG'
+REMOTE_HOST=127.0.0.1
+REMOTE_USER=netlab
+REMOTE_SSH_PORT=22
+CFG
+cat >"$tmp/bin/ssh" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >>"$LAB_MOCK_SSH_LOG"
+case "$*" in
+    *'No active lab or UUT session'*) printf 'No active lab or UUT session\n' ;;
+    *BatchMode=yes*) exit 0 ;;
+esac
+SH
+chmod +x "$tmp/bin/ssh"
+export LAB_MOCK_SSH_LOG="$tmp/ssh.log"
+REMOTE_LAB_CONFIG="$tmp/localhost.cfg" "$root/netlabs/tools/remote-lab.sh" --status |
+    grep -F 'No active lab or UUT session'
+grep -Fq 'netlab@127.0.0.1' "$tmp/ssh.log"
+echo 'PASS: localhost is accepted as an SSH execution host'

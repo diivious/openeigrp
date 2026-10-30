@@ -405,6 +405,21 @@ bool eigrp_topology_redist_present(const eigrp_instance_t *eigrp,
 	return false;
 }
 
+/* A retained route keeps its advertising peer alive through deferred
+ * withdrawal and packetizer retirement.  Topology alone owns these counts. */
+static void eigrp_topology_nbr_hold(eigrp_nbr_t *nbr)
+{
+	assert(nbr && !nbr->retiring);
+	nbr->topo_refs++;
+}
+
+static void eigrp_topology_nbr_release(eigrp_nbr_t *nbr)
+{
+	assert(nbr && nbr->topo_refs);
+	if (--nbr->topo_refs == 0 && nbr->retiring)
+		free(nbr);
+}
+
 /* Insert once and account only after storage succeeds.  A route moved between
  * metric/class queues is not a newly owned neighbor destination. */
 bool eigrp_topology_route_insert(eigrp_instance_t *eigrp,
@@ -415,6 +430,11 @@ bool eigrp_topology_route_insert(eigrp_instance_t *eigrp,
 	if (!eigrp_list_insert(eigrp_topology_route_class_queue(prefix, route),
 			       route))
 		return false;
+	if (route->adv_router && route->adv_router != eigrp->neighbor_self
+	    && !route->owner_ref) {
+		eigrp_topology_nbr_hold(route->adv_router);
+		route->owner_ref = true;
+	}
 	if (first_peer_path && route->adv_router
 	    && route->adv_router != eigrp->neighbor_self
 	    && route->adv_router->limit_prefix_count_valid)
@@ -530,7 +550,13 @@ static int eigrp_route_descriptor_cmp(eigrp_route_descriptor_t *route1,
  */
 void eigrp_topology_route_free(eigrp_route_descriptor_t *route)
 {
+	if (!route)
+		return;
+	eigrp_nbr_t *owner = route->owner_ref ? route->adv_router : NULL;
+
 	free(route);
+	if (owner)
+		eigrp_topology_nbr_release(owner);
 }
 
 /**
@@ -723,7 +749,7 @@ void eigrp_route_descriptor_delete(eigrp_instance_t *eigrp,
 				eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
 				&node->destination, rib_result, 0, 0, 0);
 		}
-		free(route);
+		eigrp_topology_route_free(route);
 	}
 }
 
@@ -1877,6 +1903,7 @@ eigrp_topology_connected_route_snapshot(eigrp_instance_t *eigrp,
 		if (!copy)
 			continue;
 		*copy = *route;
+		copy->owner_ref = false;
 		copy->prefix = NULL;
 		eigrp_list_add(routes, copy);
 	}
@@ -1914,6 +1941,7 @@ eigrp_topology_query_route_snapshot(const eigrp_prefix_descriptor_t *prefix)
 		if (!copy)
 			return NULL;
 		*copy = *route;
+		copy->owner_ref = false;
 		copy->prefix = NULL;
 		copy->adv_router = NULL;
 		copy->ei = NULL;
