@@ -1,0 +1,52 @@
+# Mixed Cisco/OpenEIGRP AddPath qualification; the two spokes provide equal paths.
+name: eigrp-4r-addp
+provider: clab
+
+defaults:
+  devices.frr.clab.image: ghcr.io/diivious/openeigrp-frr:0.3.0
+  devices.csr.clab.image: vrnetlab/vr-csr:17.03.06
+  devices.frr.clab.group_vars.netlab_config_exec: [ 'sleep 10' ]
+  paths.prepend.custom.dirs: [ 'topology:../../../config' ]
+nodes:
+  hub:
+    device: frr
+    frr.daemons: [ eigrpd ]
+    config: [ eigrp-2r-interop ]
+    loopback.ipv4: 10.255.0.1/32
+    loopback.ipv6: 2001:db8:4473:ff::1/128
+  r2:
+    device: frr
+    frr.daemons: [ eigrpd ]
+    config: [ eigrp-2r-interop ]
+    loopback.ipv4: 10.255.0.2/32
+    loopback.ipv6: 2001:db8:4473:ff::2/128
+  r3:
+    device: frr
+    frr.daemons: [ eigrpd ]
+    config: [ eigrp-2r-interop ]
+    loopback.ipv4: 10.255.0.3/32
+    loopback.ipv6: 2001:db8:4473:ff::3/128
+  csr:
+    device: csr
+    config: [ eigrp-2r-interop ]
+    loopback.ipv4: 10.255.0.5/32
+    loopback.ipv6: 2001:db8:4473:ff::5/128
+links:
+- hub:
+    ipv4: 10.44.52.1/30
+    ipv6: 2001:db8:4473:2::1/64
+  r2:
+    ipv4: 10.44.52.2/30
+    ipv6: 2001:db8:4473:2::2/64
+- hub:
+    ipv4: 10.44.53.1/30
+    ipv6: 2001:db8:4473:3::1/64
+  r3:
+    ipv4: 10.44.53.2/30
+    ipv6: 2001:db8:4473:3::2/64
+- hub:
+    ipv4: 10.44.55.1/30
+    ipv6: 2001:db8:4473:5::1/64
+  csr:
+    ipv4: 10.44.55.2/30
+    ipv6: 2001:db8:4473:5::2/64

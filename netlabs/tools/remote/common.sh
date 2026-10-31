@@ -44,8 +44,19 @@ remote_new_stage() {
     remote_ssh "mkdir -p '$REMOTE_RUNS' && mktemp -d '$REMOTE_RUNS/upload.XXXXXXXX'"
 }
 remote_stage() {
-    local stage="$1"; shift
+    local stage="$1" item; shift
     [[ "$stage" =~ ^/home/netlab-data/runs/upload\.[A-Za-z0-9]+$ ]] || return 2
+    # The single-AF RTP cases share the existing complete transport driver.
+    # Stage its source alongside the selected fixture without duplicating RTP
+    # validation or changing the legacy combined 2R-transport scenario.
+    for item in "$@"; do
+        case "$item" in
+            netlabs/test/rtp/2R-transport-ipv4|netlabs/test/rtp/2R-transport-ipv6)
+                set -- "$@" netlabs/test/rtp/2R-transport/driver.py
+                break
+                ;;
+        esac
+    done
     COPYFILE_DISABLE=1 tar --format=ustar --no-xattrs -C "$REMOTE_REPO_ROOT" -cf - "$@" | \
         remote_ssh "tar -C '$stage' -xf -"
 }

@@ -1,0 +1,10 @@
+schema: openeigrp-live-rtp-2r/v1
+name: 2R-transport-ipv6
+group: rtp
+process: OpenEIGRP
+asn: 4473
+families: [ipv6]
+burst_prefixes: 128
+objectives: [RTP-01, RTP-02, RTP-03, RTP-04, RTP-05, RTP-06, RTP-07, RTP-08, RTP-11]
+# Independent address-family execution. The existing 2R-transport validator
+# retains every per-AF assertion including repeated UPDATE/ACK loss handling.

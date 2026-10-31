@@ -1,0 +1,18 @@
+schema: openeigrp-live-addpath-compat/v1
+name: 4R-addpath-compat
+group: dual
+process: OpenEIGRP
+asn: 4473
+families: [ipv4, ipv6]
+origins: [r2, r3]
+hub: hub
+receiver: csr
+prefixes:
+  ipv4: 198.18.44.0/24
+  ipv6: 2001:db8:4473:44::/64
+add_paths: 2
+ipv6_sync_repeats: 4
+objectives: [AP-INIT, AP-WITHDRAW, AP-RECOVER]
+# Require captured Cisco-facing TLV2 AddPath attributes and the actual Cisco
+# external RIB throughout initial sync, unchanged-metric partial withdrawal,
+# and recovery. Absence of Cisco evidence is a failure, not inferred success.
