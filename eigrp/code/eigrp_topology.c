@@ -1325,7 +1325,7 @@ void eigrp_topology_update_all_node_flags(eigrp_instance_t *eigrp)
 	}
 }
 
-void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
+bool eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 				      eigrp_prefix_descriptor_t *dest)
 {
 	eigrp_route_descriptor_t *route;
@@ -1333,11 +1333,12 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 	eigrp_topology_route_iterator_t iterator;
 	eigrp_list_item_t *node;
 	eigrp_list_t *eligible = NULL;
+	bool successors_changed = false;
 	unsigned int successor_count = 0;
 	unsigned int max_paths;
 
 	if (!eigrp || !dest)
-		return;
+		return false;
 
 	/* Use the same FC-aware selector as the FSM.  A lower-CD path that
 	 * fails the Feasibility Condition must not hide a later feasible path
@@ -1350,14 +1351,24 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 	max_paths =
 		eigrp->max_paths ? eigrp->max_paths : EIGRP_MAX_PATHS_DEFAULT;
 
-	/* Only the selected I/E class participates in successor/FS marking. */
+	/* Clear ineligible classes separately, retaining the previous flags so
+	 * a replaced or withdrawn equal-cost successor is detectable even when
+	 * the destination's advertised metric does not change.
+	 */
 	for (route = eigrp_topology_route_iterator_first(dest, &iterator);
-	     route; route = eigrp_topology_route_iterator_next(&iterator))
+	     route; route = eigrp_topology_route_iterator_next(&iterator)) {
+		if (eigrp_topology_route_class_queue(dest, route) == eligible)
+			continue;
+		if (route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
+			successors_changed = true;
 		route->flags &= ~(EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
 				  | EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG);
+	}
 
 	for (EIGRP_LIST_ITERATE_RO(eligible, node, route)) {
 		uint32_t old_flags = route->flags;
+		route->flags &= ~(EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
+				  | EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG);
 		bool feasible = route->reported_distance < dest->fdistance;
 		bool within_variance =
 			route->distance != EIGRP_MAX_METRIC
@@ -1375,6 +1386,10 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 					EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG;
 			}
 		}
+
+		if ((old_flags ^ route->flags)
+		    & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
+			successors_changed = true;
 
 		if (IS_DEBUG_EIGRP(0, FAST_REROUTE)
 		    && ((old_flags ^ route->flags)
@@ -1404,6 +1419,7 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 				route->distance);
 		}
 	}
+	return successors_changed;
 }
 
 void eigrp_topology_multipath_update(eigrp_instance_t *eigrp)

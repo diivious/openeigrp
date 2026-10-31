@@ -76,7 +76,7 @@ extern void eigrp_topology_update_all_node_flags(eigrp_instance_t *eigrp);
 void eigrp_topology_multipath_update(eigrp_instance_t *eigrp);
 void eigrp_topology_traffic_share_update(eigrp_instance_t *eigrp);
 void eigrp_topology_metric_update(eigrp_instance_t *eigrp);
-extern void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
+extern bool eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 					     eigrp_prefix_descriptor_t *pe);
 extern enum metric_change
 eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg);

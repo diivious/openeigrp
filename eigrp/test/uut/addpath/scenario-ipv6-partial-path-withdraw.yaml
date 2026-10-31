@@ -1,0 +1,48 @@
+schema: eigrp-uut-test/v1
+topology: ipv6-diamond-hub.yaml
+name: AddPath IPV6 replacement UPDATE after equal-cost partial withdrawal
+steps:
+  - start: origin
+  - start: r2
+  - start: r3
+  - start: hub
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 2}
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: path, next_hop: 'fe80::2', successor: true, distance: 8519680}
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: path, next_hop: 'fe80::3', successor: true}
+  - packet-mark: baseline
+  - start: client
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, timeout: 10}
+  - validate-route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true, timeout: 12}
+  - validate-packet: {since: baseline, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_min: 1, timeout: 12}
+  # Remove one of two equal-cost successors without disconnecting the client.
+  # The destination remains reachable with the same distance; no diffusing
+  # computation or destination poison is necessary. Its AddPath set changes.
+  - packet-mark: partial-withdraw
+  - link-down: {uut: hub, interface: eth13}
+  - link-down: {uut: r3, interface: eth31}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 1}
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: path, next_hop: 'fe80::2', successor: true, distance: 8519680}
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: path, next_hop: 'fe80::3', successor: true, present: false}
+        - route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true}
+  # This is the critical missing replacement UPDATE in the defective build.
+  # It MUST be delivered, and it MUST clear the obsolete AddPath attribute.
+  - validate-packet: {since: partial-withdraw, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_max: 0, timeout: 12}
+  - packet-mark: alternate-restored
+  - link-up: {uut: hub, interface: eth13}
+  - link-up: {uut: r3, interface: eth31}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 2}
+        - route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true}
+  - validate-packet: {since: alternate-restored, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_min: 1, timeout: 12}
+  - stop: all

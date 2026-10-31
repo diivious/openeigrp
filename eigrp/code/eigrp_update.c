@@ -990,8 +990,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 						wire_route.metric =
 							selected_route
 								->total_metric;
-					eigrp_addpath_select(eigrp, ei,
-							     &wire_route);
+					eigrp_addpath_route_prepare(
+						eigrp, ei, &wire_route);
 					if (eigrp_nbr_split_horizon(
 						    selected_route, ei)) {
 						wire_route.metric.delay =
@@ -1023,7 +1023,7 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 							wire_route.metric =
 								selected_route
 									->total_metric;
-						eigrp_addpath_select(
+						eigrp_addpath_route_prepare(
 							eigrp, ei, &wire_route);
 						if (eigrp_nbr_split_horizon(
 							    selected_route,
@@ -1073,6 +1073,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 							leak_route = *route;
 						leak_route.metric =
 							route->total_metric;
+						eigrp_addpath_route_prepare(
+							eigrp, ei, &leak_route);
 						if (eigrp_nbr_split_horizon(
 							    route, ei)) {
 							leak_route.metric

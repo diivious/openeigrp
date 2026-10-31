@@ -106,9 +106,18 @@ static void verify(int af)
 	assert(wire.addpath_count == 0);
 	ei.add_paths = 4;
 	ei.next_hop_self = true;
-	eigrp_addpath_select(&instance, &ei, &wire);
+	eigrp_addpath_route_prepare(&instance, &ei, &wire);
 	assert(wire.addpath_count == 0);
+	assert(memcmp(&wire.nexthop, &(eigrp_addr_t){0}, sizeof(wire.nexthop))
+	       == 0);
 	ei.next_hop_self = false;
+	wire = candidate[0];
+	candidate[1].nexthop = candidate[0].nexthop;
+	addr(&candidate[1].nexthop, af, 99);
+	candidate[1].flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
+	eigrp_addpath_route_prepare(&instance, &ei, &wire);
+	assert(wire.addpath_count >= 1);
+	assert(wire.addpaths[0].nexthop.afi == af);
 	wire.metric.delay = EIGRP_MAX_METRIC;
 	eigrp_addpath_select(&instance, &ei, &wire);
 	assert(wire.addpath_count == 0);

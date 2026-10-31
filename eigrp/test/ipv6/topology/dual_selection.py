@@ -204,7 +204,7 @@ def test_passive_fd_and_active_freeze_rules_are_preserved():
     assert "eigrp_topology_route_select(prefix)" in event
     assert "if (selected)" in event
 
-    flags_start = topology.index("void eigrp_topology_update_node_flags")
+    flags_start = topology.index("bool eigrp_topology_update_node_flags")
     flags = topology[
         flags_start:topology.index("void eigrp_update_routing_table", flags_start)
     ]

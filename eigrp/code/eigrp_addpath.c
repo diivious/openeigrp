@@ -89,6 +89,20 @@ void eigrp_addpath_select(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	}
 }
 
+/* Prepare UPDATE next-hop identity before selecting extra paths.  Initial
+ * EOT and normal UPDATEs must apply next-hop-self identically, especially
+ * for IPv6 link-local next hops learned on separate interfaces.
+ */
+void eigrp_addpath_route_prepare(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				 eigrp_route_descriptor_t *wire)
+{
+	if (!wire)
+		return;
+	if (ei && ei->next_hop_self)
+		memset(&wire->nexthop, 0, sizeof(wire->nexthop));
+	eigrp_addpath_select(eigrp, ei, wire);
+}
+
 void eigrp_addpath_refresh(eigrp_instance_t *eigrp)
 {
 	eigrp_table_node_t *node;

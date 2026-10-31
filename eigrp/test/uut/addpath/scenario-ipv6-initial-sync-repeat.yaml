@@ -1,0 +1,61 @@
+schema: eigrp-uut-test/v1
+topology: ipv6-diamond-hub.yaml
+name: IPv6 AddPath repeated client initial synchronization
+steps:
+  - start: origin
+  - start: r2
+  - start: r3
+  - start: hub
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 2}
+  - packet-mark: client-sync-1
+  - start: client
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, timeout: 10}
+  - validate-packet: {since: client-sync-1, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_min: 1, timeout: 12}
+  - validate-route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true, timeout: 12}
+  - link-down: {uut: hub, interface: eth15}
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, state: down, timeout: 10}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 2}
+  - stop: client
+  - link-up: {uut: hub, interface: eth15}
+  - packet-mark: client-sync-2
+  - start: client
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, timeout: 10}
+  - validate-packet: {since: client-sync-2, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_min: 1, timeout: 12}
+  - validate-route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true, timeout: 12}
+  - link-down: {uut: hub, interface: eth15}
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, state: down, timeout: 10}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 2}
+  - stop: client
+  - link-up: {uut: hub, interface: eth15}
+  - packet-mark: client-sync-3
+  - start: client
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, timeout: 10}
+  - validate-packet: {since: client-sync-3, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_min: 1, timeout: 12}
+  - validate-route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true, timeout: 12}
+  - link-down: {uut: hub, interface: eth15}
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, state: down, timeout: 10}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.5
+      expect:
+        - route: {uut: hub, prefix: '2001:db8:44::/64', table: topology, active: false, successors: 2}
+  - stop: client
+  - link-up: {uut: hub, interface: eth15}
+  - packet-mark: client-sync-4
+  - start: client
+  - validate-neighbor: {uut: hub, neighbor: 'fe80::5', interface: eth15, timeout: 10}
+  - validate-packet: {since: client-sync-4, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: '2001:db8:44::/64', addpaths_min: 1, timeout: 12}
+  - validate-route: {uut: client, prefix: '2001:db8:44::/64', table: topology, present: true, timeout: 12}
+  - stop: all

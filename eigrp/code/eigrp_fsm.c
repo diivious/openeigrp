@@ -825,6 +825,24 @@ eigrp_fsm_active_non_successor_reply_send(eigrp_instance_t *eigrp,
 			       EIGRP_PACKETIZER_WORK_F_POISON);
 }
 
+/* An unchanged metric still needs a replacement advertisement when the
+ * selected path set changes on an AddPath-enabled outgoing interface.
+ * Keep this predicate local to DUAL: standalone FSM fixtures do not require
+ * the AddPath selection/codec module to be linked.
+ */
+static bool eigrp_fsm_addpath_enabled(eigrp_instance_t *eigrp)
+{
+	eigrp_list_item_t *node;
+	eigrp_intf_t *ei;
+
+	if (!eigrp || !eigrp->eiflist)
+		return false;
+	for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, node, ei))
+		if (ei->add_paths && !ei->next_hop_self)
+			return true;
+	return false;
+}
+
 int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 {
 	eigrp_instance_t *eigrp = msg->eigrp;
@@ -854,7 +872,17 @@ int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 			prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 			eigrp_list_add(eigrp->topology_changes, prefix);
 		}
-		eigrp_topology_update_node_flags(eigrp, prefix);
+		/* AddPath path membership is part of the advertised route even
+		 * when the destination metric remains unchanged.  A partial
+		 * withdrawal must replace the previous TLV set, not poison the
+		 * still-reachable destination or enter ACTIVE.
+		 */
+		if (eigrp_topology_update_node_flags(eigrp, prefix)
+		    && eigrp_fsm_addpath_enabled(eigrp)) {
+			prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
+			if (!eigrp_list_lookup(eigrp->topology_changes, prefix))
+				eigrp_list_add(eigrp->topology_changes, prefix);
+		}
 		eigrp_update_routing_table(eigrp, prefix);
 	}
 

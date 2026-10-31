@@ -11,4 +11,7 @@ void eigrp_addpath_refresh(eigrp_instance_t *eigrp);
 void eigrp_addpath_select(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 			  eigrp_route_descriptor_t *route);
 
+void eigrp_addpath_route_prepare(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+				 eigrp_route_descriptor_t *wire);
+
 #endif /* EIGRP_ADDPATH_H */
