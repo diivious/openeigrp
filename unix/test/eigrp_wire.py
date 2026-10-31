@@ -71,6 +71,41 @@ def _route_prefixes(payload, afi):
         off=end
     return out
 
+def _route_addpath_counts(payload, afi):
+    """Diagnostic-only opcode 7 counts, keyed to complete MP destinations."""
+    counts={}; off=20
+    addr_bytes={4:4,6:16}.get(afi)
+    if not addr_bytes: return counts
+    while off+4<=len(payload):
+        typ,length=struct.unpack_from("!HH",payload,off)
+        if length<4 or off+length>len(payload): break
+        end=off+length
+        if typ in (0x0602,0x0603) and off+36<=end:
+            protocol_afi=struct.unpack_from("!H",payload,off+6)[0]
+            if protocol_afi==(1 if afi==4 else 2):
+                metric=off+12
+                attr_end=metric+24+payload[metric]*2
+                attr=metric+24; n=0; valid=attr_end<=end
+                while valid and attr<attr_end:
+                    if attr+2>attr_end:
+                        valid=False; break
+                    opcode,words=payload[attr],payload[attr+1]
+                    size=words*2
+                    if attr+2+size>attr_end:
+                        valid=False; break
+                    if opcode==7:
+                        if size!=addr_bytes+8+(2 if typ==0x0603 else 0):
+                            valid=False; break
+                        n+=1
+                    attr+=2+size
+                if valid and attr==attr_end and n:
+                    # Count only complete, valid route TLVs, not unrelated bytes.
+                    prefixes=_route_prefixes(bytes(20)+payload[off:end],afi)
+                    if len(prefixes)==1:
+                        counts[prefixes[0]]=counts.get(prefixes[0],0)+n
+        off=end
+    return counts
+
 def _packet_meta(payload, afi):
     opcode=payload[1] if len(payload)>1 else -1
     flags=struct.unpack_from("!I",payload,4)[0] if len(payload)>=16 else 0
@@ -86,7 +121,8 @@ def _packet_meta(payload, afi):
             auth_sequence=struct.unpack_from("!I",payload,32)[0]
     return {"opcode":"ack" if opcode==5 and ack else OPCODES.get(opcode,str(opcode)),
             "sequence":sequence,"auth_sequence":auth_sequence,"ack":ack,
-            "cr":bool(flags&CR_FLAG),"prefixes":_route_prefixes(payload,afi)}
+            "cr":bool(flags&CR_FLAG),"prefixes":_route_prefixes(payload,afi),
+            "addpath_counts":_route_addpath_counts(payload,afi)}
 
 class Broker(threading.Thread):
     """Shared-segment delivery broker. Faults affect delivery only, never EIGRP state."""
@@ -178,7 +214,7 @@ class Broker(threading.Thread):
                         if not mc and eaddr[:4 if afi==4 else 16]!=dst[:4 if afi==4 else 16]: continue
                         if mc and (id(ec),eif) in sent: continue
                         sent.add((id(ec),eif)); destinations.append(e)
-                    base={"time":time.monotonic(),"uut":owner,"source_uut":owner,"interface":ifname,"source_interface":ifname,"segment":seg,"afi":afi,"opcode":pm["opcode"],"length":len(payload),"multicast":mc,"sequence":pm["sequence"],"auth_sequence":pm["auth_sequence"],"ack":pm["ack"],"cr":pm["cr"],"prefixes":pm["prefixes"]}
+                    base={"time":time.monotonic(),"uut":owner,"source_uut":owner,"interface":ifname,"source_interface":ifname,"segment":seg,"afi":afi,"opcode":pm["opcode"],"length":len(payload),"multicast":mc,"sequence":pm["sequence"],"auth_sequence":pm["auth_sequence"],"ack":pm["ack"],"cr":pm["cr"],"prefixes":pm["prefixes"],"addpath_counts":pm["addpath_counts"]}
                     self.journal.append({**base,"destination_uut":None,"destination_interface":None,"event":"sent"})
                     for e in destinations:
                         meta={**base,"destination_uut":e[6],"destination_interface":e[4]}; actions=self._actions(meta)

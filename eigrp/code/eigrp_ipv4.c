@@ -282,6 +282,49 @@ eigrp_ipv4_summary_auto_prefix(const eigrp_prefix_t *component,
 	return EIGRP_RESULT_SUCCESS;
 }
 
+/* RFC 7868 section 6.9.3.8: the opcode and offset belong to TLV2.
+ * AddPath payloads are address + RID + tag (+ protocol/flags for external).
+ */
+static uint16_t eigrp_ipv4_addpath_decode(eigrp_stream_t *stream,
+					  eigrp_addpath_t *path, bool external)
+{
+	const uint16_t length =
+		EIGRP_IPV4_ADDRESS_BYTES + 8U + (external ? 2U : 0U);
+
+	if (!path || !eigrp_ipv4_stream_has(stream, length))
+		return 0;
+	memset(path, 0, sizeof(*path));
+	if (!eigrp_ipv4_packet_address_decode(stream, &path->nexthop))
+		return 0;
+	path->router_id = eigrp_stream_getl(stream);
+	path->tag = eigrp_stream_getl(stream);
+	if (external) {
+		path->protocol = eigrp_stream_getc(stream);
+		path->flags = eigrp_stream_getc(stream);
+	}
+	return length;
+}
+
+static uint16_t eigrp_ipv4_addpath_encode(eigrp_stream_t *stream,
+					  const eigrp_addpath_t *path,
+					  bool external)
+{
+	uint16_t written;
+
+	if (!path || !stream)
+		return 0;
+	written = eigrp_ipv4_packet_address_encode(stream, &path->nexthop);
+	if (!written)
+		return 0;
+	eigrp_stream_putl(stream, path->router_id);
+	eigrp_stream_putl(stream, path->tag);
+	if (external) {
+		eigrp_stream_putc(stream, path->protocol);
+		eigrp_stream_putc(stream, path->flags);
+	}
+	return written + 8U + (external ? 2U : 0U);
+}
+
 void eigrp_ipv4_init(eigrp_af_vectors_t *vectors)
 {
 	assert(vectors);
@@ -292,6 +335,7 @@ void eigrp_ipv4_init(eigrp_af_vectors_t *vectors)
 	vectors->packet_receive = eigrp_ipv4_packet_receive;
 	vectors->packet_source_on_link = eigrp_ipv4_packet_source_on_link;
 	vectors->packet_address_bytes = EIGRP_IPV4_ADDRESS_BYTES;
+	vectors->packet_address_afi = AF_INET;
 	vectors->packet_ip_header_bytes = EIGRP_IPV4_HEADER_LEN;
 	vectors->packet_address_decode = eigrp_ipv4_packet_address_decode;
 	vectors->packet_address_encode = eigrp_ipv4_packet_address_encode;
@@ -300,6 +344,8 @@ void eigrp_ipv4_init(eigrp_af_vectors_t *vectors)
 	vectors->classic_internal_tlv_type = EIGRP_TLV_IPv4_INT;
 	vectors->classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
 	vectors->multiprotocol_afi = EIGRP_AF_IPv4;
+	vectors->addpath_decode = eigrp_ipv4_addpath_decode;
+	vectors->addpath_encode = eigrp_ipv4_addpath_encode;
 	vectors->addr_snprintf = eigrp_ipv4_addr_snprintf;
 	vectors->summary_auto_prefix = eigrp_ipv4_summary_auto_prefix;
 }

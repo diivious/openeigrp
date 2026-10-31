@@ -145,6 +145,9 @@ eigrp_result_t eigrp_intf_passive_update(eigrp_operation_t operation,
 					 eigrp_intf_context_t *context);
 eigrp_result_t eigrp_intf_nexthop_self_update(eigrp_operation_t operation,
 					      eigrp_intf_context_t *context);
+eigrp_result_t eigrp_intf_addpath_update(eigrp_operation_t operation,
+					 eigrp_intf_context_t *context,
+					 uint8_t count);
 eigrp_result_t eigrp_intf_split_horizon_update(eigrp_operation_t operation,
 					       eigrp_intf_context_t *context);
 eigrp_result_t eigrp_intf_shutdown_update(eigrp_operation_t operation,

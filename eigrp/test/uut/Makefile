@@ -20,7 +20,12 @@ clean:
 	rm -f eigrp-uut-node
 	rm -rf logs
 
+.PHONY: addpath
 .PHONY: ipv4-basic-core ipv6-basic-core basic-core md5-mixed-lan md5-security rtp-core dual-diamond kite-topology core-topology mesh-topology active-topology all-scenarios
+addpath: eigrp-uut-node
+	$(PYTHON) run.py addpath/ipv4-diamond-hub.yaml addpath/scenario-ipv4-burst-withdraw-recover.yaml
+	$(PYTHON) run.py addpath/ipv6-diamond-hub.yaml addpath/scenario-ipv6-burst-withdraw-recover.yaml
+
 ipv4-basic-core: eigrp-uut-node
 	$(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml
 

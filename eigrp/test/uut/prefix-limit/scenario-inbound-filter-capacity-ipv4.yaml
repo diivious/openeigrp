@@ -27,6 +27,7 @@ steps:
   - validate-process-limit: {uut: r1, state: 0, count: 4}
   - source-route-remove: {uut: r2, prefix: '192.0.2.241/32'}
   - validate-route: {uut: r1, prefix: '192.0.2.241/32', table: topology, present: false, timeout: 15}
+  - validate-process-limit: {uut: r1, state: 0, count: 3}
   - redistribute-remove: {uut: r2, source: static}
   - process-limit-config: {uut: r1, maximum: 0}
   - stop: all

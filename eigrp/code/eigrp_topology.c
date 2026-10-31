@@ -199,30 +199,49 @@ eigrp_topology_redistributed_route_lookup(eigrp_instance_t *eigrp,
 	return NULL;
 }
 
+/* Convert a native next hop to the public RIB address without assuming an
+ * address family in the shared topology implementation.
+ */
+static bool eigrp_topology_nexthop_addr_set(const eigrp_instance_t *eigrp,
+					    const eigrp_addr_t *address,
+					    eigrp_rib_nexthop_t *nexthop)
+{
+	static const uint8_t zero[16];
+	uint8_t bytes;
+
+	if (!eigrp || !address || !nexthop)
+		return false;
+	bytes = eigrp->af_vectors.packet_address_bytes;
+	if (!bytes || bytes > sizeof(nexthop->gateway.bytes)
+	    || address->afi != eigrp->af_vectors.packet_address_afi
+	    || memcmp(&address->ip, zero, bytes) == 0)
+		return false;
+
+	nexthop->gateway.afi = eigrp->af_vectors.afi;
+	memcpy(nexthop->gateway.bytes, &address->ip, bytes);
+	nexthop->gateway_present = true;
+	return true;
+}
+
 static bool
 eigrp_topology_southbound_nexthop(const eigrp_route_descriptor_t *route,
 				  eigrp_rib_nexthop_t *nexthop)
 {
 	if (!route || !route->ei || !nexthop)
 		return false;
-
 	memset(nexthop, 0, sizeof(*nexthop));
 	nexthop->ifindex = route->ei->ifindex;
 
-	if (route->adv_router && route->adv_router->src.afi == AF_INET
-	    && route->adv_router->src.ip.v4.s_addr != INADDR_ANY) {
-		nexthop->gateway_present = true;
-		nexthop->gateway.afi = EIGRP_AFI_IPV4;
-		memcpy(nexthop->gateway.bytes, &route->adv_router->src.ip.v4,
-		       sizeof(route->adv_router->src.ip.v4));
-	} else if (route->adv_router && route->adv_router->src.afi == AF_INET6
-		   && !IN6_IS_ADDR_UNSPECIFIED(&route->adv_router->src.ip.v6)) {
-		nexthop->gateway_present = true;
-		nexthop->gateway.afi = EIGRP_AFI_IPV6;
-		memcpy(nexthop->gateway.bytes, &route->adv_router->src.ip.v6,
-		       sizeof(route->adv_router->src.ip.v6));
-	}
-
+	/* Only a route carrying AddPath may override its advertising neighbor
+	 * as the base next hop. Legacy routes retain their existing behavior.
+	 */
+	if (route->addpath_count
+	    && eigrp_topology_nexthop_addr_set(route->ei->eigrp,
+					       &route->nexthop, nexthop))
+		return true;
+	if (route->adv_router)
+		(void)eigrp_topology_nexthop_addr_set(
+			route->ei->eigrp, &route->adv_router->src, nexthop);
 	return true;
 }
 
@@ -235,9 +254,11 @@ static size_t eigrp_topology_southbound_nexthops(const eigrp_instance_t *eigrp,
 	eigrp_list_item_t *node;
 	uint64_t largest_metric = 0;
 	size_t count = 0;
+	size_t maximum;
 
 	if (!eigrp || !routes || !nexthops || capacity == 0)
 		return 0;
+	maximum = eigrp->max_paths ? eigrp->max_paths : EIGRP_MAX_PATHS_DEFAULT;
 
 	if (eigrp->traffic_share_balanced) {
 		for (EIGRP_LIST_ITERATE_RO(routes, node, route)) {
@@ -248,7 +269,7 @@ static size_t eigrp_topology_southbound_nexthops(const eigrp_instance_t *eigrp,
 	}
 
 	for (EIGRP_LIST_ITERATE_RO(routes, node, route)) {
-		if (count == capacity)
+		if (count == capacity || count >= maximum)
 			break;
 		if (!eigrp_topology_southbound_nexthop(route, &nexthops[count]))
 			continue;
@@ -260,6 +281,34 @@ static size_t eigrp_topology_southbound_nexthops(const eigrp_instance_t *eigrp,
 				nexthops[count].weight = 1;
 		}
 		count++;
+		/* Each additional next hop belongs to the same elected DUAL
+		 * path. Never exceed the configured RIB maximum or duplicate a
+		 * gateway.
+		 */
+		for (uint8_t n = 0; n < route->addpath_count && count < capacity
+				    && count < maximum;
+		     n++) {
+			eigrp_rib_nexthop_t extra = nexthops[count - 1];
+			bool duplicate = false;
+
+			extra.gateway_present = false;
+			memset(&extra.gateway, 0, sizeof(extra.gateway));
+			if (!eigrp_topology_nexthop_addr_set(
+				    eigrp, &route->addpaths[n].nexthop, &extra))
+				continue;
+			for (size_t j = 0; j < count; j++)
+				if (nexthops[j].ifindex == extra.ifindex
+				    && nexthops[j].gateway_present
+				    && memcmp(&nexthops[j].gateway,
+					      &extra.gateway,
+					      sizeof(extra.gateway))
+					       == 0) {
+					duplicate = true;
+					break;
+				}
+			if (!duplicate)
+				nexthops[count++] = extra;
+		}
 	}
 
 	return count;

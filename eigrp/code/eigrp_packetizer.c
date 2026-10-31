@@ -14,6 +14,7 @@
 #include "eigrp_packet.h"
 #include "eigrp_auth.h"
 #include "eigrp_topology.h"
+#include "eigrp_addpath.h"
 #include "eigrp_neighbor.h"
 #include "eigrp_debug.h"
 #include "eigrp_prefix.h"
@@ -21,7 +22,7 @@
 #include "eigrp_fsm.h"
 #include "eigrp_summary.h"
 #include "eigrp_eventlog.h"
-typedef struct eigrp_packetizer_builder {
+typedef struct eigrp_packetizer_item {
 	eigrp_instance_t *eigrp;
 	eigrp_intf_t *ei;
 	eigrp_nbr_t *nbr;
@@ -31,7 +32,7 @@ typedef struct eigrp_packetizer_builder {
 	uint32_t flags;
 	uint16_t packet_limit;
 	uint32_t route_count;
-} eigrp_packetizer_builder_t;
+} eigrp_packetizer_item_t;
 
 static bool eigrp_packetizer_opcode_valid(uint8_t opcode)
 {
@@ -138,45 +139,43 @@ eigrp_packetizer_route_select(eigrp_prefix_descriptor_t *prefix,
 	return route;
 }
 
-static bool eigrp_packetizer_builder_start(eigrp_packetizer_builder_t *builder)
+static bool eigrp_packetizer_item_start(eigrp_packetizer_item_t *item)
 {
 	uint32_t sequence;
 
-	if (!builder || !builder->eigrp || !builder->ei || !builder->encoder)
+	if (!item || !item->eigrp || !item->ei || !item->encoder)
 		return false;
 
-	sequence = eigrp_packet_sequence_reserve(builder->eigrp);
-	builder->packet =
-		eigrp_packet_create(builder->packet_limit, builder->nbr);
-	if (!builder->packet)
+	sequence = eigrp_packet_sequence_reserve(item->eigrp);
+	item->packet = eigrp_packet_create(item->packet_limit, item->nbr);
+	if (!item->packet)
 		return false;
 
-	eigrp_packet_header_init(builder->opcode, builder->eigrp,
-				 builder->packet->s, builder->flags, sequence,
-				 0);
-	if (builder->ei->params.auth_type == EIGRP_AUTH_TYPE_MD5
-	    && eigrp_auth_material_available(builder->ei))
-		eigrp_auth_tlv_md5_encode(builder->packet->s, builder->ei);
-	else if (builder->ei->params.auth_type == EIGRP_AUTH_TYPE_SHA256
-		 && eigrp_auth_material_available(builder->ei))
-		eigrp_auth_tlv_sha256_encode(builder->packet->s, builder->ei);
+	eigrp_packet_header_init(item->opcode, item->eigrp, item->packet->s,
+				 item->flags, sequence, 0);
+	if (item->ei->params.auth_type == EIGRP_AUTH_TYPE_MD5
+	    && eigrp_auth_material_available(item->ei))
+		eigrp_auth_tlv_md5_encode(item->packet->s, item->ei);
+	else if (item->ei->params.auth_type == EIGRP_AUTH_TYPE_SHA256
+		 && eigrp_auth_material_available(item->ei))
+		eigrp_auth_tlv_sha256_encode(item->packet->s, item->ei);
 
-	builder->packet->sequence_number = sequence;
-	builder->route_count = 0;
+	item->packet->sequence_number = sequence;
+	item->route_count = 0;
 	return true;
 }
 
-static void eigrp_packetizer_builder_flush(eigrp_packetizer_builder_t *builder)
+static void eigrp_packetizer_item_flush(eigrp_packetizer_item_t *item)
 {
 	eigrp_packet_t *packet;
 	uint16_t length;
 
-	if (!builder || !builder->packet)
+	if (!item || !item->packet)
 		return;
 
-	packet = builder->packet;
-	builder->packet = NULL;
-	if (!builder->route_count) {
+	packet = item->packet;
+	item->packet = NULL;
+	if (!item->route_count) {
 		eigrp_packet_free(packet);
 		return;
 	}
@@ -185,61 +184,61 @@ static void eigrp_packetizer_builder_flush(eigrp_packetizer_builder_t *builder)
 	/* Preserve an unsigned RTP template until the paced wire send. */
 	packet->length = length;
 
-	if (builder->nbr) {
-		bool queue_was_empty = builder->nbr->retrans_queue->count == 0;
+	if (item->nbr) {
+		bool queue_was_empty = item->nbr->retrans_queue->count == 0;
 
-		eigrp_addr_cpy(&packet->dst, &builder->nbr->src);
-		eigrp_packet_enqueue(builder->nbr->retrans_queue, packet);
+		eigrp_addr_cpy(&packet->dst, &item->nbr->src);
+		eigrp_packet_enqueue(item->nbr->retrans_queue, packet);
 		eigrp_debug_transmit_event(
-			EIGRP_DEBUG_TRANSMIT_LINK, builder->eigrp, builder->ei,
-			builder->nbr,
+			EIGRP_DEBUG_TRANSMIT_LINK, item->eigrp, item->ei,
+			item->nbr,
 			"linked opcode %u seq %u to reliable queue (depth %lu)",
-			builder->opcode, packet->sequence_number,
-			builder->nbr->retrans_queue->count);
+			item->opcode, packet->sequence_number,
+			item->nbr->retrans_queue->count);
 		if (queue_was_empty)
-			eigrp_packet_send_reliably(builder->eigrp,
-						   builder->nbr);
+			eigrp_packet_send_reliably(item->eigrp, item->nbr);
 		return;
 	}
 
-	eigrp_packet_multicast_reliable_enqueue(builder->eigrp, builder->ei,
-						packet);
+	eigrp_packet_multicast_reliable_enqueue(item->eigrp, item->ei, packet);
 }
 
-static int
-eigrp_packetizer_builder_route_add(eigrp_packetizer_builder_t *builder,
-				   eigrp_route_descriptor_t *route)
+static int eigrp_packetizer_item_route_add(eigrp_packetizer_item_t *item,
+					   eigrp_route_descriptor_t *route)
 {
 	eigrp_route_descriptor_t wire_route;
 	const eigrp_prefix_t *prefix;
 	int encoded;
 
-	if (!builder || !route)
+	if (!item || !route)
 		return 0;
-	if (!builder->packet && !eigrp_packetizer_builder_start(builder))
+	if (!item->packet && !eigrp_packetizer_item_start(item))
 		return 0;
 
 	wire_route = *route;
 	/* A zero next hop means use the advertising router.  This is the wire
 	 * representation of next-hop-self for both IPv4 and IPv6 route TLVs. */
-	if (builder->ei->next_hop_self)
+	if (item->ei->next_hop_self)
 		memset(&wire_route.nexthop, 0, sizeof(wire_route.nexthop));
+	if (item->opcode == EIGRP_OPC_UPDATE)
+		eigrp_addpath_select(item->eigrp, item->ei, &wire_route);
+	else
+		wire_route.addpath_count = 0;
 	prefix = route->prefix ? &route->prefix->destination : &route->dest;
-	eigrp_offset_metric_update(builder->eigrp, builder->ei,
-				   EIGRP_FILTER_OUT, prefix,
-				   &wire_route.metric);
+	eigrp_offset_metric_update(item->eigrp, item->ei, EIGRP_FILTER_OUT,
+				   prefix, &wire_route.metric);
 	encoded = eigrp_packet_route_encode_append(
-		builder->eigrp, builder->ei, builder->nbr, builder->encoder,
-		builder->packet->s, &wire_route, builder->packet_limit);
+		item->eigrp, item->ei, item->nbr, item->encoder,
+		item->packet->s, &wire_route, item->packet_limit);
 	if (encoded >= 0) {
 		if (encoded > 0) {
-			builder->route_count++;
-			if (builder->opcode == EIGRP_OPC_UPDATE)
+			item->route_count++;
+			if (item->opcode == EIGRP_OPC_UPDATE)
 				(void)eigrp_eventlog_msg_add(
-					builder->eigrp,
+					item->eigrp,
 					EIGRP_EVENTLOG_OPCODE_UPDATE_PACKETIZED,
 					prefix,
-					builder->ei ? builder->ei->ifindex : 0,
+					item->ei ? item->ei->ifindex : 0,
 					route->distance,
 					route->reported_distance, 0);
 		}
@@ -248,56 +247,54 @@ eigrp_packetizer_builder_route_add(eigrp_packetizer_builder_t *builder,
 
 	/* The next complete TLV does not fit.  Finish the current immutable
 	 * packet and retry that destination in a fresh packet. */
-	if (!builder->route_count)
+	if (!item->route_count)
 		return 0;
 
-	eigrp_packetizer_builder_flush(builder);
-	if (!eigrp_packetizer_builder_start(builder))
+	eigrp_packetizer_item_flush(item);
+	if (!eigrp_packetizer_item_start(item))
 		return 0;
 
-	wire_route = *route;
-	eigrp_offset_metric_update(builder->eigrp, builder->ei,
-				   EIGRP_FILTER_OUT, prefix,
-				   &wire_route.metric);
+	/* Retry the same prepared route, including next-hop-self, AddPath,
+	 * and the outbound metric adjustment.
+	 */
 	encoded = eigrp_packet_route_encode_append(
-		builder->eigrp, builder->ei, builder->nbr, builder->encoder,
-		builder->packet->s, &wire_route, builder->packet_limit);
+		item->eigrp, item->ei, item->nbr, item->encoder,
+		item->packet->s, &wire_route, item->packet_limit);
 	if (encoded > 0) {
-		builder->route_count++;
-		if (builder->opcode == EIGRP_OPC_UPDATE)
+		item->route_count++;
+		if (item->opcode == EIGRP_OPC_UPDATE)
 			(void)eigrp_eventlog_msg_add(
-				builder->eigrp,
+				item->eigrp,
 				EIGRP_EVENTLOG_OPCODE_UPDATE_PACKETIZED, prefix,
-				builder->ei ? builder->ei->ifindex : 0,
+				item->ei ? item->ei->ifindex : 0,
 				route->distance, route->reported_distance, 0);
 	} else if (encoded < 0) {
 		(void)eigrp_eventlog_msg_add(
-			builder->eigrp,
-			EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE, prefix,
-			builder->opcode, builder->ei ? builder->ei->ifindex : 0,
-			builder->packet_limit, 0);
+			item->eigrp, EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE,
+			prefix, item->opcode, item->ei ? item->ei->ifindex : 0,
+			item->packet_limit, 0);
 		eigrp_log(
 			EIGRP_LOG_WARNING,
 			"interface %s: EIGRP route TLV exceeds packet limit %u",
-			builder->ei->name, builder->packet_limit);
+			item->ei->name, item->packet_limit);
 	}
 	return encoded > 0 ? encoded : 0;
 }
 
-static void eigrp_packetizer_builder_init(eigrp_packetizer_builder_t *builder,
-					  eigrp_instance_t *eigrp,
-					  eigrp_intf_t *ei, eigrp_nbr_t *nbr,
-					  uint8_t opcode, uint32_t flags)
+static void eigrp_packetizer_item_init(eigrp_packetizer_item_t *item,
+				       eigrp_instance_t *eigrp,
+				       eigrp_intf_t *ei, eigrp_nbr_t *nbr,
+				       uint8_t opcode, uint32_t flags)
 {
-	memset(builder, 0, sizeof(*builder));
-	builder->eigrp = eigrp;
-	builder->ei = ei;
-	builder->nbr = nbr;
-	builder->opcode = opcode;
-	builder->flags = flags;
-	builder->packet_limit = eigrp_packet_payload_limit(
+	memset(item, 0, sizeof(*item));
+	item->eigrp = eigrp;
+	item->ei = ei;
+	item->nbr = nbr;
+	item->opcode = opcode;
+	item->flags = flags;
+	item->packet_limit = eigrp_packet_payload_limit(
 		ei->curr_mtu, ei->eigrp->af_vectors.packet_ip_header_bytes);
-	builder->encoder = nbr ? nbr->encoder : ei->encoder;
+	item->encoder = nbr ? nbr->encoder : ei->encoder;
 }
 
 static bool eigrp_packetizer_prefix_allowed(eigrp_instance_t *eigrp,
@@ -373,7 +370,7 @@ static void eigrp_packetizer_intf_prefix_send(eigrp_instance_t *eigrp,
 					      eigrp_intf_t *ei,
 					      eigrp_packetizer_work_t *work)
 {
-	eigrp_packetizer_builder_t builder;
+	eigrp_packetizer_item_t item;
 	eigrp_route_descriptor_t *route;
 	bool owned;
 
@@ -413,12 +410,11 @@ static void eigrp_packetizer_intf_prefix_send(eigrp_instance_t *eigrp,
 		}
 		wire_route = eigrp_packetizer_poison_reverse(
 			ei, work->opcode, wire_route, &poison_route);
-		eigrp_packetizer_builder_init(&builder, eigrp, ei, NULL,
-					      work->opcode, 0);
+		eigrp_packetizer_item_init(&item, eigrp, ei, NULL, work->opcode,
+					   0);
 		if (eigrp_packetizer_prefix_allowed(eigrp, ei, wire_prefix,
 						    wire_route, work->opcode)
-		    && eigrp_packetizer_builder_route_add(&builder, wire_route)
-			       > 0
+		    && eigrp_packetizer_item_route_add(&item, wire_route) > 0
 		    && work->opcode == EIGRP_OPC_QUERY)
 			eigrp_packetizer_query_rij_add(work->prefix, ei);
 		if (wire_prefix != work->prefix
@@ -432,11 +428,11 @@ static void eigrp_packetizer_intf_prefix_send(eigrp_instance_t *eigrp,
 			if (eigrp_packetizer_prefix_allowed(
 				    eigrp, ei, work->prefix, leak_route,
 				    work->opcode))
-				(void)eigrp_packetizer_builder_route_add(
-					&builder, leak_route);
+				(void)eigrp_packetizer_item_route_add(
+					&item, leak_route);
 		}
 	}
-	eigrp_packetizer_builder_flush(&builder);
+	eigrp_packetizer_item_flush(&item);
 
 	if (owned)
 		eigrp_topology_route_free(route);
@@ -445,7 +441,7 @@ static void eigrp_packetizer_intf_prefix_send(eigrp_instance_t *eigrp,
 static void eigrp_packetizer_neighbor_route_send(eigrp_instance_t *eigrp,
 						 eigrp_packetizer_work_t *work)
 {
-	eigrp_packetizer_builder_t builder;
+	eigrp_packetizer_item_t item;
 	eigrp_nbr_t *nbr;
 	eigrp_route_descriptor_t *route;
 	bool owned;
@@ -480,16 +476,15 @@ static void eigrp_packetizer_neighbor_route_send(eigrp_instance_t *eigrp,
 			return;
 	}
 
-	eigrp_packetizer_builder_init(&builder, eigrp, nbr->ei, nbr,
-				      work->opcode, 0);
+	eigrp_packetizer_item_init(&item, eigrp, nbr->ei, nbr, work->opcode, 0);
 	if (work->flags & EIGRP_PACKETIZER_WORK_F_ROUTE_ACTIVE) {
 		eigrp_route_descriptor_t active_route = *route;
 
 		active_route.metric.flags |= EIGRP_OPAQUE_ACTIVE;
-		eigrp_packetizer_builder_route_add(&builder, &active_route);
+		eigrp_packetizer_item_route_add(&item, &active_route);
 	} else
-		eigrp_packetizer_builder_route_add(&builder, route);
-	eigrp_packetizer_builder_flush(&builder);
+		eigrp_packetizer_item_route_add(&item, route);
+	eigrp_packetizer_item_flush(&item);
 
 	if (owned)
 		eigrp_topology_route_free(route);
@@ -505,7 +500,7 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 	eigrp_list_t *retire = eigrp_list_create();
 
 	for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, inode, ei)) {
-		eigrp_packetizer_builder_t builder;
+		eigrp_packetizer_item_t item;
 
 		/* UPDATE work drains the instance-wide topology_changes list,
 		 * not only the changes from the ingress interface that queued
@@ -524,8 +519,8 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 		size_t summary_seen_count = 0;
 		size_t summary_seen_capacity = 0;
 
-		eigrp_packetizer_builder_init(&builder, eigrp, ei, NULL,
-					      work->opcode, 0);
+		eigrp_packetizer_item_init(&item, eigrp, ei, NULL, work->opcode,
+					   0);
 		for (EIGRP_LIST_ITERATE_RO(eigrp->topology_changes, pnode,
 					   prefix)) {
 			eigrp_route_descriptor_t *route;
@@ -615,8 +610,8 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 			    && eigrp_packetizer_prefix_allowed(
 				    eigrp, ei, wire_prefix, wire_route,
 				    work->opcode)
-			    && eigrp_packetizer_builder_route_add(&builder,
-								  wire_route)
+			    && eigrp_packetizer_item_route_add(&item,
+							       wire_route)
 				       > 0
 			    && work->opcode == EIGRP_OPC_QUERY && !summarized)
 				eigrp_packetizer_query_rij_add(prefix, ei);
@@ -633,15 +628,15 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 				if (eigrp_packetizer_prefix_allowed(
 					    eigrp, ei, prefix, leak_route,
 					    work->opcode))
-					(void)eigrp_packetizer_builder_route_add(
-						&builder, leak_route);
+					(void)eigrp_packetizer_item_route_add(
+						&item, leak_route);
 			}
 
 			if (owned)
 				eigrp_topology_route_free(route);
 		}
 		free(summary_seen);
-		eigrp_packetizer_builder_flush(&builder);
+		eigrp_packetizer_item_flush(&item);
 	}
 
 	/* The work bead represents the complete current topology-change set. Do

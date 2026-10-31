@@ -1,0 +1,48 @@
+schema: eigrp-uut-test/v1
+topology: ipv6-diamond-hub.yaml
+name: AddPath IPv6 multipath UPDATE, withdrawal and recovery
+steps:
+  - start: origin
+  - start: r2
+  - start: r3
+  - start: hub
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: hub, prefix: 2001:db8:44::/64, table: topology, active: false, successors: 2}
+        - route: {uut: hub, prefix: 2001:db8:44::/64, table: path, next_hop: fe80::2, successor: true}
+        - route: {uut: hub, prefix: 2001:db8:44::/64, table: path, next_hop: fe80::3, successor: true}
+  - packet-mark: initial
+  - start: client
+  - validate-neighbor: {uut: hub, neighbor: fe80::5, interface: eth15, timeout: 10}
+  - validate-packet: {since: initial, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: 2001:db8:44::/64, addpaths_min: 1, timeout: 12}
+  - validate-route: {uut: client, prefix: 2001:db8:44::/64, table: topology, present: true, timeout: 12}
+  - packet-mark: disabled
+  - add-paths-config: {uut: hub, interface: eth15, count: 0}
+  - validate-packet: {since: disabled, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: 2001:db8:44::/64, addpaths_max: 0, timeout: 8}
+  - packet-mark: enabled
+  - add-paths-config: {uut: hub, interface: eth15, count: 1}
+  - validate-packet: {since: enabled, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: 2001:db8:44::/64, addpaths_min: 1, addpaths_max: 1, timeout: 8}
+  - packet-mark: lost-path
+  - link-down: {uut: hub, interface: eth15}
+  - link-down: {uut: client, interface: eth51}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: hub, neighbor: fe80::5, interface: eth15, state: down}
+        - route: {uut: client, prefix: 2001:db8:44::/64, table: rib, present: false}
+        - route: {uut: hub, prefix: 2001:db8:44::/64, table: topology, active: false, successors: 2}
+  - packet-mark: recovery
+  - link-up: {uut: hub, interface: eth15}
+  - link-up: {uut: client, interface: eth51}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: hub, prefix: 2001:db8:44::/64, table: topology, active: false, successors: 2}
+        - route: {uut: client, prefix: 2001:db8:44::/64, table: topology, active: false}
+  - validate-neighbor: {uut: hub, neighbor: fe80::5, interface: eth15, timeout: 10}
+  - validate-packet: {since: recovery, source_uut: hub, destination_uut: client, event: delivered, opcode: update, prefix: 2001:db8:44::/64, addpaths_min: 1, timeout: 12}
+  - stop: all

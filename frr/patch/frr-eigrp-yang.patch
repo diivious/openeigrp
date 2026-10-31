@@ -35,7 +35,7 @@ index 8491bfc103..6a6efc31de 100644
    typedef authentication-type {
      type enumeration {
        enum none {
-@@ -103,6 +129,135 @@ module frr-eigrpd {
+@@ -103,6 +129,140 @@ module frr-eigrpd {
      description "Authentication types";
    }
  
@@ -134,6 +134,11 @@ index 8491bfc103..6a6efc31de 100644
 +        description "Advertise the local outbound interface as next hop";
 +      }
 +
++      leaf add-paths {
++        type uint8 { range "1..4"; }
++        description "Additional equal-cost best paths to advertise";
++      }
++
 +      leaf split-horizon {
 +        type boolean;
 +        default true;
@@ -171,7 +176,7 @@ index 8491bfc103..6a6efc31de 100644
    /*
     * EIGRP operational data.
     */
-@@ -110,7 +265,6 @@ module frr-eigrpd {
+@@ -110,7 +270,6 @@ module frr-eigrpd {
      description "EIGRP daemon configuration";
  
      list instance {
@@ -179,7 +184,7 @@ index 8491bfc103..6a6efc31de 100644
        key "asn vrf";
        description "EIGRP autonomous system instance";
        leaf asn {
-@@ -159,6 +313,11 @@ module frr-eigrpd {
+@@ -159,6 +318,11 @@ module frr-eigrpd {
          description "Most number of paths to forward packets to";
        }
  
@@ -191,7 +196,7 @@ index 8491bfc103..6a6efc31de 100644
        container metric-weights {
          description
            "Metrics and parameters for advertisement.
-@@ -290,6 +449,52 @@ module frr-eigrpd {
+@@ -290,6 +454,52 @@ module frr-eigrpd {
          }
        }
      }
@@ -244,7 +249,7 @@ index 8491bfc103..6a6efc31de 100644
    }
  
    /*
-@@ -372,4 +577,281 @@ module frr-eigrpd {
+@@ -372,4 +582,281 @@ module frr-eigrpd {
         }
       }
     }

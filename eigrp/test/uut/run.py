@@ -38,7 +38,11 @@ def validate_topology(t):
         if "active_time" in r and not 1 <= int(r["active_time"]) <= 65535: raise SpecError(f"router {rn}: active_time must be 1..65535 seconds")
         if not isinstance(r.get("interfaces",{}),dict): raise SpecError(f"router {rn}.interfaces must be a mapping")
         for name,i in r.get("interfaces",{}).items():
-            check_keys(i,{"segment","ipv4","ipv6","mtu","bandwidth","delay","up","summaries","authentication"},f"{rn}.{name}")
+            check_keys(i,{"segment","ipv4","ipv6","mtu","bandwidth","delay","up","summaries","authentication","add_paths","next_hop_self"},f"{rn}.{name}")
+            if "add_paths" in i and (type(i["add_paths"]) is not int or not 1 <= i["add_paths"] <= 4):
+                raise SpecError(f"{rn}.{name}: add_paths must be an integer in 1..4")
+            if "next_hop_self" in i and type(i["next_hop_self"]) is not bool:
+                raise SpecError(f"{rn}.{name}: next_hop_self must be boolean")
             auth=i.get("authentication")
             if auth is not None:
                 if not isinstance(auth,dict): raise SpecError(f"{rn}.{name}.authentication must be a mapping")
@@ -152,7 +156,7 @@ ROUTE_FIELDS = {
 PACKET_FILTERS = {"uut", "source_uut", "destination_uut", "interface", "source_interface",
                   "destination_interface", "segment", "afi", "opcode", "multicast", "sequence",
                   "auth_sequence", "ack", "cr", "event", "prefix"}
-PACKET_ASSERTION_KEYS = PACKET_FILTERS | {"since", "min", "max", "timeout", "group_by",
+PACKET_ASSERTION_KEYS = PACKET_FILTERS | {"since", "min", "max", "timeout", "addpaths_min", "addpaths_max", "group_by",
                                         "min_groups", "max_groups", "max_per_group"}
 PACKET_EVENTS = {"sent", "delivered", "delayed", "duplicated", "dropped", "fault", "disconnected", "send-error"}
 PACKET_GROUP_KEYS = {"source_uut", "destination_uut", "source_interface", "destination_interface",
@@ -166,6 +170,7 @@ STEP_FIELDS = {
     "inbound-filter-config": {"uut", "prefix", "enabled"},
     "process-limit-clear": {"uut"}, "process-limit-expire": {"uut"}, "process-limit-reset-expire": {"uut"}, "process-limit-stale": {"uut"}, "process-limit-age": {"uut"}, "validate-process-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "penalty_min", "penalty_max", "penalty_after_age", "timeout"},
     "redist-limit-clear": {"uut"}, "redist-limit-expire": {"uut"}, "validate-redist-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "timeout"},
+    "add-paths-config": {"uut", "interface", "count"},
     "source-route-add": {"uut", "prefix", "metric"}, "source-route-remove": {"uut", "prefix"},
     "redistribute-add": {"uut", "source"}, "redistribute-remove": {"uut", "source"},
     "redistribute-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
@@ -208,8 +213,12 @@ def validate_packet_assertion(e, where, marks=None):
     if "event" not in e: raise SpecError(f"{where}: event is required (sent, delivered, dropped, or any for negative checks)")
     event=e["event"]
     if not isinstance(event,str) or event not in PACKET_EVENTS | {"any"}: raise SpecError(f"{where}: unsupported packet event {event!r}")
-    for key in ("min", "max", "min_groups", "max_groups", "max_per_group"):
+    for key in ("min", "max", "min_groups", "max_groups", "max_per_group", "addpaths_min", "addpaths_max"):
         if key in e: _count(e[key], f"{where}.{key}")
+    if "addpaths_min" in e and "addpaths_max" in e and e["addpaths_min"] > e["addpaths_max"]:
+        raise SpecError(f"{where}: addpaths_min exceeds addpaths_max")
+    if "addpaths_min" in e and e["addpaths_min"] > 4:
+        raise SpecError(f"{where}: addpaths_min must be <= 4")
     if "min" in e and "max" in e and e["min"]>e["max"]: raise SpecError(f"{where}: min exceeds max")
     if e.get("max") == 0 and e.get("min",1) != 0:
         raise SpecError(f"{where}: zero-packet checks require min: 0, max: 0")
@@ -267,7 +276,7 @@ def validate_scenario(s):
     if s.get("schema")!=TEST_SCHEMA: raise SpecError(f"scenario schema must be {TEST_SCHEMA}")
     if not isinstance(s.get("topology"),str) or not s["topology"]: raise SpecError("scenario.topology must name its topology YAML")
     if not isinstance(s.get("steps"),list) or not s["steps"]: raise SpecError("scenario.steps must be a non-empty list")
-    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
+    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","add-paths-config","checkpoint"}
     marks=set()
     for idx,step in enumerate(s["steps"],1):
         if not isinstance(step,dict) or len(step)!=1: raise SpecError(f"step {idx}: exactly one operation required")
@@ -337,6 +346,7 @@ def validate_scenario(s):
                     "inbound-filter-config":("uut","prefix"),
                     "process-limit-clear":("uut",),"process-limit-expire":("uut",),"process-limit-reset-expire":("uut",),"process-limit-stale":("uut",),"process-limit-age":("uut",),"validate-process-limit":("uut","state"),
                     "redist-limit-clear":("uut",),"redist-limit-expire":("uut",),"validate-redist-limit":("uut","state"),
+                    "add-paths-config":("uut","interface","count"),
                     "source-route-add":("uut","prefix"),"source-route-remove":("uut","prefix"),
                     "redistribute-add":("uut","source"),"redistribute-remove":("uut","source"),
                     "redistribute-metric":("uut",),"default-metric":("uut",),
@@ -363,6 +373,10 @@ def validate_scenario(s):
                 _count(arg["maximum"], f"{where}.maximum")
                 if "warning_only" in arg and type(arg["warning_only"]) is not bool:
                     raise SpecError(f"{where}: warning_only must be boolean")
+            if op == "add-paths-config":
+                _count(arg["count"], f"{where}.count")
+                if arg["count"] > 4:
+                    raise SpecError(f"{where}: add-paths count must be 0..4")
             if op == "inbound-filter-config":
                 try: ipaddress.ip_network(arg["prefix"], strict=False)
                 except (ValueError, TypeError) as exc:
@@ -557,6 +571,11 @@ class Node:
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: source route change failed: {result}")
 
+    def addpath_change(self, interface, count):
+        result = self.cmd(f"ADDPATH {interface} {count}", timeout=10)
+        if result != "RESULT|0":
+            raise RuntimeError(f"{self.name}: AddPath configuration failed: {result}")
+
     def redistribute_change(self, source, add):
         result = self.cmd(f"REDIST-{'ON' if add else 'OFF'} {source}", timeout=10)
         if result != "RESULT|0":
@@ -617,6 +636,8 @@ class Runner:
                 if "delay" in n: lines.append(f"delay {n.get('interface')} {int(n['delay'])}")
             for name,i in r.get("interfaces",{}).items():
                 if "delay" in i: lines.append(f"delay {name} {int(i['delay'])}")
+                if "add_paths" in i: lines.append(f"add-paths {name} {i['add_paths']}")
+                if i.get("next_hop_self") is False: lines.append(f"next-hop-self {name} off")
                 for summary in i.get("summaries",[]): lines.append(f"summary {name} {ipaddress.ip_network(summary,strict=False)}")
             for name,i in r.get("interfaces",{}).items():
                 auth=i.get("authentication")
@@ -734,7 +755,18 @@ class Runner:
             if key=="prefix": return str(e[key]).lower() in [str(x).lower() for x in packet.get("prefixes",[])]
             if key=="event" and e[key]=="any": return True
             return packet.get(field)==e[key]
-        matches=[p for p in rows if all(matches_filter(p,k,v) for k,v in fields.items())]
+        def matches_addpaths(packet):
+            if "addpaths_min" not in e and "addpaths_max" not in e:
+                return True
+            counts = packet.get("addpath_counts", {})
+            if "prefix" in e:
+                value = counts.get(str(ipaddress.ip_network(e["prefix"], strict=False)), 0)
+            else:
+                value = sum(counts.values())
+            return (value >= e.get("addpaths_min", 0)
+                    and value <= e.get("addpaths_max", 255))
+        matches=[p for p in rows if all(matches_filter(p,k,v) for k,v in fields.items())
+                 and matches_addpaths(p)]
         count=len(matches)
         if count<int(e.get("min",1)) or ("max" in e and count>int(e["max"])): return False
         group_by=e.get("group_by")
@@ -828,6 +860,8 @@ class Runner:
             for thread in threads: thread.start()
             for thread in threads: thread.join()
             if errors: raise RuntimeError(f"batched link operation failed: {errors}")
+        elif op == "add-paths-config":
+            self.nodes[arg["uut"]].addpath_change(arg["interface"], arg["count"])
         elif op == "peer-limit":
             self.nodes[arg["uut"]].peer_limit(
                 arg["interface"], arg["neighbor"], arg["operation"])

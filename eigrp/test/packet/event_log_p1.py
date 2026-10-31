@@ -50,7 +50,7 @@ def test_only_terminal_route_encode_failure_is_logged():
     update = read("eigrp_update.c")
     assert "EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE" in packetizer
     assert update.count("EIGRP_EVENTLOG_OPCODE_ROUTE_ENCODE_FAILURE") >= 3
-    assert "builder->route_count" in packetizer
+    assert "item->route_count" in packetizer
 
 
 def test_packet_send_failure_and_unexpected_ack_are_logged():

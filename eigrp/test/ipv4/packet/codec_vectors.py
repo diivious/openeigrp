@@ -55,7 +55,7 @@ def test_runtime_path_uses_single_interface_encoder_vector():
 
     assert "ei->encoder[" not in source
     assert "encoder->next" not in source
-    assert "builder->encoder = nbr ? nbr->encoder : ei->encoder;" in packetizer
+    assert "item->encoder = nbr ? nbr->encoder : ei->encoder;" in packetizer
     assert "eigrp_packet_route_encode_append(" in packetizer
 
 

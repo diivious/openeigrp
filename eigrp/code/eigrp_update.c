@@ -21,6 +21,7 @@
 
 #include "eigrp_structs.h"
 #include "eigrp_topology.h"
+#include "eigrp_addpath.h"
 #include "eigrp_interface.h"
 #include "eigrp_neighbor.h"
 #include "eigrp_packet.h"
@@ -441,6 +442,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				eigrp_route_descriptor_t *topology_route =
 					eigrp_prefix_descriptor_lookup(prefix,
 								       nbr);
+				bool addpaths_changed = false;
 				bool free_received_route = false;
 				eigrp_metrics_t ingress_metric =
 					received_route->metric;
@@ -493,12 +495,29 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				}
 
 				if (topology_route) {
+					addpaths_changed =
+						topology_route->addpath_count
+							!= received_route
+								   ->addpath_count
+						|| memcmp(topology_route
+								  ->addpaths,
+							  received_route
+								  ->addpaths,
+							  sizeof(topology_route
+									 ->addpaths))
+							   != 0;
 					topology_route->type =
 						received_route->type;
 					topology_route->nexthop =
 						received_route->nexthop;
 					topology_route->extdata =
 						received_route->extdata;
+					topology_route->addpath_count =
+						received_route->addpath_count;
+					memcpy(topology_route->addpaths,
+					       received_route->addpaths,
+					       sizeof(topology_route
+							      ->addpaths));
 					route = topology_route;
 					free_received_route = true;
 				} else {
@@ -529,6 +548,20 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 								  msg.metrics)
 						   == EIGRP_MAX_METRIC;
 				eigrp_fsm_event(&msg);
+				if (addpaths_changed && !unreachable
+				    && prefix->state
+					       == EIGRP_FSM_STATE_PASSIVE) {
+					eigrp_update_routing_table(eigrp,
+								   prefix);
+					prefix->req_action |=
+						EIGRP_FSM_NEED_UPDATE;
+					if (!eigrp_list_lookup(
+						    eigrp->topology_changes,
+						    prefix))
+						(void)eigrp_list_add(
+							eigrp->topology_changes,
+							prefix);
+				}
 
 				if (free_received_route || msg.transient_route)
 					eigrp_topology_route_free(
@@ -957,6 +990,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 						wire_route.metric =
 							selected_route
 								->total_metric;
+					eigrp_addpath_select(eigrp, ei,
+							     &wire_route);
 					if (eigrp_nbr_split_horizon(
 						    selected_route, ei)) {
 						wire_route.metric.delay =
@@ -988,6 +1023,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 							wire_route.metric =
 								selected_route
 									->total_metric;
+						eigrp_addpath_select(
+							eigrp, ei, &wire_route);
 						if (eigrp_nbr_split_horizon(
 							    selected_route,
 							    ei)) {

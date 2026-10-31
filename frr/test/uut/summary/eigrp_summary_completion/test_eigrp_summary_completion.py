@@ -36,7 +36,7 @@ def test_leak_map_uses_portable_policy_boundary_and_fails_closed():
 
 def test_packetizer_emits_aggregate_and_permitted_specific_on_same_path():
     assert "eigrp_summary_specific_leak" in PACKETIZER
-    assert "eigrp_packetizer_builder_route_add(&builder, route)" in PACKETIZER
+    assert "eigrp_packetizer_item_route_add(&item, route)" in PACKETIZER
     assert "eigrp_summary_specific_leak" in UPDATE
     assert "eigrp_packet_route_encode_append" in UPDATE
 

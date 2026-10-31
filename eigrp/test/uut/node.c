@@ -112,7 +112,7 @@ static eigrp_result_t accounting_cb(const eigrp_stat_nbr_limit_t *s, void *arg)
 static eigrp_result_t intf_cb(const eigrp_intf_state_t *s, void *arg)
 {
 	(void)arg;
-	printf("INTF|name=%s|config_present=%u|runtime_present=%u|passive=%u|shutdown=%u|multicast_enabled=%u|auth_configured=%u|auth_mode=%u|bandwidth=%u|bandwidth_percent=%u|delay=%u|mtu=%u|hello_interval=%u|hold_time=%u|peer_count=%u|output_queue=%lu|reliable_queue=%lu|reliability=%u|load=%u|tlv1_peers=%u|tlv2_peers=%u|split_horizon=%u|next_hop_self=%u|hello_timer_running=%u|hello_timer_remaining=%u|unreliable_multicast_sent=%llu|reliable_multicast_sent=%llu|unreliable_unicast_sent=%llu|reliable_unicast_sent=%llu|multicast_exceptions=%llu|cr_packets_sent=%llu|retransmissions_sent=%llu\n",
+	printf("INTF|name=%s|config_present=%u|runtime_present=%u|passive=%u|shutdown=%u|multicast_enabled=%u|auth_configured=%u|auth_mode=%u|bandwidth=%u|bandwidth_percent=%u|delay=%u|mtu=%u|hello_interval=%u|hold_time=%u|peer_count=%u|output_queue=%lu|reliable_queue=%lu|reliability=%u|load=%u|tlv1_peers=%u|tlv2_peers=%u|split_horizon=%u|next_hop_self=%u|add_paths=%u|hello_timer_running=%u|hello_timer_remaining=%u|unreliable_multicast_sent=%llu|reliable_multicast_sent=%llu|unreliable_unicast_sent=%llu|reliable_unicast_sent=%llu|multicast_exceptions=%llu|cr_packets_sent=%llu|retransmissions_sent=%llu\n",
 	       s->interface_name ? s->interface_name : "-",
 	       s->config_present ? 1 : 0, s->runtime_present ? 1 : 0,
 	       s->passive ? 1 : 0, s->shutdown ? 1 : 0,
@@ -122,7 +122,7 @@ static eigrp_result_t intf_cb(const eigrp_intf_state_t *s, void *arg)
 	       s->hello_interval, s->hold_time, s->peer_count,
 	       s->output_queue_count, s->reliable_queue_count, s->reliability,
 	       s->load, s->tlv1_peer_count, s->tlv2_peer_count,
-	       s->split_horizon ? 1 : 0, s->next_hop_self ? 1 : 0,
+	       s->split_horizon ? 1 : 0, s->next_hop_self ? 1 : 0, s->add_paths,
 	       s->hello_timer_running ? 1 : 0, s->hello_timer_remaining,
 	       (unsigned long long)s->unreliable_multicast_sent,
 	       (unsigned long long)s->reliable_multicast_sent,
@@ -674,6 +674,33 @@ static eigrp_result_t uut_redist_restart_expire(eigrp_instance_t *e, void *arg)
 	return EIGRP_RESULT_SUCCESS;
 }
 
+typedef struct uut_addpath_args {
+	char interface[256];
+	unsigned count;
+} uut_addpath_args_t;
+
+static eigrp_result_t uut_addpath_config(eigrp_instance_t *instance, void *arg)
+{
+	const uut_addpath_args_t *request = arg;
+	eigrp_intf_context_t context = {
+		.address_family = af,
+		.config = eigrp_intf_config_read(af, request->interface),
+		.runtime = eigrp_intf_lookup_by_name(instance,
+						     request->interface)};
+	if (!context.runtime)
+		return EIGRP_RESULT_NOT_FOUND;
+	if (!context.config) {
+		eigrp_result_t result =
+			eigrp_intf_config_create(af, request->interface);
+		if (result != EIGRP_RESULT_SUCCESS)
+			return result;
+		context.config = eigrp_intf_config_read(af, request->interface);
+	}
+	return eigrp_intf_addpath_update(request->count ? EIGRP_SET
+							: EIGRP_RESET,
+					 &context, (uint8_t)request->count);
+}
+
 static void load(const char *path)
 {
 	FILE *f = fopen(path, "r");
@@ -834,6 +861,36 @@ static void load(const char *path)
 					(uint32_t)strtoul(b, NULL, 10));
 				if (r != EIGRP_RESULT_SUCCESS)
 					die("interface delay", r);
+			} else if (!strcmp(op, "add-paths")
+				   || !strcmp(op, "next-hop-self")) {
+				eigrp_intf_context_t ic = {
+					.address_family = af,
+					.config = eigrp_intf_config_read(af, a),
+					.runtime = eigrp_intf_lookup_by_name(
+						runtime, a)};
+				if (!ic.config) {
+					r = eigrp_intf_config_create(af, a);
+					if (r != EIGRP_RESULT_SUCCESS)
+						die("addpath interface config",
+						    r);
+					ic.config =
+						eigrp_intf_config_read(af, a);
+				}
+				if (!ic.config || !ic.runtime)
+					die("addpath interface",
+					    EIGRP_RESULT_NOT_FOUND);
+				if (!strcmp(op, "add-paths"))
+					r = eigrp_intf_addpath_update(
+						EIGRP_SET, &ic,
+						(uint8_t)strtoul(b, NULL, 10));
+				else
+					r = eigrp_intf_nexthop_self_update(
+						strcmp(b, "off") == 0
+							? EIGRP_RESET
+							: EIGRP_SET,
+						&ic);
+				if (r != EIGRP_RESULT_SUCCESS)
+					die("addpath interface update", r);
 			} else if (!strcmp(op, "auth-md5")) {
 				char name[256], keychain[256], secret[256];
 				eigrp_intf_context_t ic;
@@ -962,6 +1019,17 @@ int main(int argc, char **argv)
 		} else if (!strcmp(verb, "DOWN")) {
 			printf("RESULT|%d\n",
 			       (int)eigrp_unix_interface_down(ifname));
+			fflush(stdout);
+		} else if (!strcmp(verb, "ADDPATH")) {
+			uut_addpath_args_t request = {0};
+			eigrp_result_t result = EIGRP_RESULT_INVALID_ARGUMENT;
+			if (sscanf(line, "%*s %255s %u", request.interface,
+				   &request.count)
+				    == 2
+			    && request.count <= 4)
+				result = eigrp_instance_message_call(
+					runtime, uut_addpath_config, &request);
+			printf("RESULT|%d\n", (int)result);
 			fflush(stdout);
 		} else if (!strcmp(verb, "LIMIT")) {
 			uut_limit_args_t request = {0};

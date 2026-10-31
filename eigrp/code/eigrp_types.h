@@ -110,6 +110,7 @@ typedef struct eigrp_filter_runtime_state {
 typedef struct eigrp_addr eigrp_addr_t;
 typedef struct eigrp_prefix_descriptor eigrp_prefix_descriptor_t;
 typedef struct eigrp_route_descriptor eigrp_route_descriptor_t;
+typedef struct eigrp_addpath eigrp_addpath_t;
 typedef struct eigrp_fsm_action_message eigrp_fsm_action_message_t;
 typedef struct eigrp_eventlog eigrp_eventlog_t;
 typedef struct eigrp_table eigrp_table_t;
@@ -182,6 +183,8 @@ typedef struct eigrp_af_vectors {
 	 * representation.
 	 */
 	uint8_t packet_address_bytes;
+	/* Native eigrp_addr_t family, paired with packet_address_bytes. */
+	uint8_t packet_address_afi;
 	/* Base IP header overhead used to bound a complete EIGRP wire image. */
 	uint8_t packet_ip_header_bytes;
 	uint16_t (*packet_address_decode)(eigrp_stream_t *stream,
@@ -202,6 +205,15 @@ typedef struct eigrp_af_vectors {
 	uint16_t classic_internal_tlv_type;
 	uint16_t classic_external_tlv_type;
 	uint16_t multiprotocol_afi;
+
+	/* AddPath payload only. The common TLV2 codec owns the opcode, word
+	 * count, and attribute framing; AF implementations own wire addresses.
+	 * Both callbacks consume/produce exactly one AddPath payload.
+	 */
+	uint16_t (*addpath_decode)(eigrp_stream_t *stream,
+				   eigrp_addpath_t *path, bool external);
+	uint16_t (*addpath_encode)(eigrp_stream_t *stream,
+				   const eigrp_addpath_t *path, bool external);
 
 	/* Portable text presentation used by show/debug callers. */
 	int (*addr_snprintf)(char *buf, size_t len,

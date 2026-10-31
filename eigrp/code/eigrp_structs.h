@@ -31,6 +31,18 @@ struct eigrp_addr {
 	} ip;
 };
 
+/* Up to four additional equal-metric paths in TLV2 opcode 0x07.
+ * All paths share the wide metric and neighbor lifecycle of their RDB.
+ */
+#define EIGRP_ADDPATH_MAX 4
+struct eigrp_addpath {
+	eigrp_addr_t nexthop;
+	uint32_t router_id;
+	uint32_t tag;
+	uint8_t protocol;
+	uint8_t flags;
+};
+
 /*
  * A received packet owns its input stream while it moves from the host read
  * callback, through the process receive/demux thread, to the target AF.
@@ -339,6 +351,7 @@ typedef struct eigrp_interface {
 	eigrp_packet_encoder_t encoder;
 	bool split_horizon;
 	bool next_hop_self;
+	uint8_t add_paths; /* 0 disabled; 1-4 additional best paths. */
 	uint32_t bandwidth_percent;
 	/* Per-interface transmit bandwidth budget (packet bytes * 800 units).
 	 */
@@ -597,6 +610,8 @@ typedef struct eigrp_route_descriptor {
 		topology_id;  /* Multiprotocol topology identifier. */
 	eigrp_prefix_t dest;  // destination address
 	eigrp_addr_t nexthop; // address of advertised by peer
+	uint8_t addpath_count;
+	eigrp_addpath_t addpaths[EIGRP_ADDPATH_MAX];
 
 	eigrp_prefix_descriptor_t *prefix; // prefix this route is part of
 	eigrp_nbr_t *adv_router;	   // peer who sent me the route

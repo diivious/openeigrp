@@ -265,6 +265,14 @@ void eigrp_cli_named_show_af_interface_next_hop_self(
 		vty_out(vty, "   no next-hop-self\n");
 }
 
+void eigrp_cli_named_show_af_interface_add_paths(struct vty *vty,
+						 const struct lyd_node *dnode,
+						 bool show_defaults)
+{
+	(void)show_defaults;
+	vty_out(vty, "   add-paths %u\n", yang_dnode_get_uint8(dnode, NULL));
+}
+
 void eigrp_cli_named_show_af_interface_split_horizon(
 	struct vty *vty, const struct lyd_node *dnode, bool show_defaults)
 {
@@ -2388,6 +2396,34 @@ DEFUN(no_eigrp_af_interface_next_hop_self,
 					 sizeof(interface_name)))
 		return CMD_WARNING;
 	nb_cli_enqueue_change(vty, "./next-hop-self", NB_OP_MODIFY, "false");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+/* Named af-interface AddPath limit, absent by default. */
+DEFUN(eigrp_af_interface_add_paths, eigrp_af_interface_add_paths_cmd,
+      "add-paths (1-4)",
+      "Advertise additional equal-cost best paths\n"
+      "Number of additional paths\n")
+{
+	const char *count = eigrp_cli_token_last(argc, argv);
+	char interface_name[IFNAMSIZ];
+
+	if (!eigrp_cli_af_interface_path(vty, interface_name,
+					 sizeof(interface_name)))
+		return CMD_WARNING;
+	nb_cli_enqueue_change(vty, "./add-paths", NB_OP_MODIFY, count);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFUN(no_eigrp_af_interface_add_paths, no_eigrp_af_interface_add_paths_cmd,
+      "no add-paths", NO_STR "Advertise additional best paths\n")
+{
+	char interface_name[IFNAMSIZ];
+
+	if (!eigrp_cli_af_interface_path(vty, interface_name,
+					 sizeof(interface_name)))
+		return CMD_WARNING;
+	nb_cli_enqueue_change(vty, "./add-paths", NB_OP_DESTROY, NULL);
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -5631,6 +5667,8 @@ void eigrp_cli_named_init(void)
 	install_element(EIGRP_NODE, &no_eigrp_af_interface_passive_cmd);
 	install_element(EIGRP_NODE, &eigrp_af_interface_next_hop_self_cmd);
 	install_element(EIGRP_NODE, &no_eigrp_af_interface_next_hop_self_cmd);
+	install_element(EIGRP_NODE, &eigrp_af_interface_add_paths_cmd);
+	install_element(EIGRP_NODE, &no_eigrp_af_interface_add_paths_cmd);
 	install_element(EIGRP_NODE, &eigrp_af_interface_split_horizon_cmd);
 	install_element(EIGRP_NODE, &no_eigrp_af_interface_split_horizon_cmd);
 	install_element(EIGRP_NODE, &eigrp_af_interface_summary_address_cmd);

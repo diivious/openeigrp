@@ -336,3 +336,32 @@ Values must be finite and strictly positive. A router's command output is
 consumed by a dedicated reader thread; both the initial response and every
 subsequent line must arrive before the command's single deadline. Incomplete
 `STATE`/`EVENTS` snapshots now fail with a timeout rather than hanging forever.
+
+## AddPath qualification (portable)
+
+`make uut` discovers the AddPath compiled-C tests and both IPv4/IPv6
+multi-router scenarios. To run the two end-to-end scenarios independently:
+
+```
+make -C eigrp/test/uut addpath
+```
+
+The topology interface keys `add_paths: 1..4` and `next_hop_self: false`
+configure the actual EIGRP-owned named-interface state on the Unix test
+routers. The `add-paths-config` step changes that limit at runtime (use
+`count: 0` to reset). Packet assertions `addpaths_min` and `addpaths_max`
+require the specified number of opcode-7 attributes on a *complete, valid*
+MP route TLV for the selected destination prefix; they do not infer AddPath
+from ordinary ECMP or from the router configuration. The virtual-wire broker
+only decodes diagnostic attributes. It does not modify or synthesize packets.
+
+The codec executable checks the four AF/class combinations, zero through four
+additional paths, malformed attribute lengths, and withdrawal suppression.
+The selector executable checks limits, equal-cost eligibility, deduplication,
+disabled/next-hop-self/ACTIVE suppression, and preservation of hub-supplied
+path metadata. The multi-router scenarios validate initial advertisements,
+live disable/re-enable refresh, and complete adjacency-loss withdrawal and
+recovery. Partial loss of one of multiple advertised paths is a separate
+operational invariant and must not be inferred from full adjacency recovery.
+
+Cisco packet captures remain authoritative for the exact wire encoding.

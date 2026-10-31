@@ -32,5 +32,6 @@ steps:
   - start: r2
   - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: up, timeout: 15}
   - validate-packet: {since: sync, source_uut: r1, destination_uut: r2, opcode: update, event: delivered, group_by: sequence, min_groups: 6, timeout: 15}
+  - validate-route: {uut: r2, prefix: '2001:db8:1234::1/128', table: rib, present: true, timeout: 15}
   - validate-route: {uut: r2, prefix: '2001:db8:1234::18/128', table: rib, present: true, timeout: 15}
   - stop: all

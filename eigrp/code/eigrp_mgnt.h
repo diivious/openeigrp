@@ -37,6 +37,7 @@ typedef struct eigrp_intf_state {
 	uint16_t tlv2_peer_count;
 	bool split_horizon;
 	bool next_hop_self;
+	uint8_t add_paths;
 	bool hello_timer_running;
 	uint32_t hello_timer_remaining;
 	uint64_t unreliable_multicast_sent;

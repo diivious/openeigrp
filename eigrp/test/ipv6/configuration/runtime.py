@@ -51,8 +51,8 @@ def test_af_interface_runtime_mutation_is_af_neutral():
 
 def test_next_hop_self_changes_the_actual_route_wire_image():
     packetizer = read(PACKETIZER)
-    block = body(packetizer, "eigrp_packetizer_builder_route_add")
-    assert "if (builder->ei->next_hop_self)" in block
+    block = body(packetizer, "eigrp_packetizer_item_route_add")
+    assert "if (item->ei->next_hop_self)" in block
     assert "memset(&wire_route.nexthop, 0, sizeof(wire_route.nexthop));" in block
 
 

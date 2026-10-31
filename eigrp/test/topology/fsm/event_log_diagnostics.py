@@ -63,8 +63,8 @@ def test_topology_packetizer_and_nsf_decisions_are_logged_at_operation_sites():
                       topology.index("eigrp_table_t *eigrp_topology_table_create")]
     assert delete.index("EIGRP_EVENTLOG_OPCODE_TOPOLOGY_ROUTE_DELETE") < delete.index("eigrp_list_delete_data")
 
-    add = packetizer[packetizer.index("eigrp_packetizer_builder_route_add(") :
-                     packetizer.index("eigrp_packetizer_builder_init(")]
+    add = packetizer[packetizer.index("eigrp_packetizer_item_route_add(") :
+                     packetizer.index("eigrp_packetizer_item_init(")]
     assert "encoded > 0" in add
     assert "EIGRP_EVENTLOG_OPCODE_UPDATE_PACKETIZED" in add
 

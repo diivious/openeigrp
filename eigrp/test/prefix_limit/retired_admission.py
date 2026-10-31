@@ -19,8 +19,7 @@ def prefix_admission_executable(tmp_path_factory):
     source = work / "prefix_admission.c"
     binary = work / "prefix_admission"
     update_source = (ROOT / "eigrp/code/eigrp_update.c").read_text()
-    start = (update_source.index("bool free_received_route = false;")
-             + len("bool free_received_route = false;"))
+    start = update_source.index("eigrp_metrics_t ingress_metric =")
     end = update_source.index("if (topology_route) {", start)
     # Exercise the actual receive admission statements, not a copied
     # approximation. Compile them with the real topology admission function.

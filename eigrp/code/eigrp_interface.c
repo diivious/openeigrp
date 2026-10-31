@@ -28,6 +28,7 @@
 #include "eigrp_tlv2.h"
 #include "eigrp_network.h"
 #include "eigrp_topology.h"
+#include "eigrp_addpath.h"
 #include "eigrp_prefix.h"
 #include "eigrp_fsm.h"
 #include "eigrp_debug.h"
@@ -108,6 +109,7 @@ static void eigrp_intf_state_from_config(eigrp_intf_state_t *state,
 		config->authentication_mode_configured;
 	state->authentication_mode = config->authentication_mode;
 	state->next_hop_self = config->next_hop_self;
+	state->add_paths = config->add_paths;
 	state->split_horizon = config->split_horizon;
 	state->bandwidth_percent_configured =
 		config->bandwidth_percent_configured;
@@ -154,6 +156,7 @@ eigrp_intf_state_emit(eigrp_intf_t *ei, eigrp_intf_config_t *config,
 		state.tlv2_peer_count = ei->tlv2_peer_count;
 		state.split_horizon = ei->split_horizon;
 		state.next_hop_self = ei->next_hop_self;
+		state.add_paths = ei->add_paths;
 		state.bandwidth_percent = ei->bandwidth_percent;
 		state.pacing_tx_bytes = ei->pacing_tx_bytes;
 		state.pacing_defer_count = ei->pacing_defer_count;
@@ -272,6 +275,7 @@ typedef enum eigrp_intf_message_type {
 	EIGRP_INTF_MESSAGE_HOLD_TIME,
 	EIGRP_INTF_MESSAGE_PASSIVE,
 	EIGRP_INTF_MESSAGE_NEXTHOP_SELF,
+	EIGRP_INTF_MESSAGE_ADDPATH,
 	EIGRP_INTF_MESSAGE_SPLIT_HORIZON,
 	EIGRP_INTF_MESSAGE_SHUTDOWN,
 } eigrp_intf_message_type_t;
@@ -464,6 +468,7 @@ void eigrp_intf_config_update(eigrp_intf_t *runtime,
 	runtime->params.v_wait = EIGRP_HOLD_INTERVAL_DEFAULT;
 	runtime->params.passive_interface = EIGRP_INTF_ACTIVE;
 	runtime->split_horizon = true;
+	runtime->add_paths = 0;
 	defaults = eigrp_intf_effective_default(runtime);
 	if (defaults && defaults != config) {
 		if (defaults->bandwidth_configured)
@@ -480,6 +485,7 @@ void eigrp_intf_config_update(eigrp_intf_t *runtime,
 						  : EIGRP_INTF_ACTIVE;
 		runtime->split_horizon = defaults->split_horizon;
 		runtime->next_hop_self = defaults->next_hop_self;
+		runtime->add_paths = defaults->add_paths;
 		if (defaults->bandwidth_percent_configured)
 			runtime->bandwidth_percent =
 				defaults->bandwidth_percent;
@@ -499,6 +505,8 @@ void eigrp_intf_config_update(eigrp_intf_t *runtime,
 							    : EIGRP_INTF_ACTIVE;
 	runtime->split_horizon = config->split_horizon;
 	runtime->next_hop_self = config->next_hop_self;
+	if (config == defaults || config->add_paths_configured)
+		runtime->add_paths = config->add_paths;
 	if (config->bandwidth_percent_configured)
 		runtime->bandwidth_percent = config->bandwidth_percent;
 
@@ -1041,9 +1049,57 @@ eigrp_result_t eigrp_intf_nexthop_self_update(eigrp_operation_t operation,
 	if (context->runtime)
 		context->runtime->next_hop_self = enabled;
 	eigrp_intf_context_runtime_rebind(context);
+	if (instance)
+		eigrp_addpath_refresh(instance);
 	return EIGRP_RESULT_SUCCESS;
 }
 
+
+/* Set or reset the named-interface AddPath advertisement limit.
+ * Retained configuration is applied to interfaces created later, too.
+ */
+eigrp_result_t eigrp_intf_addpath_update(eigrp_operation_t operation,
+					 eigrp_intf_context_t *context,
+					 uint8_t count)
+{
+	eigrp_instance_t *instance =
+		context && context->runtime
+			? context->runtime->eigrp
+			: (context && context->address_family
+				   ? context->address_family->runtime
+				   : NULL);
+	uint8_t effective;
+
+	if (operation != EIGRP_SET && operation != EIGRP_RESET)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (operation == EIGRP_SET && (count < 1 || count > EIGRP_ADDPATH_MAX))
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (eigrp_instance_thread_dispatch_needed(instance))
+		return eigrp_intf_message_dispatch(EIGRP_INTF_MESSAGE_ADDPATH,
+						   operation, context, count);
+	if (!eigrp_intf_context_valid(context))
+		return EIGRP_RESULT_NOT_FOUND;
+	effective = operation == EIGRP_SET ? count : 0;
+	if (context->config) {
+		context->config->add_paths = effective;
+		context->config->add_paths_configured = operation == EIGRP_SET;
+	}
+	if (context->runtime) {
+		/* An explicit per-interface reset inherits the AF default. */
+		const eigrp_intf_config_t *defaults =
+			eigrp_intf_effective_default(context->runtime);
+		if (operation == EIGRP_RESET && defaults
+		    && context->config != defaults)
+			effective = defaults->add_paths;
+		context->runtime->add_paths = effective;
+	}
+	eigrp_intf_context_runtime_rebind(context);
+	/* This includes changes through af-interface default, which may rebind
+	 * several live interfaces without supplying context->runtime. */
+	if (instance)
+		eigrp_addpath_refresh(instance);
+	return EIGRP_RESULT_SUCCESS;
+}
 
 /*
  * Syntax:
@@ -1393,6 +1449,10 @@ static eigrp_result_t eigrp_intf_message_process(eigrp_instance_t *eigrp,
 	case EIGRP_INTF_MESSAGE_NEXTHOP_SELF:
 		return eigrp_intf_nexthop_self_update(message->operation,
 						      message->context);
+	case EIGRP_INTF_MESSAGE_ADDPATH:
+		return eigrp_intf_addpath_update(message->operation,
+						 message->context,
+						 (uint8_t)message->value);
 	case EIGRP_INTF_MESSAGE_SPLIT_HORIZON:
 		return eigrp_intf_split_horizon_update(message->operation,
 						       message->context);

@@ -1435,6 +1435,48 @@ eigrpd_named_af_interface_next_hop_modify(struct nb_cb_modify_args *args)
 }
 
 
+/* FRR normalizes the YANG AddPath limit and delegates runtime ownership. */
+static int
+eigrpd_named_af_interface_add_paths_modify(struct nb_cb_modify_args *args)
+{
+	const char *name, *vrf, *interface_name;
+	eigrp_afi_t afi;
+	eigrp_intf_context_t context;
+	eigrp_result_t result;
+	uint16_t asn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	if (!eigrpd_named_af_interface_context(args->dnode, true, &name, &afi,
+					       &vrf, &asn, &interface_name)
+	    || !eigrpd_named_interface_context_resolve(
+		    name, afi, vrf, asn, interface_name, &context))
+		return NB_ERR_INCONSISTENCY;
+	result = eigrp_intf_addpath_update(
+		EIGRP_SET, &context, yang_dnode_get_uint8(args->dnode, NULL));
+	return eigrpd_named_config_result(result, false);
+}
+
+static int
+eigrpd_named_af_interface_add_paths_destroy(struct nb_cb_destroy_args *args)
+{
+	const char *name, *vrf, *interface_name;
+	eigrp_afi_t afi;
+	eigrp_intf_context_t context;
+	eigrp_result_t result;
+	uint16_t asn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	if (!eigrpd_named_af_interface_context(args->dnode, true, &name, &afi,
+					       &vrf, &asn, &interface_name)
+	    || !eigrpd_named_interface_context_resolve(
+		    name, afi, vrf, asn, interface_name, &context))
+		return NB_ERR_INCONSISTENCY;
+	result = eigrp_intf_addpath_update(EIGRP_RESET, &context, 0);
+	return eigrpd_named_config_result(result, false);
+}
+
 /*
  * XPath: /frr-eigrpd:eigrpd/named/address-family/af-interface/split-horizon
  * Description:
@@ -4781,6 +4823,14 @@ const struct frr_yang_module_info frr_eigrpd_info = {
 			.cbs = {
 				.modify = eigrpd_named_af_interface_next_hop_modify,
 				.cli_show = eigrp_cli_named_show_af_interface_next_hop_self,
+			}
+		},
+		{
+			.xpath = "/frr-eigrpd:eigrpd/named/address-family/af-interface/add-paths",
+			.cbs = {
+				.modify = eigrpd_named_af_interface_add_paths_modify,
+				.destroy = eigrpd_named_af_interface_add_paths_destroy,
+				.cli_show = eigrp_cli_named_show_af_interface_add_paths,
 			}
 		},
 		{

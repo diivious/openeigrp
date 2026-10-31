@@ -110,12 +110,12 @@ static bool eigrp_tlv2_addr_is_zero(const eigrp_instance_t *eigrp,
 	return memcmp(&address->ip, zero, address_bytes) == 0;
 }
 
-/* Until AddPath has an independent path lifecycle, treat extended metric
- * attributes as opaque.  Validate the framing, but do not apply additional
- * path data to the primary route descriptor.
- */
-static uint16_t eigrp_tlv2_extended_decode(eigrp_stream_t *pkt,
-					   uint16_t attr_len)
+/* TLV2 owns extended-attribute framing; the AF owns AddPath payloads. */
+#define EIGRP_TLV2_EXTATTR_ADDPATH 0x07
+static uint16_t eigrp_tlv2_extended_decode(eigrp_instance_t *eigrp,
+					   eigrp_stream_t *pkt,
+					   eigrp_route_descriptor_t *route,
+					   uint16_t attr_len, bool external)
 {
 	size_t attr_end;
 
@@ -126,26 +126,47 @@ static uint16_t eigrp_tlv2_extended_decode(eigrp_stream_t *pkt,
 
 	attr_end = eigrp_stream_get_getp(pkt) + attr_len;
 	while (eigrp_stream_get_getp(pkt) < attr_end) {
-		uint8_t words;
+		uint8_t opcode, words;
 		uint16_t data_len;
+		size_t data_end;
 
 		if (attr_end - eigrp_stream_get_getp(pkt)
 		    < EIGRP_TLV2_EXTATTR_HEADER_SIZE)
 			return UINT16_MAX;
-		(void)eigrp_stream_getc(pkt); /* attribute opcode */
+		opcode = eigrp_stream_getc(pkt);
 		words = eigrp_stream_getc(pkt);
 		data_len = (uint16_t)words * 2U;
 		if (data_len > attr_end - eigrp_stream_get_getp(pkt))
 			return UINT16_MAX;
-		eigrp_stream_set_getp(pkt,
-				      eigrp_stream_get_getp(pkt) + data_len);
-	}
+		data_end = eigrp_stream_get_getp(pkt) + data_len;
+		if (opcode == EIGRP_TLV2_EXTATTR_ADDPATH) {
+			eigrp_addpath_t *path;
+			uint16_t decoded;
 
+			if (route->addpath_count >= EIGRP_ADDPATH_MAX
+			    || !eigrp->af_vectors.addpath_decode)
+				return UINT16_MAX;
+			path = &route->addpaths[route->addpath_count];
+			/* Bound the AF decoder to this attribute, not the
+			 * entire TLV. */
+			size_t tlv_end = eigrp_stream_get_endp(pkt);
+			eigrp_stream_set_endp(pkt, data_end);
+			decoded = eigrp->af_vectors.addpath_decode(pkt, path,
+								   external);
+			eigrp_stream_set_endp(pkt, tlv_end);
+			if (decoded != data_len || !decoded)
+				return UINT16_MAX;
+			route->addpath_count++;
+		}
+		eigrp_stream_set_getp(pkt, data_end);
+	}
 	return attr_len;
 }
 
-static uint16_t eigrp_tlv2_metric_decode(eigrp_stream_t *pkt,
-					 eigrp_route_descriptor_t *route)
+static uint16_t eigrp_tlv2_metric_decode(eigrp_instance_t *eigrp,
+					 eigrp_stream_t *pkt,
+					 eigrp_route_descriptor_t *route,
+					 bool external)
 {
 	eigrp_metrics_t *metric = &route->metric;
 	uint8_t attr_words;
@@ -179,24 +200,30 @@ static uint16_t eigrp_tlv2_metric_decode(eigrp_stream_t *pkt,
 		metric->bandwidth = EIGRP_MAX_METRIC;
 
 	attr_len = (uint16_t)attr_words * 2U;
-	decoded = eigrp_tlv2_extended_decode(pkt, attr_len);
+	decoded = eigrp_tlv2_extended_decode(eigrp, pkt, route, attr_len,
+					     external);
 	if (decoded == UINT16_MAX)
 		return 0;
 
 	return EIGRP_TLV2_METRIC_SIZE + decoded;
 }
 
-/* Cisco IOS XE encodes the 32-bit administrative tag between AS and
- * protocol metric in the multiprotocol exterior for both address families.
- * An AddPath encoder is intentionally absent until multi-path ownership and
- * capability negotiation are implemented.
- */
-static uint16_t eigrp_tlv2_metric_encode(eigrp_stream_t *pkt,
-					 eigrp_route_descriptor_t *route)
+/* The common codec owns the extended-attribute header and word count. */
+static uint16_t eigrp_tlv2_metric_encode(eigrp_instance_t *eigrp,
+					 eigrp_stream_t *pkt,
+					 eigrp_route_descriptor_t *route,
+					 bool external)
 {
 	eigrp_metrics_t *metric = &route->metric;
+	size_t attr_offset = eigrp_stream_get_endp(pkt);
+	size_t attr_start, attr_bytes;
+	uint8_t count = route->metric.delay == EIGRP_MAX_METRIC
+				? 0
+				: route->addpath_count;
 
-	eigrp_stream_putc(pkt, 0); /* no optional extended metric attributes */
+	if (count > EIGRP_ADDPATH_MAX)
+		return 0;
+	eigrp_stream_putc(pkt, 0); /* total attribute words, patched below */
 	eigrp_stream_putc(pkt, metric->tag);
 	eigrp_stream_putc(pkt, metric->reliability);
 	eigrp_stream_putc(pkt, metric->load);
@@ -213,7 +240,27 @@ static uint16_t eigrp_tlv2_metric_encode(eigrp_stream_t *pkt,
 	eigrp_stream_putw(pkt, 0);
 	eigrp_stream_putw(pkt, metric->flags);
 
-	return EIGRP_TLV2_METRIC_SIZE;
+	attr_start = eigrp_stream_get_endp(pkt);
+	for (uint8_t i = 0; i < count; i++) {
+		uint16_t size;
+		size_t offset_pos;
+
+		if (!eigrp->af_vectors.addpath_encode)
+			return 0;
+		eigrp_stream_putc(pkt, EIGRP_TLV2_EXTATTR_ADDPATH);
+		offset_pos = eigrp_stream_get_endp(pkt);
+		eigrp_stream_putc(pkt, 0);
+		size = eigrp->af_vectors.addpath_encode(
+			pkt, &route->addpaths[i], external);
+		if (!size || (size & 1U) || size > 254U)
+			return 0;
+		pkt->data[offset_pos] = (uint8_t)(size / 2U);
+	}
+	attr_bytes = eigrp_stream_get_endp(pkt) - attr_start;
+	if ((attr_bytes & 1U) || attr_bytes > 510U)
+		return 0;
+	pkt->data[attr_offset] = (uint8_t)(attr_bytes / 2U);
+	return EIGRP_TLV2_METRIC_SIZE + attr_bytes;
 }
 
 /* Cisco IOS XE tagged multiprotocol exterior; one layout for IPv4 and IPv6. */
@@ -377,7 +424,7 @@ static eigrp_route_descriptor_t *eigrp_tlv2_decoder(eigrp_instance_t *eigrp,
 			       : eigrp->af_vectors.classic_internal_tlv_type;
 	route->extdata.orig = rid;
 
-	decoded = eigrp_tlv2_metric_decode(pkt, route);
+	decoded = eigrp_tlv2_metric_decode(eigrp, pkt, route, external);
 	if (!decoded)
 		goto malformed;
 	bytes += decoded;
@@ -408,6 +455,9 @@ static eigrp_route_descriptor_t *eigrp_tlv2_decoder(eigrp_instance_t *eigrp,
 
 	if (eigrp_tlv2_addr_is_zero(eigrp, &route->nexthop))
 		route->nexthop = nbr->src;
+	for (uint8_t i = 0; i < route->addpath_count; i++)
+		if (eigrp_tlv2_addr_is_zero(eigrp, &route->addpaths[i].nexthop))
+			route->addpaths[i].nexthop = nbr->src;
 
 	if (bytes != length)
 		goto malformed;
@@ -471,7 +521,8 @@ static uint16_t eigrp_tlv2_encoder(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	eigrp_stream_putw(pkt, eigrp->af_vectors.multiprotocol_afi);
 	eigrp_stream_putl(pkt, eigrp_tlv2_router_id_host(eigrp));
 
-	encoded = eigrp_tlv2_metric_encode(pkt, route);
+	encoded = eigrp_tlv2_metric_encode(eigrp, pkt, route,
+					   type == EIGRP_TLV_MP_EXT);
 	if (!encoded) {
 		eigrp_stream_set_endp(pkt, tlv_start);
 		return 0;

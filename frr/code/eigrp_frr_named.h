@@ -53,6 +53,8 @@ extern void eigrp_cli_named_show_af_interface_keychain(
 	struct vty *vty, const struct lyd_node *dnode, bool show_defaults);
 extern void eigrp_cli_named_show_af_interface_next_hop_self(
 	struct vty *vty, const struct lyd_node *dnode, bool show_defaults);
+extern void eigrp_cli_named_show_af_interface_add_paths(
+	struct vty *vty, const struct lyd_node *dnode, bool show_defaults);
 extern void eigrp_cli_named_show_af_interface_split_horizon(
 	struct vty *vty, const struct lyd_node *dnode, bool show_defaults);
 extern void eigrp_cli_named_show_af_interface_summary(

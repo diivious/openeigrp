@@ -1,0 +1,40 @@
+schema: eigrp-uut-topology/v1
+segments:
+  hub-r2: {}
+  hub-r3: {}
+  r2-origin: {}
+  r3-origin: {}
+  hub-client: {}
+routers:
+  hub:
+    asn: 4453
+    router_id: 10.255.0.1
+    interfaces:
+      eth12: {segment: hub-r2, ipv4: 10.12.0.1/24}
+      eth13: {segment: hub-r3, ipv4: 10.13.0.1/24}
+      eth15: {segment: hub-client, ipv4: 10.15.0.1/24, add_paths: 2, next_hop_self: false}
+  r2:
+    asn: 4453
+    router_id: 10.255.0.2
+    interfaces:
+      eth21: {segment: hub-r2, ipv4: 10.12.0.2/24}
+      eth24: {segment: r2-origin, ipv4: 10.24.0.2/24}
+  r3:
+    asn: 4453
+    router_id: 10.255.0.3
+    interfaces:
+      eth31: {segment: hub-r3, ipv4: 10.13.0.3/24}
+      eth34: {segment: r3-origin, ipv4: 10.34.0.3/24}
+  origin:
+    asn: 4453
+    router_id: 10.255.0.4
+    interfaces:
+      eth42: {segment: r2-origin, ipv4: 10.24.0.4/24}
+      eth43: {segment: r3-origin, ipv4: 10.34.0.4/24}
+    attached_networks:
+      - {prefix: 10.44.0.1/24, interface: lan44}
+  client:
+    asn: 4453
+    router_id: 10.255.0.5
+    interfaces:
+      eth51: {segment: hub-client, ipv4: 10.15.0.5/24}
