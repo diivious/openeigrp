@@ -67,7 +67,7 @@ def main(argv=None):
         duplicate = report['objectives'].get('RTP-07/duplicate')
         if duplicate is not None:
             duplicate['reason'] = (
-                f'duplicate UPDATE reception and ACK-loss qualification ' 
+                f'duplicate UPDATE reception and ACK-loss qualification '
                 f'for {family} only')
     except engine.CapturePrerequisiteError as exc:
         report['error'] = str(exc)
