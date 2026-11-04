@@ -17,8 +17,7 @@ steps:
       expect:
         - route: {uut: r1, prefix: 10.30.0.0/16, table: rib, metric: 7336960}
         - route: {uut: r2, prefix: 10.30.2.0/24, table: topology, active: false, successors: 1}
-  - wait: 0.5
-  - validate-event: {uut: r2, contains: "Summary component: 10.30.2.0/24 metric 13762560"}
+  - validate-event: {uut: r2, contains: "Summary component: 10.30.2.0/24 metric 13762560", timeout: 5}
   - validate-event: {uut: r2, contains: "Summary metric: 10.30.0.0/16 1438720"}
   - validate-packet: {opcode: query, prefix: 10.30.1.0/24, source_uut: r2, destination_uut: r1, since: best-down-static, min: 0, max: 0, timeout: 1, event: any}
   - packet-mark: last-down-static

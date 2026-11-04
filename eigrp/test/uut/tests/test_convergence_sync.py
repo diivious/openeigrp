@@ -26,6 +26,20 @@ class SnapshotNode:
         return current
 
 
+# Use the same injected clock as the scenario framework, not a module-global
+# monkeypatch that can corrupt other tests or the subprocess clock domain.
+@pytest.fixture
+def clock():
+    return runner_module.ManualClock()
+
+
+def new_runner(clock, nodes):
+    runner = runner_module.Runner.__new__(runner_module.Runner)
+    runner.clock = clock
+    runner.nodes = nodes
+    return runner
+
+
 def state(count, present=False):
     return {
         "neighbors": [], "accounting": [], "source": [], "rib": [],
@@ -45,21 +59,20 @@ CONVERGENCE = {
 }
 
 
-def test_convergence_rejects_partial_cleanup_then_waits_for_stability():
+def test_convergence_rejects_partial_cleanup_then_waits_for_stability(clock):
     # Delayed retirement can report count=0 and still have a route, or vice
     # versa. One sample per UUT must satisfy every condition at once.
     node = SnapshotNode([state(1, True), state(0, True), state(1, False),
                          state(0, False)])
-    runner = runner_module.Runner.__new__(runner_module.Runner)
-    runner.nodes = {"r1": node}
+    runner = new_runner(clock, {"r1": node})
     runner.expect_convergence(CONVERGENCE)
     assert node.calls >= 6
+    assert clock.elapsed >= 0.3 + CONVERGENCE["stable_for"]
 
 
-def test_convergence_does_not_accept_transient_empty_topology():
+def test_convergence_does_not_accept_transient_empty_topology(clock):
     node = SnapshotNode([state(0, False), state(1, True)])
-    runner = runner_module.Runner.__new__(runner_module.Runner)
-    runner.nodes = {"r1": node}
+    runner = new_runner(clock, {"r1": node})
     with pytest.raises(AssertionError, match="count.*1"):
         runner.expect_convergence({**CONVERGENCE, "timeout": 0.35})
     assert node.calls >= 2
@@ -91,7 +104,7 @@ def test_live_redistribution_lockout_recovery():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_convergence_supports_process_and_neighbor_accounting():
+def test_convergence_supports_process_and_neighbor_accounting(clock):
     snapshot = state(0)
     snapshot["process_limit"] = {"state": 0, "restarts": 0, "count": 1,
                                   "restart_active": False, "reset_active": False,
@@ -101,8 +114,7 @@ def test_convergence_supports_process_and_neighbor_accounting():
                                 "restart_count": 0, "restart_active": False,
                                 "reset_active": False}]
     node = SnapshotNode([snapshot])
-    runner = runner_module.Runner.__new__(runner_module.Runner)
-    runner.nodes = {"r1": node}
+    runner = new_runner(clock, {"r1": node})
     check = {"timeout": 0.4, "stable_for": 0.1, "expect": [
         {"process-limit": {"uut": "r1", "state": 0, "count": 1}},
         {"accounting": {"uut": "r1", "neighbor": "10.0.0.2",
@@ -113,6 +125,7 @@ def test_convergence_supports_process_and_neighbor_accounting():
                                      "steps": [{"validate-convergence": check}]})
     runner.expect_convergence(check)
     assert node.calls >= 2
+    assert clock.elapsed >= check["stable_for"]
 
 
 @pytest.mark.parametrize("window", [
