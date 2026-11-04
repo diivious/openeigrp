@@ -14,17 +14,79 @@ source "$REMOTE_CFG"
 REMOTE_TARGET="${REMOTE_USER}@${REMOTE_HOST}"
 REMOTE_RUNS='/home/netlab-data/runs'
 REMOTE_MODE=''
+# Report transport failures before any tests are marked BLOCKED. Authentication
+# failures cannot reliably distinguish a bad username from a bad password.
+remote_transport_error() {
+    local phase="$1" rc="$2" detail="$3" reason
+    case "$detail" in
+        *'Could not resolve hostname'*|*'Name or service not known'*|\
+        *'nodename nor servname provided'*|*'Temporary failure in name resolution'*)
+            reason='hostname cannot be resolved' ;;
+        *'Connection refused'*) reason='SSH connection refused' ;;
+        *'Connection timed out'*|*'Operation timed out'*|*'Connection timeout'*)
+            reason='SSH connection timed out' ;;
+        *'Network is unreachable'*|*'No route to host'*)
+            reason='remote host is not reachable' ;;
+        *'REMOTE HOST IDENTIFICATION HAS CHANGED'*|*'Host key verification failed'*|\
+        *'POSSIBLE DNS SPOOFING'*)
+            reason='SSH host-key verification failed' ;;
+        *'Permission denied'*|*'Authentication failed'*|*'Too many authentication failures'*)
+            reason='SSH authentication failed (check username, password or key)' ;;
+        *)
+            if [[ "$phase" == password && "$rc" == 5 ]]; then
+                reason='SSH username or password rejected'
+            else
+                reason='SSH connection check failed'
+            fi ;;
+    esac
+    printf 'ERROR: Remote transport: %s\n' "$reason" >&2
+    printf '  Target: %s (port %s)\n  Config: %s\n' \
+        "$REMOTE_TARGET" "$REMOTE_SSH_PORT" "$REMOTE_CFG" >&2
+    [[ -z "$detail" ]] || printf '  SSH: %s\n' "$detail" >&2
+    printf '  Phase: %s (exit %s)\n' "$phase" "$rc" >&2
+}
+
 remote_transport_prepare() {
     local ssh_base=(ssh -p "$REMOTE_SSH_PORT" -o ConnectTimeout=8
         -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
         -o ServerAliveCountMax=3)
-    if "${ssh_base[@]}" -n -o BatchMode=yes "$REMOTE_TARGET" true >/dev/null 2>&1; then
-        REMOTE_MODE=key
-    elif command -v sshpass >/dev/null 2>&1; then
-        REMOTE_MODE=password
-    else
+    local key_error='' pass_error='' rc=0
+    REMOTE_MODE=''
+    if ! command -v ssh >/dev/null 2>&1; then
+        echo 'ERROR: Remote transport: ssh executable not found' >&2
         return 2
     fi
+    # Preserve SSH diagnostics. A DNS/network failure must never fall back
+    # to password authentication just because sshpass is installed.
+    if key_error="$("${ssh_base[@]}" -n -o BatchMode=yes \
+        "$REMOTE_TARGET" true 2>&1 >/dev/null)"; then
+        REMOTE_MODE=key
+        return 0
+    else
+        rc=$?
+    fi
+    case "$key_error" in
+        *'Permission denied'*|*'Authentication failed'*|*'Too many authentication failures'*) ;;
+        *) remote_transport_error key "$rc" "$key_error"; return 2 ;;
+    esac
+    if ! command -v sshpass >/dev/null 2>&1; then
+        remote_transport_error key "$rc" "$key_error"
+        echo '  Password fallback unavailable: install sshpass or configure SSH key access.' >&2
+        return 2
+    fi
+    # Verify credentials before declaring password mode usable. Do not put
+    # REMOTE_PASSWORD on the command line or include it in diagnostics.
+    if pass_error="$(SSHPASS="$REMOTE_PASSWORD" sshpass -e "${ssh_base[@]}" \
+        -n -o BatchMode=no -o NumberOfPasswordPrompts=1 \
+        -o PreferredAuthentications=password,keyboard-interactive \
+        -o PubkeyAuthentication=no "$REMOTE_TARGET" true 2>&1 >/dev/null)"; then
+        REMOTE_MODE=password
+        return 0
+    else
+        rc=$?
+    fi
+    remote_transport_error password "$rc" "$pass_error"
+    return 2
 }
 remote_ssh() {
     local tty=''
@@ -37,7 +99,9 @@ remote_ssh() {
         ssh -o BatchMode=yes "${args[@]}" "$REMOTE_TARGET" "$@"
     else
         SSHPASS="$REMOTE_PASSWORD" sshpass -e ssh "${args[@]}" \
-            -o NumberOfPasswordPrompts=1 "$REMOTE_TARGET" "$@"
+            -o NumberOfPasswordPrompts=1 -o BatchMode=no \
+            -o PreferredAuthentications=password,keyboard-interactive \
+            -o PubkeyAuthentication=no "$REMOTE_TARGET" "$@"
     fi
 }
 remote_new_stage() {
