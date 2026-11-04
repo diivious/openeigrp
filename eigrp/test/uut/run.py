@@ -13,6 +13,8 @@ OPCODES={1:"update",2:"request",3:"query",4:"reply",5:"hello",6:"ipxsap",7:"prob
 ROOT=Path(__file__).resolve().parents[3]; NODE=Path(__file__).with_name("eigrp-uut-node")
 sys.path.insert(0,str(ROOT/"unix"/"test"))
 from eigrp_wire import Broker
+sys.path.insert(0, str(Path(__file__).parent))
+from timing import Poller, MonotonicClock, ManualClock
 
 class SpecError(Exception): pass
 
@@ -355,6 +357,17 @@ def validate_scenario(s):
                         raise SpecError(f"{where}: reliability/load must be <= 255")
                 elif any(field in arg for field in ("bandwidth", "delay", "reliability", "load", "mtu")):
                     raise SpecError(f"{where}: reset must not specify metric values")
+            if op == "validate-event":
+                if not isinstance(arg["contains"], str) or not arg["contains"]:
+                    raise SpecError(f"{where}: contains must be a nonempty string")
+                if "min" in arg: _count(arg["min"], f"{where}.min")
+                if "max" in arg: _count(arg["max"], f"{where}.max")
+                if arg.get("min", 1) > arg.get("max", math.inf):
+                    raise SpecError(f"{where}: event count bounds are inverted")
+                timeout = arg.get("timeout", 3)
+                if (type(timeout) not in (int, float) or
+                        not math.isfinite(timeout) or timeout <= 0):
+                    raise SpecError(f"{where}: timeout must be finite and positive")
             if op == "validate-log":
                 if not isinstance(arg["contains"], str) or not arg["contains"]:
                     raise SpecError(f"{where}: contains must be a nonempty string")
@@ -582,7 +595,9 @@ class Node:
         except subprocess.TimeoutExpired: self.p.kill(); self.p.wait()
 
 class Runner:
-    def __init__(self,t,s,work,verbose=False,report=False): self.t=t; self.s=s; self.work=Path(work); self.verbose=verbose; self.report=report; self.report_emitted=False; self.nodes={}; self.broker=None; self.packet_marks={}; self.checkpoints=[]
+    def __init__(self,t,s,work,verbose=False,report=False,clock=None): self.t=t; self.s=s; self.work=Path(work); self.verbose=verbose; self.report=report; self.report_emitted=False; self.nodes={}; self.broker=None; self.packet_marks={}; self.checkpoints=[]; self.clock=clock if clock is not None else MonotonicClock()
+    def poller(self, interval=0.1):
+        return Poller(getattr(self, "clock", None), interval)
     def build(self): subprocess.run(["make","-C",str(Path(__file__).parent)],cwd=ROOT,check=True,stdout=None if self.verbose else subprocess.DEVNULL)
     def configs(self):
         owners={}; next_if=1; afi=topology_afi(self.t)
@@ -783,24 +798,21 @@ class Runner:
             seen.add(key)
         return False
     def expect(self,kind,e):
-        timeout=float(e.get("timeout",5)); deadline=time.monotonic()+timeout; okfn={"neighbor":self.neighbor_ok,"accounting":self.accounting_ok,"route":self.route_ok,"packet":self.packet_ok,"fault":self.fault_ok,"retransmission":self.retransmission_ok,"retry":self.retry_ok}[kind]
+        timeout=float(e.get("timeout",5))
+        okfn={"neighbor":self.neighbor_ok,"accounting":self.accounting_ok,
+              "route":self.route_ok,"packet":self.packet_ok,"fault":self.fault_ok,
+              "retransmission":self.retransmission_ok,"retry":self.retry_ok}[kind]
         if kind=="packet" and any(k in e for k in ("max","max_groups","max_per_group")):
             upper=dict(e); upper["min"]=0; upper.pop("min_groups",None)
-            while time.monotonic()<deadline:
-                if not okfn(upper): raise AssertionError(f"validate-{kind} upper bound failed: expected {e}")
-                time.sleep(.05)
+            if not self.poller(.05).throughout(lambda: okfn(upper), timeout):
+                raise AssertionError(f"validate-{kind} upper bound failed: expected {e}")
             if okfn(e): return
             raise AssertionError(f"validate-{kind} failed at end of observation window: expected {e}")
         if ((kind=="neighbor" and e.get("state", "up").lower() not in ("up", "present")) or kind=="accounting") and e.get("observe"):
-            deadline=time.monotonic()+float(e["observe"])
-            while time.monotonic()<deadline:
-                if not okfn(e):
-                    raise AssertionError(f"validate-neighbor failed during observation: expected {e}")
-                time.sleep(.1)
+            if not self.poller().throughout(lambda: okfn(e), float(e["observe"])):
+                raise AssertionError(f"validate-{kind} failed during observation: expected {e}")
             return
-        while time.monotonic()<deadline:
-            if okfn(e): return
-            time.sleep(.1)
+        if self.poller().until(lambda: okfn(e), timeout): return
         raise AssertionError(f"validate-{kind} failed: expected {e}")
     def step(self,op,arg):
         if self.verbose: print(f"-- {op}: {arg}",flush=True)
@@ -853,44 +865,41 @@ class Runner:
         elif op == "process-limit-clear":
             self.nodes[arg["uut"]].process_limit_clear()
         elif op == "validate-process-limit":
-            deadline = time.monotonic() + float(arg.get("timeout", 10))
             penalty_min = arg.get("penalty_min", 0)
             penalty_max = arg.get("penalty_max", 4294967295)
             if arg.get("penalty_after_age"):
                 node = self.nodes[arg["uut"]]
                 if node.process_limit_age_elapsed is None or node.process_limit_age_started is None:
                     raise RuntimeError("process penalty age was not recorded")
-            while True:
+            actual = {}
+            def check():
+                nonlocal actual, penalty_min, penalty_max
                 actual = self.nodes[arg["uut"]].state().get("process_limit", {})
                 if arg.get("penalty_after_age"):
-                    # The second violation occurs during asynchronous route
-                    # replay, not when PROCESS-LIMIT-AGE returns. Bound its
-                    # actual decay by the time elapsed through this STATE read.
+                    # The aging timestamp belongs to the live node's real-time
+                    # domain; do not mix it with the injectable scenario clock.
                     extra = max(0, int((time.monotonic() - node.process_limit_age_started) * 1000))
                     penalty_min, penalty_max = process_penalty_bounds(node.process_limit_age_elapsed, extra)
-                if (all(actual.get(k) == v for k,v in arg.items()
-                        if k not in ("uut", "timeout", "penalty_min", "penalty_max", "penalty_after_age"))
-                    and penalty_min <= actual.get("penalty", 0) <= penalty_max):
-                    break
-                if time.monotonic() >= deadline:
-                    raise RuntimeError(f"process limit state mismatch: {actual} expected {arg} penalty bounds [{penalty_min}, {penalty_max}]")
-                time.sleep(0.1)
+                return (all(actual.get(k) == v for k,v in arg.items()
+                            if k not in ("uut", "timeout", "penalty_min", "penalty_max", "penalty_after_age"))
+                        and penalty_min <= actual.get("penalty", 0) <= penalty_max)
+            if not self.poller().until(check, float(arg.get("timeout", 10))):
+                raise RuntimeError(f"process limit state mismatch: {actual} expected {arg} penalty bounds [{penalty_min}, {penalty_max}]")
         elif op == "redist-limit-expire":
             self.nodes[arg["uut"]].redist_limit_expire()
         elif op == "redist-limit-clear":
             self.nodes[arg["uut"]].redist_limit_clear()
         elif op == "validate-redist-limit":
-            deadline = time.monotonic() + float(arg.get("timeout", 10))
-            while True:
+            actual = {}
+            def check():
+                nonlocal actual
                 actual = self.nodes[arg["uut"]].state().get("redist_limit", {})
-                if (all(actual.get(k) == v for k,v in arg.items()
-                        if k not in ("uut", "timeout", "penalty_min", "penalty_max"))
-                    and actual.get("penalty", 0) >= arg.get("penalty_min", 0)
-                    and actual.get("penalty", 0) <= arg.get("penalty_max", 4294967295)):
-                    break
-                if time.monotonic() >= deadline:
-                    raise RuntimeError(f"redistribution limit state mismatch: {actual} expected {arg}")
-                time.sleep(0.1)
+                return (all(actual.get(k) == v for k,v in arg.items()
+                            if k not in ("uut", "timeout", "penalty_min", "penalty_max"))
+                        and arg.get("penalty_min", 0) <= actual.get("penalty", 0)
+                        <= arg.get("penalty_max", 4294967295))
+            if not self.poller().until(check, float(arg.get("timeout", 10))):
+                raise RuntimeError(f"redistribution limit state mismatch: {actual} expected {arg}")
         elif op in ("source-route-add", "source-route-remove"):
             prefix = str(ipaddress.ip_network(arg["prefix"], strict=False))
             self.nodes[arg["uut"]].source_route_change(
@@ -921,15 +930,21 @@ class Runner:
         elif op=="validate-retry": self.expect("retry",arg)
         elif op=="validate-log":
             node=self.nodes[arg["uut"]]
-            deadline=time.monotonic()+float(arg.get("timeout",3))
-            while True:
-                matching=[line for line in list(node.stderr) if arg["contains"] in line]
-                if len(matching)>=arg.get("min",1): break
-                if time.monotonic()>=deadline:
-                    raise AssertionError(f"validate-log failed: {arg}; stderr={list(node.stderr)}")
-                time.sleep(.05)
+            def matched():
+                return sum(arg["contains"] in line for line in list(node.stderr)) >= arg.get("min",1)
+            if not self.poller(.05).until(matched, float(arg.get("timeout",3))):
+                raise AssertionError(f"validate-log failed: {arg}; stderr={list(node.stderr)}")
         elif op=="validate-event":
-            if not self.event_ok(arg): raise AssertionError(f"validate-event failed: {arg}")
+            timeout = float(arg.get("timeout", 3))
+            if "max" in arg:
+                upper = dict(arg)
+                upper["min"] = 0
+                if not self.poller(.05).throughout(lambda: self.event_ok(upper), timeout):
+                    raise AssertionError(f"validate-event upper bound failed: {arg}")
+                if self.event_ok(arg): return
+                raise AssertionError(f"validate-event missing after observation: {arg}")
+            if not self.poller(.05).until(lambda: self.event_ok(arg), timeout):
+                raise AssertionError(f"validate-event timed out: {arg}")
         elif op=="validate-convergence":
             self.expect_convergence(arg)
 
@@ -942,17 +957,13 @@ class Runner:
         """
         timeout = float(arg.get("timeout", 10))
         stable_for = float(arg.get("stable_for", 0))
-        deadline = time.monotonic() + timeout
-        stable_since = None
         expected = [(kind, value) for item in arg["expect"]
                     for kind, value in item.items()]
         last_unmet = []
         last_limits = {}
         last_routes = {}
-        while True:
-            now = time.monotonic()
-            if now >= deadline:
-                break
+        def check():
+            nonlocal last_unmet, last_limits, last_routes
             # STATE is an AF-thread snapshot, not separate reads for each
             # assertion. The same router is sampled only once per attempt.
             snapshots = {}
@@ -983,14 +994,9 @@ class Runner:
                 if not ok:
                     unmet.append({kind: value})
             last_unmet = unmet
-            if not unmet:
-                if stable_since is None:
-                    stable_since = time.monotonic()
-                if time.monotonic() - stable_since >= stable_for:
-                    return
-            else:
-                stable_since = None
-            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+            return not unmet
+        if self.poller().until(check, timeout, stable_for):
+            return
         reason = "unmet predicates" if last_unmet else "stability window not reached"
         raise AssertionError(f"validate-convergence timed out (stable_for={stable_for}, "
                              f"reason={reason}): unmet={last_unmet}; "

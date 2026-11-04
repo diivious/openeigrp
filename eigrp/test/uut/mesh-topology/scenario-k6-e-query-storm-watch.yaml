@@ -57,10 +57,42 @@ steps:
     - route: {uut: r4, prefix: 10.12.0.0/24, table: topology, active: false, successors: 1}
     - route: {uut: r5, prefix: 10.12.0.0/24, table: topology, active: false, successors: 1}
     - route: {uut: r6, prefix: 10.12.0.0/24, table: topology, active: false, successors: 1}
-# The route/neighbor state can converge before the reliable startup UPDATE
-# queues are empty.  Start the storm-watch observation from a quiescent
-# topology so delayed startup traffic cannot overlap the injected failure.
-- wait: 1
+# Wait for every neighbor queue in the six-router mesh, not just the hub.
+# A fixed settling delay could overlap a late startup reliable UPDATE.
+- validate-convergence:
+    timeout: 12
+    stable_for: 0.6
+    expect:
+    - neighbor: {uut: r1, neighbor: 10.12.0.2, interface: eth12, state: up, reliable_q: 0}
+    - neighbor: {uut: r2, neighbor: 10.12.0.1, interface: eth21, state: up, reliable_q: 0}
+    - neighbor: {uut: r1, neighbor: 10.13.0.3, interface: eth13, state: up, reliable_q: 0}
+    - neighbor: {uut: r3, neighbor: 10.13.0.1, interface: eth31, state: up, reliable_q: 0}
+    - neighbor: {uut: r1, neighbor: 10.14.0.4, interface: eth14, state: up, reliable_q: 0}
+    - neighbor: {uut: r4, neighbor: 10.14.0.1, interface: eth41, state: up, reliable_q: 0}
+    - neighbor: {uut: r1, neighbor: 10.15.0.5, interface: eth15, state: up, reliable_q: 0}
+    - neighbor: {uut: r5, neighbor: 10.15.0.1, interface: eth51, state: up, reliable_q: 0}
+    - neighbor: {uut: r1, neighbor: 10.16.0.6, interface: eth16, state: up, reliable_q: 0}
+    - neighbor: {uut: r6, neighbor: 10.16.0.1, interface: eth61, state: up, reliable_q: 0}
+    - neighbor: {uut: r2, neighbor: 10.23.0.3, interface: eth23, state: up, reliable_q: 0}
+    - neighbor: {uut: r3, neighbor: 10.23.0.2, interface: eth32, state: up, reliable_q: 0}
+    - neighbor: {uut: r2, neighbor: 10.24.0.4, interface: eth24, state: up, reliable_q: 0}
+    - neighbor: {uut: r4, neighbor: 10.24.0.2, interface: eth42, state: up, reliable_q: 0}
+    - neighbor: {uut: r2, neighbor: 10.25.0.5, interface: eth25, state: up, reliable_q: 0}
+    - neighbor: {uut: r5, neighbor: 10.25.0.2, interface: eth52, state: up, reliable_q: 0}
+    - neighbor: {uut: r2, neighbor: 10.26.0.6, interface: eth26, state: up, reliable_q: 0}
+    - neighbor: {uut: r6, neighbor: 10.26.0.2, interface: eth62, state: up, reliable_q: 0}
+    - neighbor: {uut: r3, neighbor: 10.34.0.4, interface: eth34, state: up, reliable_q: 0}
+    - neighbor: {uut: r4, neighbor: 10.34.0.3, interface: eth43, state: up, reliable_q: 0}
+    - neighbor: {uut: r3, neighbor: 10.35.0.5, interface: eth35, state: up, reliable_q: 0}
+    - neighbor: {uut: r5, neighbor: 10.35.0.3, interface: eth53, state: up, reliable_q: 0}
+    - neighbor: {uut: r3, neighbor: 10.36.0.6, interface: eth36, state: up, reliable_q: 0}
+    - neighbor: {uut: r6, neighbor: 10.36.0.3, interface: eth63, state: up, reliable_q: 0}
+    - neighbor: {uut: r4, neighbor: 10.45.0.5, interface: eth45, state: up, reliable_q: 0}
+    - neighbor: {uut: r5, neighbor: 10.45.0.4, interface: eth54, state: up, reliable_q: 0}
+    - neighbor: {uut: r4, neighbor: 10.46.0.6, interface: eth46, state: up, reliable_q: 0}
+    - neighbor: {uut: r6, neighbor: 10.46.0.4, interface: eth64, state: up, reliable_q: 0}
+    - neighbor: {uut: r5, neighbor: 10.56.0.6, interface: eth56, state: up, reliable_q: 0}
+    - neighbor: {uut: r6, neighbor: 10.56.0.5, interface: eth65, state: up, reliable_q: 0}
 - packet-mark: link-prefix-loss
 - links-down:
   - uut: r1
