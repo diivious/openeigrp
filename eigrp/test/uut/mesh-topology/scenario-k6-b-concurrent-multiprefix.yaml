@@ -201,6 +201,15 @@ steps:
     - neighbor: {uut: r5, neighbor: 10.56.0.6, interface: eth56, state: up}
     - neighbor: {uut: r6, neighbor: 10.56.0.5, interface: eth65, state: up}
 
+# Prevent immediate REPLY delivery from hiding a correct transient ACTIVE
+# state from the runner's topology polling. The release still exercises normal
+# DUAL REPLY processing and the existing convergence/packet assertions.
+- fault-add:
+    name: hold-r3-replies
+    action: drop
+    source_uut: r3
+    destination_uut: r1
+    opcode: reply
 - packet-mark: multi-prefix-loss
 - links-down:
   - uut: r1
@@ -225,6 +234,11 @@ steps:
         prefix: 10.127.0.0/24
         table: topology
         active: true
+- validate-fault:
+    name: hold-r3-replies
+    hits: 1
+    timeout: 2
+- fault-remove: hold-r3-replies
 - validate-convergence:
     timeout: 15
     expect:
