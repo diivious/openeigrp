@@ -40,6 +40,8 @@ static int eigrp_route_descriptor_cmp(eigrp_route_descriptor_t *,
 				      eigrp_route_descriptor_t *);
 static bool eigrp_topology_prefix_detach(eigrp_instance_t *,
 					 eigrp_prefix_descriptor_t *);
+static void eigrp_topology_prefix_count_sync(eigrp_instance_t *,
+					     eigrp_prefix_descriptor_t *);
 
 static bool eigrp_topology_table_key(const eigrp_prefix_t *source,
 				     eigrp_prefix_t *destination)
@@ -425,8 +427,70 @@ static void eigrp_topology_nbr_release(eigrp_nbr_t *nbr)
 		free(nbr);
 }
 
-/* Insert once and account only after storage succeeds.  A route moved between
- * metric/class queues is not a newly owned neighbor destination. */
+/* A retained QUERY path or a withdrawing ACTIVE destination is not a
+ * usable prefix. Inspect both route classes: route_read() can return an
+ * unelected internal candidate while an external successor is still valid.
+ */
+static bool eigrp_topology_prefix_reachable(eigrp_prefix_descriptor_t *prefix)
+{
+	eigrp_topology_route_iterator_t iterator;
+	eigrp_route_descriptor_t *route;
+
+	/* Locally connected prefixes can retain an infinite destination D
+	 * while their elected route and FD are finite. */
+	if (!prefix || prefix->fdistance == EIGRP_MAX_METRIC)
+		return false;
+	for (route = eigrp_topology_route_iterator_first(prefix, &iterator);
+	     route; route = eigrp_topology_route_iterator_next(&iterator)) {
+		if ((route->flags
+		     & (EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
+			| EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG))
+		    && !(route->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)
+		    && route->distance != EIGRP_MAX_METRIC
+		    && route->metric.delay != EIGRP_MAX_METRIC)
+			return true;
+	}
+	return false;
+}
+
+/* Keep the admission count O(1) across large UPDATE bursts. Ingress and DUAL
+ * modify metrics, flags, and table ownership at distinct lifecycle points.
+ * A first limit check seeds the count from an existing topology once; all
+ * subsequent transitions update it at those mutation sites. */
+static void eigrp_topology_prefix_count_sync(eigrp_instance_t *runtime,
+					     eigrp_prefix_descriptor_t *prefix)
+{
+	bool reachable;
+
+	if (!runtime || !runtime->topology_reachable_count_valid || !prefix
+	    || !prefix->table_node || prefix->table_node->info != prefix)
+		return;
+	reachable = eigrp_topology_prefix_reachable(prefix);
+	if (reachable == prefix->limit_counted)
+		return;
+	prefix->limit_counted = reachable;
+	if (reachable) {
+		if (runtime->topology_reachable_count < UINT32_MAX)
+			runtime->topology_reachable_count++;
+	} else if (runtime->topology_reachable_count) {
+		runtime->topology_reachable_count--;
+	}
+}
+
+static void
+eigrp_topology_prefix_count_remove(eigrp_instance_t *runtime,
+				   eigrp_prefix_descriptor_t *prefix)
+{
+	if (!runtime || !prefix || !prefix->limit_counted)
+		return;
+	prefix->limit_counted = false;
+	if (runtime->topology_reachable_count_valid
+	    && runtime->topology_reachable_count)
+		runtime->topology_reachable_count--;
+}
+
+/* Insert once and account only after storage succeeds. A route moved
+ * between metric/class queues is not a newly owned neighbor destination. */
 bool eigrp_topology_route_insert(eigrp_instance_t *eigrp,
 				 eigrp_prefix_descriptor_t *prefix,
 				 eigrp_route_descriptor_t *route,
@@ -444,6 +508,7 @@ bool eigrp_topology_route_insert(eigrp_instance_t *eigrp,
 	    && route->adv_router != eigrp->neighbor_self
 	    && route->adv_router->limit_prefix_count_valid)
 		route->adv_router->limit_prefix_count++;
+	eigrp_topology_prefix_count_sync(eigrp, prefix);
 	return true;
 }
 
@@ -505,6 +570,7 @@ void eigrp_route_descriptor_add(eigrp_instance_t *eigrp,
 						EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG;
 			}
 		}
+		eigrp_topology_prefix_count_sync(eigrp, node);
 	}
 }
 
@@ -690,6 +756,7 @@ void eigrp_prefix_descriptor_delete(eigrp_instance_t *eigrp,
 	}
 
 	eigrp_list_delete_data(eigrp->topology_changes, pe);
+	eigrp_topology_prefix_count_remove(eigrp, pe);
 
 	for (unsigned int q = 0; q < 2; q++) {
 		eigrp_list_t *routes = eigrp_topology_route_queue(pe, q);
@@ -755,6 +822,7 @@ void eigrp_route_descriptor_delete(eigrp_instance_t *eigrp,
 				&node->destination, rib_result, 0, 0, 0);
 		}
 		eigrp_topology_route_free(route);
+		eigrp_topology_prefix_count_sync(eigrp, node);
 	}
 }
 
@@ -1259,6 +1327,7 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 		return METRIC_SAME;
 	}
 
+	eigrp_topology_prefix_count_sync(eigrp, prefix);
 	return change;
 }
 
@@ -1362,6 +1431,7 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 				route->distance);
 		}
 	}
+	eigrp_topology_prefix_count_sync(eigrp, dest);
 }
 
 void eigrp_topology_multipath_update(eigrp_instance_t *eigrp)
@@ -1997,6 +2067,7 @@ static bool eigrp_topology_prefix_detach(eigrp_instance_t *eigrp,
 			eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
 			&prefix->destination, rib_result, 0, 0, 0);
 	}
+	eigrp_topology_prefix_count_remove(eigrp, prefix);
 	rn->info = NULL;
 	prefix->table_node = NULL;
 	eigrp_table_node_remove(eigrp->topology_table, rn);
@@ -2709,17 +2780,31 @@ static eigrp_result_t eigrp_topology_message_process(eigrp_instance_t *eigrp,
 	return EIGRP_RESULT_INVALID_ARGUMENT;
 }
 
-/* Every destination still present in the topology database counts, even
- * if QUERY-retained, poisoned, or awaiting deferred retirement. */
+/* Seed reachable-prefix accounting once, then update it at the topology
+ * mutation sites. Repeated admissions, including at a hard limit, are O(1). */
 static uint32_t eigrp_topology_prefix_count(eigrp_instance_t *runtime)
 {
+	eigrp_table_node_t *node;
+
 	if (!runtime || !runtime->topology_table)
 		return 0;
-	/* Topology publication sets node->info with node creation, and
-	 * retirement removes the node. The indexed table size is O(1). */
-	if (runtime->topology_table->size > UINT32_MAX)
-		return UINT32_MAX;
-	return (uint32_t)runtime->topology_table->size;
+	if (!runtime->topology_reachable_count_valid) {
+		runtime->topology_reachable_count = 0;
+		for (node = eigrp_table_first(runtime->topology_table); node;
+		     node = eigrp_table_next(node)) {
+			eigrp_prefix_descriptor_t *prefix = node->info;
+
+			if (!prefix)
+				continue;
+			prefix->limit_counted =
+				eigrp_topology_prefix_reachable(prefix);
+			if (prefix->limit_counted
+			    && runtime->topology_reachable_count < UINT32_MAX)
+				runtime->topology_reachable_count++;
+		}
+		runtime->topology_reachable_count_valid = true;
+	}
+	return runtime->topology_reachable_count;
 }
 
 bool eigrp_topology_prefix_admit(eigrp_instance_t *runtime,
@@ -2727,39 +2812,41 @@ bool eigrp_topology_prefix_admit(eigrp_instance_t *runtime,
 {
 	eigrp_af_config_t *af;
 	const eigrp_prefix_limit_t *limit;
+	eigrp_prefix_descriptor_t *existing;
+	uint32_t count;
 
 	if (!runtime || !prefix)
 		return false;
 	if (runtime->eigrp_pfxlimits_af_state)
 		return false;
-	/* Every retained topology destination consumes one prefix slot. */
-	if (eigrp_topology_table_lookup(runtime->topology_table, prefix))
+	/* A finite refresh of an already reachable destination adds no slot.
+	 * An unreachable QUERY placeholder must pass admission on UPDATE. */
+	existing = eigrp_topology_table_lookup(runtime->topology_table, prefix);
+	if (eigrp_topology_prefix_reachable(existing))
 		return true;
 	af = eigrp_af_config_runtime_read(runtime);
 	if (!af || !af->topology_maximum_prefix_configured)
 		return true;
 	limit = &af->topology_maximum_prefix;
-	{
-		uint32_t count = eigrp_topology_prefix_count(runtime);
-		if (eigrp_prefix_limit_threshold_crossed(limit, count))
-			eigrp_log(
-				EIGRP_LOG_WARNING,
-				"EIGRP topology maximum-prefix threshold reached (%u/%u)",
-				count + 1U, limit->maximum);
-		/* Process admission supports restart/reset/dampening policies.
-		 * The legacy basic-only admission helper would bypass hard
-		 * limits whenever any of those options was configured. */
-		if (!limit->warning_only && count >= limit->maximum) {
-			(void)eigrp_eventlog_msg_add(
-				runtime,
-				EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
-				prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_TOPOLOGY,
-				count + 1U, limit->maximum, 0);
-			eigrp_pfxlimits_prefix_exceeded(runtime, limit);
-			return false;
-		}
-		return true;
+	count = eigrp_topology_prefix_count(runtime);
+	if (eigrp_prefix_limit_threshold_crossed(limit, count))
+		eigrp_log(
+			EIGRP_LOG_WARNING,
+			"EIGRP topology maximum-prefix threshold reached (%u/%u)",
+			count + 1U, limit->maximum);
+	if (!limit->warning_only && count >= limit->maximum) {
+		(void)eigrp_eventlog_msg_add(
+			runtime, EIGRP_EVENTLOG_OPCODE_PREFIX_LIMIT_REJECT,
+			prefix, EIGRP_EVENTLOG_PREFIX_LIMIT_TOPOLOGY,
+			count == UINT32_MAX ? count : count + 1U,
+			limit->maximum, 0);
+		/* Cisco's default hard-limit policy suspends the entire AF even
+		 * when no explicit restart/reset/dampening options are
+		 * given. */
+		eigrp_pfxlimits_prefix_exceeded(runtime, limit);
+		return false;
 	}
+	return true;
 }
 
 eigrp_result_t

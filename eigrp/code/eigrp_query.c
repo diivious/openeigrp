@@ -94,7 +94,11 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 		}
 		return false;
 	}
-	if (!eigrp_nbr_route_admit(eigrp, nbr, &route->dest, &route->metric))
+	/* QUERY-only retention consumes a neighbor slot, but not a topology
+	 * reachable-prefix slot. Only a subsequent route-bearing UPDATE may
+	 * promote this observation and pass the AF maximum-prefix gate. */
+	if (eigrp_metric_calculate(eigrp, route->metric) == EIGRP_MAX_METRIC
+	    || !eigrp_nbr_prefix_admit(eigrp, nbr, &route->dest))
 		return false;
 
 	if (new_prefix) {

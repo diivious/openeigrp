@@ -151,6 +151,9 @@ struct eigrp_instance {
 	struct eigrp_network_runtime *networks; /* EIGRP runtime networks. */
 
 	eigrp_table_t *topology_table;
+	/* Reachable DUAL destinations, not retained topology descriptors. */
+	uint32_t topology_reachable_count;
+	bool topology_reachable_count_valid;
 	/* Topology maximum-prefix limit owned by this AF runtime. */
 	uint8_t eigrp_pfxlimits_af_state; /* 0 normal, 1 suspended, 2 locked. */
 	bool eigrp_pfxlimits_af_cleanup_pending;
@@ -565,6 +568,7 @@ typedef struct eigrp_prefix_descriptor {
 	/* Direct table ownership for O(1) detachment of retired destinations.
 	 */
 	eigrp_table_node_t *table_node;
+	bool limit_counted; /* Included in AF reachable-prefix accounting. */
 	bool retirement_queued; /* Once per packetizer work batch. */
 	eigrp_list_t *internal_routes, *external_routes, *rij;
 	eigrp_prefix_t destination;
