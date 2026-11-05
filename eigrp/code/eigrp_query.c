@@ -77,12 +77,23 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 	eigrp_route_descriptor_t *previous;
 	bool new_prefix = prefix == NULL;
 
-	if (!eigrp || !nbr || !route || !nbr->ei || !eigrp->topology_table
-	    || route->metric.delay == EIGRP_MAX_METRIC
+	if (!eigrp || !nbr || !route || !nbr->ei || !eigrp->topology_table)
+		return false;
+
+	previous = prefix ? eigrp_prefix_descriptor_lookup(prefix, nbr) : NULL;
+	if (route->metric.delay == EIGRP_MAX_METRIC
 	    || route->metric.delay == EIGRP_METRIC_MAX
 	    || eigrp_filter_prefix_update(eigrp, nbr->ei, EIGRP_FILTER_IN,
-					  &route->dest))
+					  &route->dest)) {
+		if (previous
+		    && (previous->flags
+			& EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)) {
+			eigrp_route_descriptor_delete(eigrp, prefix, previous);
+			eigrp_update_topology_table_prefix(
+				eigrp, eigrp->topology_table, prefix);
+		}
 		return false;
+	}
 	if (!eigrp_nbr_route_admit(eigrp, nbr, &route->dest, &route->metric))
 		return false;
 
@@ -106,8 +117,11 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 		prefix->reported_metric.delay = EIGRP_MAX_METRIC;
 	}
 
-	previous = eigrp_prefix_descriptor_lookup(prefix, nbr);
 	if (previous) {
+		/* A QUERY must not overwrite a path established by an UPDATE.
+		 */
+		if (!(previous->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG))
+			return false;
 		eigrp_fsm_action_message_t msg = {0};
 
 		previous->type = route->type;
@@ -130,6 +144,7 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 
 	route->adv_router = nbr;
 	route->prefix = prefix;
+	route->flags |= EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG;
 	route->reported_metric = route->metric;
 	route->reported_distance =
 		eigrp_metric_calculate(eigrp, route->reported_metric);

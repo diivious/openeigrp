@@ -25,6 +25,20 @@ eigrp_result_t eigrp_pfxlimits_state_clear(eigrp_instance_t *runtime)
 	(void)runtime;
 	return EIGRP_RESULT_SUCCESS;
 }
+eigrp_result_t eigrp_rib_route_del(eigrp_instance_t *eigrp,
+				   const eigrp_prefix_t *dest)
+{
+	(void)eigrp;
+	(void)dest;
+	return EIGRP_RESULT_SUCCESS;
+}
+void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *eigrp,
+					eigrp_prefix_descriptor_t *prefix)
+{
+	(void)eigrp;
+	/* There is no outstanding packet work in this focused fixture. */
+	eigrp_topology_prefix_free(prefix);
+}
 unsigned long term_debug_eigrp = 0;
 void eigrp_timer_cancel(eigrp_instance_t *eigrp, eigrp_timer_event_t **owner)
 {
@@ -191,7 +205,7 @@ int main(void)
 	assert(eigrp_prefix_descriptor_lookup(prefix, &nbr) == finite);
 	assert(prefix->internal_routes->count == 1
 	       && prefix->external_routes->count == 0);
-	assert(finite->flags == 0);
+	assert(finite->flags == EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG);
 	assert(eigrp_metrics_match(finite->reported_metric, advertised));
 	assert(finite->reported_distance
 	       == eigrp_metric_calculate(&eigrp, advertised));
@@ -199,7 +213,8 @@ int main(void)
 	       == (uint32_t)eigrp_metric_calculate(&eigrp,
 						   finite->total_metric));
 	assert(finite->distance < EIGRP_MAX_METRIC);
-	assert(eigrp_topology_route_select(prefix) == finite);
+	assert(eigrp_topology_route_select(prefix) == NULL);
+	assert(eigrp_topology_route_read(prefix) == NULL);
 
 	/* A second finite QUERY for the same destination must update the
 	 * retained neighbor metric without promoting it to a successor. */
@@ -214,7 +229,7 @@ int main(void)
 		assert(prefix->state == EIGRP_FSM_STATE_PASSIVE);
 		assert(prefix->distance == EIGRP_MAX_METRIC
 		       && prefix->fdistance == EIGRP_MAX_METRIC);
-		assert(finite->flags == 0
+		assert(finite->flags == EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG
 		       && prefix->internal_routes->count == 1);
 	}
 

@@ -835,22 +835,32 @@ int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 		route = eigrp_topology_route_read(prefix);
 
 	if (prefix->state == EIGRP_FSM_STATE_PASSIVE) {
-		if (!eigrp_metrics_match(prefix->reported_metric,
-					 route->total_metric)) {
+		eigrp_metrics_t metric = {0};
+		if (route)
+			metric = route->total_metric;
+		else
+			metric.delay = EIGRP_MAX_METRIC;
+		if (!eigrp_metrics_match(prefix->reported_metric, metric)) {
 			/* While PASSIVE, FD is the least distance observed
 			 * since the last ACTIVE -> PASSIVE transition.  Current
 			 * distance/RD may increase without moving that
 			 * feasibility anchor upward.
 			 */
-			prefix->distance = route->distance;
-			prefix->rdistance = route->distance;
-			if (route->distance < prefix->fdistance)
-				prefix->fdistance = route->distance;
-			prefix->reported_metric = route->total_metric;
+			prefix->distance =
+				route ? route->distance : EIGRP_MAX_METRIC;
+			prefix->rdistance = prefix->distance;
+			if (route) {
+				if (route->distance < prefix->fdistance)
+					prefix->fdistance = route->distance;
+			}
+			prefix->reported_metric = metric;
 			(void)eigrp_eventlog_msg_add(
 				eigrp, EIGRP_EVENTLOG_OPCODE_DUAL_METRIC_SET,
 				&prefix->destination, prefix->distance,
-				prefix->fdistance, route->reported_distance, 0);
+				prefix->fdistance,
+				route ? route->reported_distance
+				      : EIGRP_MAX_METRIC,
+				0);
 			prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 			eigrp_list_add(eigrp->topology_changes, prefix);
 		}

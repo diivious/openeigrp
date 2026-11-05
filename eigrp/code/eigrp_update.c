@@ -493,6 +493,28 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				}
 
 				if (topology_route) {
+					/* A poisoned UPDATE withdraws an
+					 * unelected QUERY observation without
+					 * entering DUAL. */
+					if (unreachable
+					    && (topology_route->flags
+						& EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)) {
+						eigrp_route_descriptor_delete(
+							eigrp, prefix,
+							topology_route);
+						eigrp_update_topology_table_prefix(
+							eigrp,
+							eigrp->topology_table,
+							prefix);
+						eigrp_topology_route_free(
+							received_route);
+						continue;
+					}
+					/* A finite UPDATE establishes a usable
+					 * path regardless of the earlier QUERY
+					 * metric. */
+					topology_route->flags &=
+						~EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG;
 					topology_route->type =
 						received_route->type;
 					topology_route->nexthop =

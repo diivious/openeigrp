@@ -123,6 +123,8 @@ enum metric_change { METRIC_DECREASE, METRIC_SAME, METRIC_INCREASE };
 #define EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG (1 << 1)
 #define EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG (1 << 2)
 #define EIGRP_ROUTE_DESCRIPTOR_EXTERNAL_FLAG (1 << 3)
+/* A finite QUERY observation is not evidence of a usable route. */
+#define EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG (1 << 4)
 
 /*EIGRP FSM state count, event count*/
 #define EIGRP_FSM_STATE_MAX 5

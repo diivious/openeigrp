@@ -334,6 +334,9 @@ eigrp_topology_route_read(eigrp_prefix_descriptor_t *prefix)
 	for (q = 0; q < 2; q++) {
 		eigrp_list_t *routes = eigrp_topology_route_queue(prefix, q);
 		for (EIGRP_LIST_ITERATE_RO(routes, node, route)) {
+			if (route->flags
+			    & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)
+				continue;
 			if (!fallback)
 				fallback = route;
 			if (route->distance != EIGRP_MAX_METRIC)
@@ -362,7 +365,9 @@ eigrp_topology_route_select(eigrp_prefix_descriptor_t *prefix)
 	for (q = 0; q < 2; q++) {
 		eigrp_list_t *routes = eigrp_topology_route_queue(prefix, q);
 		for (EIGRP_LIST_ITERATE_RO(routes, node, route)) {
-			if (route->distance == EIGRP_MAX_METRIC)
+			if (route->distance == EIGRP_MAX_METRIC
+			    || (route->flags
+				& EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG))
 				continue;
 			if (route->reported_distance >= prefix->fdistance)
 				continue;
@@ -1309,7 +1314,9 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 
 	for (EIGRP_LIST_ITERATE_RO(eligible, node, route)) {
 		uint32_t old_flags = route->flags;
-		bool feasible = route->reported_distance < dest->fdistance;
+		bool feasible =
+			!(route->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)
+			&& route->reported_distance < dest->fdistance;
 		bool within_variance =
 			route->distance != EIGRP_MAX_METRIC
 			&& (uint64_t)route->distance
@@ -1807,10 +1814,11 @@ void eigrp_topology_neighbor_down(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
 {
 	eigrp_prefix_descriptor_t *pe;
 	eigrp_route_descriptor_t *route;
-	eigrp_table_node_t *rn;
+	eigrp_table_node_t *rn, *next;
 
-	for (rn = eigrp_table_first(eigrp->topology_table); rn;
-	     rn = eigrp_table_next(rn)) {
+	/* The QUERY-only branch may detach and retire the current node. */
+	for (rn = eigrp_table_first(eigrp->topology_table); rn; rn = next) {
+		next = eigrp_table_next(rn);
 		pe = rn->info;
 
 		if (!pe)
@@ -1825,6 +1833,18 @@ void eigrp_topology_neighbor_down(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
 
 		route = eigrp_prefix_descriptor_lookup(pe, nbr);
 		if (route) {
+			/* No UPDATE ever made this QUERY observation usable.
+			 * Retire it without triggering successor election.
+			 * ACTIVE destinations still need the normal REPLY/RIJ
+			 * path. */
+			if (pe->state == EIGRP_FSM_STATE_PASSIVE
+			    && (route->flags
+				& EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)) {
+				eigrp_route_descriptor_delete(eigrp, pe, route);
+				eigrp_update_topology_table_prefix(
+					eigrp, eigrp->topology_table, pe);
+				continue;
+			}
 			eigrp_fsm_action_message_t msg = {0};
 
 			msg.metrics.delay = EIGRP_MAX_METRIC;

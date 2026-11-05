@@ -1,0 +1,42 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-kite.yaml
+name: QUERY-only path retention, withdrawal and recovery
+steps:
+  # Start R2 before the origin and deny only the target prefix so RTP
+  # initialization completes normally without a usable route at R2.
+  - start: r2
+  - inbound-filter-config: {uut: r2, prefix: 10.3.0.0/24, enabled: true}
+  - start: r3
+  - start: r1
+  - validate-convergence:
+      timeout: 7
+      stable_for: 0.2
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.12.0.2, interface: eth12}
+        - neighbor: {uut: r2, neighbor: 10.23.0.3, interface: eth23}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.13.0.3}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: path, present: false}
+  # Remove input filter before R1's DUAL computation reaches R2. R2
+  # learns only the finite QUERY observation and must not select it.
+  - inbound-filter-config: {uut: r2, prefix: 10.3.0.0/24, enabled: false}
+  - packet-mark: lose-source
+  - link-down: {uut: r3, interface: lan3}
+  - validate-packet: {source_uut: r1, destination_uut: r2, opcode: query, prefix: 10.3.0.0/24, since: lose-source, min: 1, timeout: 7, event: delivered}
+  - validate-packet: {source_uut: r2, destination_uut: r1, opcode: reply, prefix: 10.3.0.0/24, since: lose-source, min: 1, timeout: 7, event: delivered}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: topology, present: false}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: path, present: false}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, present: false}
+  - link-up: {uut: r3, interface: lan3}
+  - validate-convergence:
+      timeout: 10
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.13.0.3}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: rib, present: true}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: topology, successors: 1, active: false}
