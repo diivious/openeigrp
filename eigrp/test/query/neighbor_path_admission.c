@@ -30,6 +30,7 @@ void eigrp_reply_receive(eigrp_instance_t *, eigrp_nbr_t *,
 static eigrp_af_config_t policy;
 static eigrp_route_descriptor_t *incoming;
 static unsigned replies, acks, updates, rib_installs, rib_withdraws;
+static unsigned af_limit_incidents;
 static bool deny_inbound;
 static eigrp_instance_t runtime;
 static eigrp_nbr_t peer, self;
@@ -85,6 +86,7 @@ void eigrp_pfxlimits_prefix_exceeded(eigrp_instance_t *e,
 {
 	(void)e;
 	(void)l;
+	af_limit_incidents++;
 }
 void eigrp_eventlog_addr_from_legacy(eigrp_prefix_t *p, const eigrp_addr_t *a)
 {
@@ -303,6 +305,7 @@ static void start(bool warning_only)
 	       == EIGRP_RESULT_SUCCESS);
 	deny_inbound = false;
 	replies = acks = updates = rib_installs = rib_withdraws = 0;
+	af_limit_incidents = 0;
 }
 static void finish(void)
 {
@@ -439,6 +442,32 @@ static void filtered_reply_case(void)
 	assert(eigrp_prefix_descriptor_lookup(p, &peer));
 	finish();
 }
+/* A finite QUERY for an unknown destination is not an eligible UPDATE.
+ * Its QUERY-only path must not trip an AF hard maximum-prefix limit, but a
+ * later finite UPDATE for that retained destination must pass admission. */
+static void query_process_limit_case(void)
+{
+	eigrp_prefix_t target = dest(2);
+	eigrp_prefix_descriptor_t *held;
+
+	start(true); /* Neighbor policy remains independent and warning-only. */
+	local(1);
+	policy.topology_maximum_prefix_configured = true;
+	policy.topology_maximum_prefix.maximum = 1;
+	receive_one(EIGRP_OPC_QUERY, 2, false);
+	held = eigrp_topology_table_lookup(runtime.topology_table, &target);
+	assert(held && held->fdistance == EIGRP_MAX_METRIC);
+	assert(eigrp_prefix_descriptor_lookup(held, &peer));
+	assert(held->internal_routes->count == 1);
+	assert(af_limit_incidents == 0);
+	assert(runtime.eigrp_pfxlimits_af_state == 0);
+	receive_one(EIGRP_OPC_QUERY, 2, false);
+	assert(af_limit_incidents == 0);
+	assert(!eigrp_topology_prefix_admit(&runtime, &target));
+	assert(af_limit_incidents == 1);
+	finish();
+}
+
 int main(int argc, char **argv)
 {
 	if (argc != 2)
@@ -453,6 +482,8 @@ int main(int argc, char **argv)
 		filtered_query_case();
 	} else if (strcmp(argv[1], "reply-filter") == 0) {
 		filtered_reply_case();
+	} else if (strcmp(argv[1], "query-process") == 0) {
+		query_process_limit_case();
 	} else
 		return 2;
 	puts("Neighbor admission, DUAL processing, and retirement: passed");
