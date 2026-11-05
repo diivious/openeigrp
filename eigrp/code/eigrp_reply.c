@@ -26,6 +26,7 @@
 #include "eigrp_prefix.h"
 #include "eigrp_eventlog.h"
 #include "eigrp_filter.h"
+#include "eigrp_metric.h"
 
 void eigrp_reply_send_route(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			    eigrp_prefix_descriptor_t *prefix,
@@ -142,6 +143,13 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			!topology_route
 			&& !eigrp_nbr_route_admit(
 				eigrp, nbr, &prefix->destination, &msg.metrics);
+		/* A finite REPLY during ACTIVE supplies new route evidence.
+		 * A poisoned or rejected REPLY must not do so. */
+		if (topology_route && !msg.transient_route
+		    && eigrp_metric_calculate(eigrp, msg.metrics)
+			       != EIGRP_MAX_METRIC)
+			topology_route->flags &=
+				~EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG;
 		eigrp_fsm_event(&msg);
 
 		if (free_received_route || msg.transient_route)

@@ -29,7 +29,7 @@ void eigrp_reply_receive(eigrp_instance_t *, eigrp_nbr_t *,
 			 eigrp_intf_t *, int);
 static eigrp_af_config_t policy;
 static eigrp_route_descriptor_t *incoming;
-static unsigned replies, acks, updates;
+static unsigned replies, acks, updates, rib_installs, rib_withdraws;
 static bool deny_inbound;
 static eigrp_instance_t runtime;
 static eigrp_nbr_t peer, self;
@@ -115,20 +115,24 @@ eigrp_result_t eigrp_rib_route_add(eigrp_instance_t *e,
 {
 	(void)e;
 	(void)r;
+	rib_installs++;
 	return EIGRP_RESULT_SUCCESS;
 }
 eigrp_result_t eigrp_rib_route_del(eigrp_instance_t *e, const eigrp_prefix_t *p)
 {
 	(void)e;
 	(void)p;
+	rib_withdraws++;
 	return EIGRP_RESULT_SUCCESS;
 }
+#ifndef EIGRP_QUERY_LIFECYCLE_TEST
 void eigrp_update_send_all(eigrp_instance_t *e, eigrp_intf_t *ei)
 {
 	(void)e;
 	(void)ei;
 	updates++;
 }
+#endif
 void eigrp_hello_send_ack(eigrp_nbr_t *nbr)
 {
 	(void)nbr;
@@ -150,7 +154,9 @@ void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *e,
 					eigrp_prefix_descriptor_t *p)
 {
 	(void)e;
-	(void)p;
+	/* The standalone unit fixture delivers packetizer work synchronously.
+	 * Retired prefixes have no outstanding references at this boundary. */
+	eigrp_topology_prefix_free(p);
 }
 void eigrp_sys_event_cancel(eigrp_event_t **owner)
 {
@@ -296,12 +302,13 @@ static void start(bool warning_only)
 	assert(eigrp_nbr_max_prefix_all_update(EIGRP_SET, &ctx, &limit)
 	       == EIGRP_RESULT_SUCCESS);
 	deny_inbound = false;
-	replies = acks = updates = 0;
+	replies = acks = updates = rib_installs = rib_withdraws = 0;
 }
 static void finish(void)
 {
 	eigrp_topology_table_delete(&runtime, runtime.topology_table);
 	eigrp_list_delete(&runtime.topology_changes);
+	eigrp_nbr_policy_delete_all(&policy);
 }
 static void active(eigrp_prefix_descriptor_t *p)
 {
