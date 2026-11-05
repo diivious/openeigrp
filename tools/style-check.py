@@ -5,6 +5,7 @@
 
 import argparse
 import difflib
+import os
 import re
 import shutil
 import subprocess
@@ -32,7 +33,31 @@ UNSAFE_APIS = {
 API_CALL = re.compile(r"\b(" + "|".join(UNSAFE_APIS) + r"|snprintf)\s*\(")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 MAX_FORMAT_REPORTS = 8
-CLANG_FORMAT_VERSION = "23.1.4"
+# Prefer a caller-selected executable, then the host's PATH. Versioned
+# binaries are common on Debian; Homebrew's LLVM keg is often not on PATH.
+CLANG_FORMAT_NAMES = ("clang-format",) + tuple(
+    f"clang-format-{version}" for version in range(25, 2, -1))
+LLVM_FORMAT_PATHS = (
+    "/opt/homebrew/opt/llvm/bin/clang-format",
+    "/usr/local/opt/llvm/bin/clang-format",
+)
+
+
+def find_formatter():
+    configured = os.environ.get("CLANG_FORMAT")
+    if configured is not None:
+        formatter = shutil.which(configured)
+        if not formatter:
+            raise RuntimeError(f"CLANG_FORMAT={configured!r} not found or not executable")
+        return formatter
+    for name in CLANG_FORMAT_NAMES:
+        formatter = shutil.which(name)
+        if formatter:
+            return formatter
+    for name in LLVM_FORMAT_PATHS:
+        if Path(name).is_file() and os.access(name, os.X_OK):
+            return name
+    return None
 
 
 def git(root, *args):
@@ -250,25 +275,24 @@ def main():
     mode = "all" if args.all else "changes"
     try:
         git(root, "rev-parse", "--is-inside-work-tree")
-        formatter = shutil.which("clang-format")
+        formatter = None
         violations = []
         count = 0
         version_checked = False
         for label, path, contents, lines in snapshots(root, mode, args.base):
             count += 1
-            if Path(path).suffix.lower() in C_SUFFIXES:
+            if Path(path).suffix.lower() in C_SUFFIXES and not version_checked:
+                formatter = find_formatter()
                 if not formatter:
                     raise RuntimeError("clang-format not found; install it before checking C source")
-                if not version_checked:
-                    result = subprocess.run([formatter, "--version"], capture_output=True,
-                                            text=True, check=False)
-                    expected = "clang-format version " + CLANG_FORMAT_VERSION
-                    found = result.stdout.strip()
-                    if result.returncode or not (found == expected or
-                                                  found.startswith(expected + " ")):
-                        raise RuntimeError(f"expected {expected}; found "
-                                           f"{found or result.stderr.strip()}")
-                    version_checked = True
+                result = subprocess.run([formatter, "--version"], capture_output=True,
+                                        text=True, check=False)
+                found = result.stdout.strip()
+                if result.returncode or not re.search(r"\bclang-format version \d+", found):
+                    raise RuntimeError(f"invalid clang-format executable {formatter}: "
+                                       f"{found or result.stderr.strip() or result.returncode}")
+                print(f"style-check: using {found} ({formatter})")
+                version_checked = True
             errors = check_source(root, path, contents, lines, formatter)
             violations += [f"[{label}] {error}" for error in errors]
     except (OSError, RuntimeError) as error:

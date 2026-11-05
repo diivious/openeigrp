@@ -3,16 +3,20 @@
 
 # Copyright (C) 2026 Donnie V. Savage
 
+import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "style-check.py"
+SCENARIO = Path(__file__).resolve().parent / "uut/clang-format.yaml"
 
 
 class StyleCheckTest(unittest.TestCase):
@@ -42,6 +46,7 @@ class StyleCheckTest(unittest.TestCase):
         )
         formatter.chmod(0o755)
         self.env = dict(os.environ)
+        self.env.pop("CLANG_FORMAT", None)
         self.env["PATH"] = str(self.bin) + os.pathsep + os.environ.get("PATH", "")
 
     def git(self, *args):
@@ -153,23 +158,79 @@ class StyleCheckTest(unittest.TestCase):
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_formatter_version_rejects_longer_version_number(self):
+    def test_formatter_version_accepts_longer_version_number(self):
         self.file("eigrp/code/check.c", "int a;\n")
         formatter = self.bin / "clang-format"
         formatter.write_text(formatter.read_text().replace(
             "clang-format version 23.1.4", "clang-format version 23.1.40"))
         result = self.run_check()
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn("expected clang-format version 23.1.4", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("clang-format version 23.1.40", result.stdout)
 
     def test_incorrect_formatter_version_is_an_error(self):
         self.file("eigrp/code/check.c", "int a;\n")
         formatter = self.bin / "clang-format"
-        formatter.write_text("#!/bin/sh\necho 'clang-format version 18.1.8'\n")
+        formatter.write_text("#!/bin/sh\necho 'not clang-format'\n")
         formatter.chmod(0o755)
         result = self.run_check()
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn("expected clang-format version 23.1.4", result.stderr)
+        self.assertIn("invalid clang-format executable", result.stderr)
+
+    def test_homebrew_llvm_keg_fallback(self):
+        checker = runpy.run_path(str(SCRIPT))
+        homebrew = "/opt/homebrew/opt/llvm/bin/clang-format"
+        with patch.object(checker["shutil"], "which", return_value=None):
+            with patch.object(checker["Path"], "is_file", autospec=True,
+                              side_effect=lambda path: str(path) == homebrew):
+                with patch.object(checker["os"], "access", return_value=True):
+                    self.assertEqual(checker["find_formatter"](), homebrew)
+
+    def test_formatter_override_missing_is_an_error(self):
+        self.file("eigrp/code/check.c", "int a;\n")
+        env = dict(self.env)
+        env["CLANG_FORMAT"] = "does-not-exist-clang-format"
+        result = self.run_check(env=env)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("CLANG_FORMAT=", result.stderr)
+
+    def test_clang_format_environment_scenarios(self):
+        # JSON is a YAML 1.2 subset; scenarios need no third-party parser.
+        scenarios = json.loads(SCENARIO.read_text())
+        self.file("eigrp/code/check.c", "int valid;\n")
+        isolated = self.root / "isolated-bin"
+        isolated.mkdir()
+        (isolated / "git").symlink_to(shutil.which("git"))
+        for case in scenarios["cases"]:
+            with self.subTest(case=case["name"]):
+                for item in isolated.iterdir():
+                    if item.name != "git":
+                        item.unlink()
+                binary = isolated / case["binary"]
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                binary.write_text(
+                    f"#!{sys.executable}\n"
+                    "import sys\n"
+                    "if '--version' in sys.argv:\n"
+                    f"    print({case['version']!r})\n"
+                    "else:\n"
+                    "    sys.stdout.buffer.write(sys.stdin.buffer.read())\n"
+                )
+                binary.chmod(0o755)
+                if case.get("also_unversioned"):
+                    alternate = isolated / "clang-format"
+                    alternate.write_text(
+                        f"#!{sys.executable}\nprint('clang-format version 99.0.0')\n")
+                    alternate.chmod(0o755)
+                env = dict(self.env)
+                env["PATH"] = str(isolated)
+                if case.get("override") == "absolute":
+                    env["CLANG_FORMAT"] = str(binary)
+                elif case.get("override"):
+                    env["CLANG_FORMAT"] = case["override"]
+                result = self.run_check(env=env)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("style-check: using " + case["version"], result.stdout)
+                self.assertIn(str(binary), result.stdout)
 
     def test_missing_formatter_is_an_error(self):
         self.file("eigrp/code/check.c", "int a;\n")

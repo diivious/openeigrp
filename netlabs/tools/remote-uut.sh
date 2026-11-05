@@ -513,7 +513,13 @@ fi
 # The selected appliance may be busy, so do not start a second session while a
 # previous live case is still operating.
 regressions_ok=0
-if remote_transport_prepare && run_remote_regressions "$requested"; then
+# An unreachable host or invalid credentials are transport errors, not
+# blocked test results. Stop before producing a misleading batch report.
+if ! remote_transport_prepare; then
+    echo 'ERROR: Remote preflight failed; no tests executed.' >&2
+    exit 2
+fi
+if run_remote_regressions "$requested"; then
     regressions_ok=1
 fi
 if (( ! regressions_ok )); then
