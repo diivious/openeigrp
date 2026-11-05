@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+# End-to-end adjacency and route cleanup regression for issue #46.
+# Peer Software-Version renegotiation itself is exercised by the C receive
+# regression: the current UUT runner does not expose live metric-version edits.
+schema: eigrp-uut-test/v1
+topology: ../examples/two-router.yaml
+name: Neighbor encoder ownership survives repeated adjacency recovery
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - checkpoint: initial-up
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: down}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: down}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  - checkpoint: withdrawn
+  - packet-mark: first-recovery
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - validate-packet: {since: first-recovery, source_uut: r1, source_interface: eth0, opcode: update, prefix: 10.1.0.0/24, event: delivered, min: 1, timeout: 8}
+  - checkpoint: first-recovered
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: down}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: down}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  - packet-mark: second-recovery
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - validate-packet: {since: second-recovery, source_uut: r2, source_interface: eth0, opcode: update, prefix: 10.2.0.0/24, event: delivered, min: 1, timeout: 8}
+  - validate-event: {uut: r1, contains: 'reason peer restarted', min: 0, max: 0}
+  - validate-event: {uut: r2, contains: 'reason peer restarted', min: 0, max: 0}
+  - stop: all
