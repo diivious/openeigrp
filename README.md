@@ -1,6 +1,6 @@
 # OpenEIGRP
 
-[![OpenEIGRP Core CI](https://github.com/diivious/eigrp/actions/workflows/core.yml/badge.svg)](https://github.com/diivious/eigrp/actions/workflows/core.yml)
+[![OpenEIGRP Core CI](https://github.com/diivious/eigrp/actions/workflows/core.yml/badge.svg?branch=master)](https://github.com/diivious/eigrp/actions/workflows/core.yml?query=branch%3Amaster)
 
 OpenEIGRP is a portable implementation of the Enhanced Interior Gateway Routing Protocol defined by RFC 7868. OpenEIGRP is the project name; EIGRP remains the protocol name used by the wire protocol, CLI, data structures, and source APIs.
 
