@@ -13,6 +13,10 @@
 #include "eigrp_metric.h"
 #include "eigrp_redistribute.h"
 #include "eigrp_neighbor.h"
+#include "eigrp_interface.h"
+#include "eigrp_packet.h"
+#include "eigrp_eventlog.h"
+#include "eigrp_timer.h"
 #include "eigrp_topology.h"
 
 struct eigrp_metric_config {
@@ -347,6 +351,49 @@ bool eigrp_metric_default(const eigrp_af_config_t *af,
  * coefficient set. Named mode converges on the EIGRP-owned metric target used
  * for protocol state instead of carrying metric behavior in the parser.
  */
+/* A metric-version or K-value change invalidates the existing adjacency's
+ * route and RTP context. Send Goodbye using the old metric configuration,
+ * then retire each peer through the regular DOWN/DUAL/delete lifecycle. */
+static void eigrp_metric_peers_restart(eigrp_instance_t *eigrp)
+{
+	eigrp_list_item_t *if_node, *nbr_node, *next_node;
+	eigrp_intf_t *ei;
+	eigrp_nbr_t *nbr;
+
+	if (!eigrp || !eigrp->eiflist)
+		return;
+
+	for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, if_node, ei)) {
+		if (!ei || !ei->nbrs || !ei->nbrs->count)
+			continue;
+		eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN, NULL);
+		for (EIGRP_LIST_ITERATE(ei->nbrs, nbr_node, next_node, nbr)) {
+			/* DOWN has no live adjacency. Preserve suspended/locked
+			 * neighbor identities and their prefix-limit penalties.
+			 */
+			if (nbr->state == EIGRP_NEIGHBOR_DOWN)
+				continue;
+			eigrp_nbr_state_update_reason(
+				EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
+				EIGRP_EVENTLOG_NBR_PEER_RESTART);
+			eigrp_nbr_delete(nbr);
+		}
+	}
+
+	/* Teardown may have enqueued multicast and unicast packets on other
+	 * interfaces before their neighbors were retired. Discard every old
+	 * encoded wire image only after the entire AF has lost its peers. */
+	for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, if_node, ei)) {
+		if (!ei)
+			continue;
+		eigrp_timer_cancel(eigrp, &ei->t_multicast_retry);
+		eigrp_packet_queue_clear(&ei->multicast_pending);
+		eigrp_packet_interface_output_clear(ei);
+		ei->multicast_backoff = false;
+		ei->multicast_waiting = false;
+	}
+}
+
 eigrp_result_t
 eigrp_metric_weights_update(eigrp_operation_t operation,
 			    eigrp_instance_context_t *context,
@@ -373,13 +420,20 @@ eigrp_metric_weights_update(eigrp_operation_t operation,
 			       sizeof(context->config->metric_config->weights));
 		}
 		if (context->runtime) {
-			context->runtime->k_values[0] = EIGRP_K1_DEFAULT;
-			context->runtime->k_values[1] = EIGRP_K2_DEFAULT;
-			context->runtime->k_values[2] = EIGRP_K3_DEFAULT;
-			context->runtime->k_values[3] = EIGRP_K4_DEFAULT;
-			context->runtime->k_values[4] = EIGRP_K5_DEFAULT;
-			context->runtime->k_values[5] = EIGRP_K6_DEFAULT;
-			eigrp_topology_metric_update(context->runtime);
+			const uint8_t defaults[6] = {
+				EIGRP_K1_DEFAULT, EIGRP_K2_DEFAULT,
+				EIGRP_K3_DEFAULT, EIGRP_K4_DEFAULT,
+				EIGRP_K5_DEFAULT, EIGRP_K6_DEFAULT,
+			};
+
+			if (memcmp(context->runtime->k_values, defaults,
+				   sizeof(defaults))
+			    != 0) {
+				eigrp_metric_peers_restart(context->runtime);
+				memcpy(context->runtime->k_values, defaults,
+				       sizeof(defaults));
+				eigrp_topology_metric_update(context->runtime);
+			}
 		}
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -401,13 +455,18 @@ eigrp_metric_weights_update(eigrp_operation_t operation,
 		config->weights_configured = true;
 	}
 	if (context->runtime) {
-		context->runtime->k_values[0] = weights->k1;
-		context->runtime->k_values[1] = weights->k2;
-		context->runtime->k_values[2] = weights->k3;
-		context->runtime->k_values[3] = weights->k4;
-		context->runtime->k_values[4] = weights->k5;
-		context->runtime->k_values[5] = weights->k6;
-		eigrp_topology_metric_update(context->runtime);
+		const uint8_t updated[6] = {
+			weights->k1, weights->k2, weights->k3,
+			weights->k4, weights->k5, weights->k6,
+		};
+
+		if (memcmp(context->runtime->k_values, updated, sizeof(updated))
+		    != 0) {
+			eigrp_metric_peers_restart(context->runtime);
+			memcpy(context->runtime->k_values, updated,
+			       sizeof(updated));
+			eigrp_topology_metric_update(context->runtime);
+		}
 	}
 	return EIGRP_RESULT_SUCCESS;
 }
@@ -665,8 +724,13 @@ eigrp_result_t eigrp_metric_version_update(eigrp_operation_t operation,
 			return EIGRP_RESULT_NOT_FOUND;
 		if (context->config && context->config->metric_config)
 			context->config->metric_config->version_32bit = false;
-		if (context->runtime) {
+		if (context->runtime
+		    && context->runtime->metric_version
+			       != EIGRP_MAJOR_VERSION) {
+			eigrp_metric_peers_restart(context->runtime);
 			context->runtime->metric_version = EIGRP_MAJOR_VERSION;
+			/* Only already-DOWN peers remain; rebind their codecs.
+			 */
 			eigrp_nbr_codec_update(context->runtime);
 			eigrp_topology_metric_update(context->runtime);
 		}
@@ -686,8 +750,11 @@ eigrp_result_t eigrp_metric_version_update(eigrp_operation_t operation,
 			return EIGRP_RESULT_INTERNAL_FAILURE;
 		config->version_32bit = true;
 	}
-	if (context->runtime) {
+	if (context->runtime
+	    && context->runtime->metric_version != EIGRP_TLV_32B_VERSION) {
+		eigrp_metric_peers_restart(context->runtime);
 		context->runtime->metric_version = EIGRP_TLV_32B_VERSION;
+		/* Only already-DOWN peers remain; rebind their codecs. */
 		eigrp_nbr_codec_update(context->runtime);
 		eigrp_topology_metric_update(context->runtime);
 	}

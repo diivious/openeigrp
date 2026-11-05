@@ -167,7 +167,10 @@ static eigrp_nbr_t *eigrp_hello_parameter_decode(eigrp_instance_t *eigrp,
 				EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
 				EIGRP_EVENTLOG_NBR_K_MISMATCH);
 		}
-		return nbr;
+		/* State DOWN alone leaves the old DUAL paths and RTP context.
+		 * Retire the adjacency before considering another HELLO. */
+		eigrp_nbr_delete(nbr);
+		return NULL;
 	}
 
 	if (!adjacency_start_allowed)
@@ -188,33 +191,50 @@ static eigrp_nbr_t *eigrp_hello_parameter_decode(eigrp_instance_t *eigrp,
  * @param[in]		nbr	neighbor the ACK shoudl be sent to
  * @param[in]		param	pointer to TLV software version information
  *
- * @return void
+ * @return bool  false when renegotiation deletes the current neighbor
  *
  * @par
  * Read the software version in the specified location.
  * This consists of two bytes of OS version, and two bytes of EIGRP
  * revision number.
  */
-static void eigrp_sw_version_decode(eigrp_nbr_t *nbr, eigrp_intf_t *ei,
-				    struct eigrp_tlv_hdr_type *tlv, bool new)
+static bool eigrp_sw_version_decode(eigrp_nbr_t *nbr, eigrp_intf_t *ei,
+				    struct eigrp_tlv_hdr_type *tlv)
 {
 	struct TLV_Software_Type *version = (struct TLV_Software_Type *)tlv;
+	uint8_t selected =
+		eigrp_metric_version_select(ei->eigrp, version->eigrp_major);
 
-	(void)new;
+	/* An established neighbor must not silently switch route formats or
+	 * restart its metric calculation with stale DUAL/RTP state. Cisco may
+	 * advertise new capabilities without tearing down the adjacency.
+	 * Explicitly terminate our old peer and rediscover it through INIT. */
+	if (nbr->state == EIGRP_NEIGHBOR_UP
+	    && (nbr->tlv_rel_major != version->eigrp_major
+		|| nbr->tlv_version != selected)) {
+		eigrp_log(
+			EIGRP_LOG_INFO,
+			"Neighbor %s (%s) is down: peer metric version changed",
+			eigrp_print_addr(&nbr->src), ei->name);
+		eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN_NBR,
+				 &nbr->src);
+		eigrp_nbr_state_update_reason(EIGRP_SET, nbr,
+					      EIGRP_NEIGHBOR_DOWN,
+					      EIGRP_EVENTLOG_NBR_PEER_RESTART);
+		eigrp_nbr_delete(nbr);
+		return false;
+	}
 
 	nbr->os_rel_major = version->vender_major;
 	nbr->os_rel_minor = version->vender_minor;
 	nbr->tlv_rel_major = version->eigrp_major;
 	nbr->tlv_rel_minor = version->eigrp_minor;
+	selected = eigrp_metric_version_select(ei->eigrp, nbr->tlv_rel_major);
 
-	/*
-	 * The software TLV advertises the peer's highest TLV format, not the
-	 * format it must use with this neighbor.  Version 2 peers retain TLV1
-	 * compatibility and use it when talking to a Version 1 peer.  Bind the
-	 * codec to the highest route TLV format supported by both sides.
-	 */
-	eigrp_nbr_codec_select(nbr, eigrp_metric_version_select(
-					    ei->eigrp, nbr->tlv_rel_major));
+	/* The peer advertises its highest supported format, not necessarily
+	 * the format used for a particular adjacency. */
+	eigrp_nbr_codec_select(nbr, selected);
+	return true;
 }
 
 /**
@@ -508,8 +528,9 @@ void eigrp_hello_receive(eigrp_instance_t *eigrp, struct eigrp_header *eigrph,
 			case EIGRP_TLV_SW_VERSION:
 				if (length < EIGRP_TLV_SW_VERSION_LEN)
 					return;
-				eigrp_sw_version_decode(nbr, ei, tlv_header,
-							new_nbr);
+				if (!eigrp_sw_version_decode(nbr, ei,
+							     tlv_header))
+					return;
 				break;
 			case EIGRP_TLV_NEXT_MCAST_SEQ:
 				if (length == EIGRP_NEXT_SEQUENCE_TLV_SIZE) {
