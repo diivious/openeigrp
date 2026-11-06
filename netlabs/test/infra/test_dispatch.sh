@@ -49,7 +49,7 @@ remote_run() {
             ;;
         uut-start)
             case "$3" in
-                2R-neighbor|3R-ack-loss|4R-feasibility) ;;
+                2R-internal|2R-neighbor|3R-ack-loss|4R-feasibility) ;;
                 *) return 2 ;;
             esac
             printf 'REPORT_ID=uut-%s\n' "$3"
@@ -200,3 +200,31 @@ if bash "$client/netlabs/tools/remote-uut.sh" --dual >"$tmp/empty.log" 2>&1; the
 fi
 grep -Fq 'NOT_IMPLEMENTED: no runnable dual live scenarios' "$tmp/empty.log"
 echo 'PASS: absent DUAL cases are not reported as PASS'
+
+# Historical 2R-internal is a complete DUAL case. Emulate macOS BSD sed,
+# which does not support GNU sed's escaped BRE alternation (\|), while
+# exercising actual scenario discovery and --dual dispatch on any test host.
+mkdir -p "$client/netlabs/uut/2R-internal" "$tmp/bsd-bin"
+cp "$root/netlabs/uut/2R-internal/scenario.yaml" \
+    "$client/netlabs/uut/2R-internal/scenario.yaml"
+cp "$root/netlabs/uut/2R-internal/topology.yml" \
+    "$client/netlabs/uut/2R-internal/topology.yml"
+printf '# legacy driver\n' >"$client/netlabs/uut/2R-internal.py"
+real_sed="$(command -v sed)"
+cat >"$tmp/bsd-bin/sed" <<'BSDSED'
+#!/usr/bin/env bash
+if [[ "$*" == *'\|'* ]]; then
+    # Under BSD BRE this is a literal backslash-bar, not alternation.
+    exit 0
+fi
+exec "$REAL_SED" "$@"
+BSDSED
+chmod +x "$tmp/bsd-bin/sed"
+: >"$MOCK_REMOTE_LOG"
+REAL_SED="$real_sed" PATH="$tmp/bsd-bin:$PATH" \
+    bash "$client/netlabs/tools/remote-uut.sh" --dual >"$tmp/dual-legacy.log" 2>&1
+[[ $(grep -c 'run .*uut-start' "$MOCK_REMOTE_LOG") == 1 ]]
+grep -Fq 'uut-start 2R-internal' "$MOCK_REMOTE_LOG"
+grep -Fq 'Running live scenario: 2R-internal [dual]' "$tmp/dual-legacy.log"
+grep -Fq 'regressions dual' "$MOCK_REMOTE_LOG"
+echo 'PASS: macOS-compatible legacy group discovery and DUAL dispatch'

@@ -58,8 +58,8 @@ class DualValidators(unittest.TestCase):
 
     def test_exact_cisco_metric_parity_and_monotonicity(self):
         wire = {
-            'oe': {'metrics': [{'bandwidth': 25600, 'delay': 2560}]},
-            'ce': {'metrics': [{'bandwidth': 8000000, 'delay': 1250000}]},
+            'oe': {'types': [0x0602], 'metrics': [{'bandwidth': 25600, 'delay': 2560}]},
+            'ce': {'types': [0x0602], 'metrics': [{'bandwidth': 8000000, 'delay': 1250000}]},
         }
         distances = {'oe': {'rd': 163840}, 'ce': {'rd': 25600167}}
         dual.require_metric_parity(distances, wire)
@@ -69,6 +69,16 @@ class DualValidators(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'did not increase'):
             dual.require_distance_change({'fd':100, 'cd':200, 'rd':150},
                                          {'fd':100, 'cd':190, 'rd':140})
+
+    def test_classic_codec_cannot_satisfy_wide_metric_parity(self):
+        wire = {
+            'oe': {'types': [0x0102], 'metrics': [{'bandwidth': 25600, 'delay': 2560}]},
+            'ce': {'types': [0x0602], 'metrics': [{'bandwidth': 8000000,
+                                                  'delay': 1250000}]},
+        }
+        with self.assertRaisesRegex(ValueError, 'TLV2 codec'):
+            dual.require_metric_parity({'oe': {'rd': 163840},
+                                        'ce': {'rd': 25600167}}, wire)
 
     def test_fd_cd_rd_no_fake_feasibility(self):
         self.assertEqual(dual.numeric_metric('FD is 28160\n via (28160/2560)'),

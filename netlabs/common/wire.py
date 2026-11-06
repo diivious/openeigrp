@@ -140,7 +140,7 @@ def route_tlv(kind, body):
             raise DecodeError('truncated multiprotocol metric attributes')
         item['extended_attributes_hex'] = body[32:pos].hex()
         item['metric'] = {'tag': metric[1], 'reliability': metric[2],
-                          'load': metric[3], 'mtu': int.from_bytes(metric[4:7], 'little'),
+                          'load': metric[3], 'mtu': int.from_bytes(metric[4:7], 'big'),
                           'hops': metric[7], 'delay': int.from_bytes(metric[8:14], 'big'),
                           'bandwidth': int.from_bytes(metric[14:20], 'big'),
                           'flags': int.from_bytes(metric[22:24], 'big')}
@@ -185,7 +185,7 @@ def route_tlv(kind, body):
         metric = body[pos:pos + 16]
         item['metric'] = {'delay': int.from_bytes(metric[:4], 'big'),
                           'bandwidth': int.from_bytes(metric[4:8], 'big'),
-                          'mtu': int.from_bytes(metric[8:11], 'little'),
+                          'mtu': int.from_bytes(metric[8:11], 'big'),
                           'hops': metric[11], 'reliability': metric[12],
                           'load': metric[13], 'tag': metric[14], 'flags': metric[15]}
         pos += 16

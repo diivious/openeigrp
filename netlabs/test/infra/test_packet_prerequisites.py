@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: ISC
 # Copyright (C) 2026 Donnie V. Savage
 """Executed packet-access gate; missing sudo privilege must never claim interop FAIL."""
+import contextlib
 import importlib.util
+import io
 from pathlib import Path
 import subprocess
 import sys
@@ -56,14 +58,17 @@ class PacketAccessTests(unittest.TestCase):
                 blocked = module.CapturePrerequisiteError('sudo: a password is required')
                 with mock.patch.object(module, 'require_packet_access', side_effect=blocked), \
                      mock.patch.object(module.Lab, 'deploy') as deploy, \
-                     mock.patch.object(module.Lab, 'collect_logs'):
+                     mock.patch.object(module.Lab, 'collect_logs'), \
+                     contextlib.redirect_stdout(io.StringIO()) as output:
                     self.assertEqual(module.main(args), 1)
                     deploy.assert_not_called()
+                self.assertIn(f'BLOCKED 2R {group.upper()}', output.getvalue())
                 report = yaml.safe_load((Path(temp)/'report.json').read_text())
                 self.assertEqual(report['status'], 'BLOCKED')
                 self.assertTrue(report['required'])
                 self.assertTrue(all(record['status'] == 'BLOCKED' for record
                                     in report['objectives'].values()))
+        print('PASS: RTP and DUAL privilege-denial tests reject deployment')
 
 
 if __name__ == '__main__':

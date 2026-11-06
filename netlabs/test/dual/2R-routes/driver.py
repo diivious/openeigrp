@@ -15,6 +15,10 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'common'))
 from interop import Lab, Trace, report_base, result, write_report
 from interop import CapturePrerequisiteError, require_packet_access
+from metric import (cisco_wide_metric, require_tlv2_types, redist_seed_matches,
+                    REDIST_BW_KBPS, REDIST_DELAY, REDIST_MTU, TLV2_EXTERNAL)
+
+REDIST_INCREASED_DELAY = 100
 
 PREFIX = {
     'internal': {
@@ -164,19 +168,11 @@ def require_distance_change(before, after):
     require(after['rd'] > before['rd'], 'remote topology reported distance did not increase')
 
 
-def cisco_metric(metric):
-    """Exact Cisco default-K TLV2 distance, keeping delay fractions."""
-    bandwidth = metric['bandwidth']
-    delay = metric['delay']
-    require(bandwidth > 0 and delay >= 0, 'invalid wide metric vector')
-    return (10000000 * 65536 // bandwidth
-            + delay * 65536 // 1000000)
-
-
 def require_metric_parity(topology, wire):
     for receiver in ('oe', 'ce'):
         sender = 'ce' if receiver == 'oe' else 'oe'
-        values = {cisco_metric(metric) for metric in wire[sender]['metrics']}
+        require_tlv2_types(wire[sender], 'internal')
+        values = {cisco_wide_metric(metric) for metric in wire[sender]['metrics']}
         require(len(values) == 1 and topology[receiver]['rd'] in values,
                 f'{sender}->{receiver} RD {topology[receiver]["rd"]} '
                 f'does not match Cisco wire distance {sorted(values)}')
@@ -213,8 +209,8 @@ def external_diagnostics(lab, family, label):
 
 
 def change_metric(lab, family, role, *, changed):
-    value = '100' if changed else '10'
-    line = f'default-metric 100000 {value} 255 1 1500'
+    value = REDIST_INCREASED_DELAY if changed else REDIST_DELAY
+    line = f'default-metric {REDIST_BW_KBPS} {value} 255 1 {REDIST_MTU}'
     base = ['router eigrp OpenEIGRP',
             f'address-family {family} unicast autonomous-system 4473',
             'topology base', line]
@@ -323,10 +319,10 @@ def run(lab, report, spec):
                     time.sleep(7)
                 wire = provenance(capture.events, family, external, sources)
                 for sender in ('oe', 'ce'):
-                    for metric in wire[sender]['metrics']:
-                        require(metric['bandwidth'] == 100000 and
-                                metric['delay'] == 100000000,
-                                f'{sender} external TLV2 seed units differ from Cisco')
+                    require_tlv2_types(wire[sender], 'external')
+                    require(all(redist_seed_matches(metric)
+                                for metric in wire[sender]['metrics']),
+                            f'{sender} external TLV2 seed units differ from Cisco')
                 return {'wire': wire,
                         'rib': {r: lab.routes(r, family) for r in ('oe','ce')}}
             except Exception:
@@ -385,7 +381,14 @@ def run(lab, report, spec):
                                 for _,t in changed), 'metric-change UPDATE unchanged')
                     require(before != '', 'baseline RIB missing')
                     require_distance_change(before_distance, after_distance)
+                    changed_types = sorted({t['type'] for _, t in changed})
+                    require(changed_types == [TLV2_EXTERNAL],
+                            f'{role} changed advertisement did not use TLV2')
+                    expected_rd = {cisco_wide_metric(t['metric']) for _, t in changed}
+                    require(after_distance['rd'] in expected_rd,
+                            f'{role} changed RD differs from Cisco TLV2 metric')
                     out[role] = {'lifecycle': evidence,
+                                 'changed_types': changed_types,
                                  'before_distance': before_distance,
                                  'after_distance': after_distance,
                                  'changed_metrics': [t['metric'] for _,t in changed]}
@@ -429,7 +432,8 @@ def main(argv=None):
     if (spec.get('schema') != 'openeigrp-live-dual-2r/v1' or
         spec.get('name') != '2R-routes' or spec.get('group') != 'dual' or
         spec.get('families') != ['ipv4','ipv6'] or
-        spec.get('asn') != 4473):
+        spec.get('asn') != 4473 or
+        spec.get('metric_codec') != 'TLV2'):
         parser.error('invalid 2R DUAL fixture')
     lab = Lab(args.topology, args.artifacts)
     report = report_base(spec['name'], lab)

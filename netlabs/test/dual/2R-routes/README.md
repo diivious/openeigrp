@@ -19,11 +19,14 @@ prefix, external TLV/provenance, tag 7 and metric. DUAL-03 performs actual
 announce, metric change, unreachable-distance withdrawal and re-advertisement
 for each originating vendor, requiring packet captures and RIB removal/recovery.
 DUAL-04 reads actual topology RD/CD/FD on each receiver for its *single*
-learned path. It does **not** assert feasible successor selection: 2R has
+learned path. DUAL-01/02/03 metric assertions require the observed TLV2
+internal/external route type; redistributed seed checks include 1500-byte MTU,
+and the changed DUAL-03 RD must equal an observed TLV2 metric calculation. It does **not** assert feasible successor selection: 2R has
 no alternate path; that requires the planned 4R diamond. On a DUAL-03 metric
 increase, IOS XE retains the historical feasible distance (FD) while the
 current computed distance (CD) and reported distance (RD) increase. DUAL-03
-requires wire UPDATE evidence and a changed CD/RD, not FD == CD or a new FD.
+requires wire UPDATE evidence, exact changed-RD parity and an increased CD/RD,
+not FD == CD or a new FD.
 
 Outputs include pre/post control-plane snapshots, PCAPs, decoded wire events,
 image ID/digests and per-AF outcomes. Any absent provenance or topology field
