@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: ISC
 /* Copyright (C) 2026 Donnie V. Savage */
 /* QUERY and REPLY admission through production receive, DUAL, and topology. */
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -220,8 +221,8 @@ static eigrp_metrics_t metric(void)
 	eigrp_metrics_t m = {0};
 	m.bandwidth = eigrp_bandwidth_to_scaled(100000);
 	m.delay = eigrp_delay_to_scaled(200);
-	m.reliability = 255;
-	m.load = 1;
+	m.reliability = EIGRP_INTF_REL_100;
+	m.load = EIGRP_LOAD_DEFAULT;
 	return m;
 }
 static eigrp_route_descriptor_t *wire(unsigned id, bool poison)
@@ -288,10 +289,10 @@ static void start(bool warning_only)
 	runtime.topology_table = eigrp_topology_table_create();
 	runtime.topology_changes = eigrp_list_create();
 	assert(runtime.topology_table && runtime.topology_changes);
-	link.params.bandwidth = 100000;
-	link.params.delay = 100;
-	link.params.reliability = 255;
-	link.params.load = 1;
+	link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	link.params.delay = EIGRP_INTF_ETH_DELAY;
+	link.params.reliability = EIGRP_INTF_REL_100;
+	link.params.load = EIGRP_LOAD_DEFAULT;
 	link.eigrp = &runtime;
 	peer.ei = &link;
 	peer.decoder = decode;

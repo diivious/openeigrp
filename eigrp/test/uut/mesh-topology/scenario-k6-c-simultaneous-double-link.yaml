@@ -12,14 +12,14 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.103.0.0/24
         table: topology
         active: false
         successors: 2
-        fd: 8519680
+        fd: 26214400
     - route:
         uut: r1
         prefix: 10.104.0.0/24
@@ -92,7 +92,7 @@ steps:
         table: topology
         active: false
         successors: 3
-        fd: 13107200
+        fd: 72089600
     - route:
         uut: r1
         prefix: 10.102.0.0/24
@@ -116,7 +116,7 @@ steps:
         table: topology
         active: false
         successors: 3
-        fd: 13762560
+        fd: 78643200
     - route:
         uut: r1
         prefix: 10.103.0.0/24
@@ -128,7 +128,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 8519680
+        fd: 26214400
     - route:
         uut: r1
         prefix: 10.104.0.0/24
@@ -321,12 +321,12 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.103.0.0/24
         table: topology
         active: false
         successors: 2
-        fd: 8519680
+        fd: 26214400
 - stop: all

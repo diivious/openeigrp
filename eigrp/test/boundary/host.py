@@ -27,6 +27,8 @@ def test_portable_sources_do_not_include_host_framework_headers():
         re.MULTILINE,
     )
     for path in PORTABLE.glob("*.[ch]"):
+        if path.name.startswith(".") or not path.is_file():
+            continue
         assert not host_include.search(path.read_text()), path.name
 
 

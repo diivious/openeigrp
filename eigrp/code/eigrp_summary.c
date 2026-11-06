@@ -235,7 +235,7 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	eigrp_prefix_t best_component = {0};
 	const eigrp_route_descriptor_t *best_route = NULL;
 	eigrp_table_node_t *rn;
-	uint32_t selected_distance = EIGRP_MAX_METRIC;
+	eigrp_metric_t selected_distance = UINT64_MAX;
 
 	if (!eigrp || !ei || !prefix || !route || !summary_prefix
 	    || !summary_route)

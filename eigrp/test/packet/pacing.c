@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ISC
 /* Packet pacing rate, idle-burst bound, slow-link precision, live updates. */
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,7 +14,7 @@ static void test_line_rate(void)
 	eigrp_intf_t ei = {0};
 	uint32_t i;
 
-	ei.params.bandwidth = 1000000; /* 1 Gbps in kbps */
+	ei.params.bandwidth = EIGRP_INTF_1G_BW; /* 1 Gbps in kbps */
 	ei.bandwidth_percent = 50;
 	for (i = 0; i < 41; i++) {
 		assert(eigrp_packet_pacing_delay_msec(&ei, 1500, 1000) == 0);
@@ -30,7 +31,7 @@ static void test_line_rate(void)
 static void test_slow_link(void)
 {
 	eigrp_intf_t ei = {0};
-	ei.params.bandwidth = 56;
+	ei.params.bandwidth = EIGRP_INTF_56K_BW;
 	ei.bandwidth_percent = 50;
 	assert(eigrp_packet_pacing_delay_msec(&ei, 512, 500) == 0);
 	eigrp_packet_pacing_charge(&ei, 512);
@@ -44,7 +45,7 @@ static void test_slow_link(void)
 static void test_configuration_change(void)
 {
 	eigrp_intf_t ei = {0};
-	ei.params.bandwidth = 100000;
+	ei.params.bandwidth = EIGRP_INTF_FASTETH_BW;
 	ei.bandwidth_percent = 50;
 	assert(eigrp_packet_pacing_delay_msec(&ei, 1400, 100) == 0);
 	eigrp_packet_pacing_charge(&ei, 1400);

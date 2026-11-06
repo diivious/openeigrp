@@ -58,10 +58,10 @@ struct eigrp_redist_policy_config {
 };
 
 typedef enum eigrp_redist_metric_origin {
-	EIGRP_REDISTRIBUTE_METRIC_NONE = 0,
-	EIGRP_REDISTRIBUTE_METRIC_EXPLICIT,
-	EIGRP_REDISTRIBUTE_METRIC_ROUTE,
-	EIGRP_REDISTRIBUTE_METRIC_DEFAULT,
+	EIGRP_REDIST_METRIC_NONE = 0,
+	EIGRP_REDIST_METRIC_EXPLICIT,
+	EIGRP_REDIST_METRIC_ROUTE,
+	EIGRP_REDIST_METRIC_DEFAULT,
 } eigrp_redist_metric_origin_t;
 
 static char *eigrp_redist_string_dup(const char *value)
@@ -83,8 +83,8 @@ static bool eigrp_redist_source_valid(const eigrp_redist_source_t *source)
 {
 	if (!source)
 		return false;
-	return source->protocol > EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED
-	       && source->protocol <= EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
+	return source->protocol > EIGRP_REDIST_PROTOCOL_UNSPECIFIED
+	       && source->protocol <= EIGRP_REDIST_PROTOCOL_EIGRP;
 }
 
 static bool eigrp_redist_source_match(const eigrp_redist_source_t *left,
@@ -291,24 +291,24 @@ static eigrp_redist_metric_origin_t eigrp_redist_metric_select(
 	eigrp_metric_values_t values;
 
 	if (!metric)
-		return EIGRP_REDISTRIBUTE_METRIC_NONE;
+		return EIGRP_REDIST_METRIC_NONE;
 	memset(metric, 0, sizeof(*metric));
 	if (!config || !route)
-		return EIGRP_REDISTRIBUTE_METRIC_NONE;
+		return EIGRP_REDIST_METRIC_NONE;
 
 	if (config->metric_configured) {
 		eigrp_metric_values_convert(&config->metric, metric);
-		return EIGRP_REDISTRIBUTE_METRIC_EXPLICIT;
+		return EIGRP_REDIST_METRIC_EXPLICIT;
 	}
 	if (eigrp_redist_vecmetric_usable(route)) {
 		*metric = route->redist.vecmetric;
-		return EIGRP_REDISTRIBUTE_METRIC_ROUTE;
+		return EIGRP_REDIST_METRIC_ROUTE;
 	}
 	if (eigrp_metric_default(af, &values)) {
 		eigrp_metric_values_convert(&values, metric);
-		return EIGRP_REDISTRIBUTE_METRIC_DEFAULT;
+		return EIGRP_REDIST_METRIC_DEFAULT;
 	}
-	return EIGRP_REDISTRIBUTE_METRIC_NONE;
+	return EIGRP_REDIST_METRIC_NONE;
 }
 
 /*
@@ -864,7 +864,7 @@ eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
 		}
 	}
 	if (eigrp_redist_metric_select(af, config, route, &metric)
-	    == EIGRP_REDISTRIBUTE_METRIC_NONE) {
+	    == EIGRP_REDIST_METRIC_NONE) {
 		eigrp_result_t withdraw;
 		eigrp_redist_event_add(
 			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,

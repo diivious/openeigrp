@@ -1,0 +1,289 @@
+{
+  "scenario": "2R-routes",
+  "objectives": {
+    "DUAL-01/ipv4": {
+      "status": "PASS",
+      "wire": {
+        "oe": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 14419200,
+              "hops": 0,
+              "delay": 2560,
+              "bandwidth": 25600,
+              "flags": 0
+            }
+          ]
+        },
+        "ce": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 15336704,
+              "hops": 0,
+              "delay": 1250000,
+              "bandwidth": 8000000,
+              "flags": 0
+            },
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 15336704,
+              "hops": 0,
+              "delay": 1250000,
+              "bandwidth": 8000000,
+              "flags": 0
+            }
+          ]
+        }
+      }
+    },
+    "DUAL-03/ipv4": {
+      "status": "PASS",
+      "oe": {
+        "before_distance": {
+          "fd": 26255360,
+          "cd": 26255360,
+          "rd": 25600000
+        },
+        "after_distance": {
+          "fd": 26255360,
+          "cd": 26255366,
+          "rd": 25600006
+        },
+        "changed_metrics": [
+          {
+            "tag": 0,
+            "reliability": 255,
+            "load": 1,
+            "mtu": 14419200,
+            "hops": 0,
+            "delay": 100,
+            "bandwidth": 25600,
+            "flags": 0
+          }
+        ]
+      },
+      "ce": {
+        "before_distance": {
+          "fd": 4151418880,
+          "cd": 4151418880,
+          "rd": 4150763520
+        },
+        "after_distance": {
+          "fd": 2623184896,
+          "cd": 2623184896,
+          "rd": 2622529536
+        },
+        "changed_metrics": [
+          {
+            "tag": 0,
+            "reliability": 255,
+            "load": 1,
+            "mtu": 14419200,
+            "hops": 0,
+            "delay": 1000000000,
+            "bandwidth": 100000,
+            "flags": 0
+          }
+        ]
+      }
+    },
+    "DUAL-04/ipv4": {
+      "status": "PASS",
+      "single_path_distances": {
+        "oe": {
+          "fd": 2368655360,
+          "cd": 2368655360,
+          "rd": 2368000000
+        },
+        "ce": {
+          "fd": 26255527,
+          "cd": 26255527,
+          "rd": 25600167
+        }
+      }
+    },
+    "DUAL-01/ipv6": {
+      "status": "PASS",
+      "wire": {
+        "oe": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 14419200,
+              "hops": 0,
+              "delay": 2560,
+              "bandwidth": 25600,
+              "flags": 0
+            }
+          ]
+        },
+        "ce": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 15336704,
+              "hops": 0,
+              "delay": 1250000,
+              "bandwidth": 8000000,
+              "flags": 0
+            },
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 15336704,
+              "hops": 0,
+              "delay": 1250000,
+              "bandwidth": 8000000,
+              "flags": 0
+            }
+          ]
+        }
+      }
+    },
+    "DUAL-03/ipv6": {
+      "status": "PASS",
+      "oe": {
+        "before_distance": {
+          "fd": 26255360,
+          "cd": 26255360,
+          "rd": 25600000
+        },
+        "after_distance": {
+          "fd": 26255360,
+          "cd": 26255366,
+          "rd": 25600006
+        },
+        "changed_metrics": [
+          {
+            "tag": 0,
+            "reliability": 255,
+            "load": 1,
+            "mtu": 14419200,
+            "hops": 0,
+            "delay": 100,
+            "bandwidth": 25600,
+            "flags": 0
+          }
+        ]
+      },
+      "ce": {
+        "before_distance": {
+          "fd": 4151418880,
+          "cd": 4151418880,
+          "rd": 4150763520
+        },
+        "after_distance": {
+          "fd": 2623184896,
+          "cd": 2623184896,
+          "rd": 2622529536
+        },
+        "changed_metrics": [
+          {
+            "tag": 0,
+            "reliability": 255,
+            "load": 1,
+            "mtu": 14419200,
+            "hops": 0,
+            "delay": 1000000000,
+            "bandwidth": 100000,
+            "flags": 0
+          }
+        ]
+      }
+    },
+    "DUAL-04/ipv6": {
+      "status": "PASS",
+      "single_path_distances": {
+        "oe": {
+          "fd": 2368655360,
+          "cd": 2368655360,
+          "rd": 2368000000
+        },
+        "ce": {
+          "fd": 26255527,
+          "cd": 26255527,
+          "rd": 25600167
+        }
+      }
+    },
+    "DUAL-02/ipv4": {
+      "status": "PASS",
+      "wire": {
+        "oe": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 14419200,
+              "hops": 0,
+              "delay": 10,
+              "bandwidth": 25600,
+              "flags": 0
+            }
+          ]
+        },
+        "ce": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 14419200,
+              "hops": 0,
+              "delay": 100000000,
+              "bandwidth": 100000,
+              "flags": 0
+            }
+          ]
+        }
+      }
+    },
+    "DUAL-02/ipv6": {
+      "status": "PASS",
+      "wire": {
+        "oe": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 14419200,
+              "hops": 0,
+              "delay": 10,
+              "bandwidth": 25600,
+              "flags": 0
+            }
+          ]
+        },
+        "ce": {
+          "metrics": [
+            {
+              "tag": 0,
+              "reliability": 255,
+              "load": 1,
+              "mtu": 14419200,
+              "hops": 0,
+              "delay": 100000000,
+              "bandwidth": 100000,
+              "flags": 0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -117,10 +117,12 @@ def test_old_interface_and_rib_target_names_are_gone():
         path.read_text()
         for root in roots
         for path in root.glob("*.c")
+        if path.is_file() and not path.name.startswith(".")
     ) + "\n" + "\n".join(
         path.read_text()
         for root in roots
         for path in root.glob("*.h")
+        if path.is_file() and not path.name.startswith(".")
     )
     for name in old_names:
         assert name not in source

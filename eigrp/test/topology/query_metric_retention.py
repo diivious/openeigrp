@@ -17,6 +17,7 @@ def test_query_retained_routes_not_promoted_by_metric_update(tmp_path):
            '-ffunction-sections', '-fdata-sections', '-I', str(ROOT),
            '-I', str(ROOT / 'eigrp' / 'code'),
            str(Path(__file__).with_suffix('.c')),
+           str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
            *(str(ROOT / 'eigrp' / 'code' / src) for src in sources),
            str(ROOT / 'unix/code/eigrp_unix_format.c'),
            *(['-Wl,-dead_strip'] if sys.platform == 'darwin' else

@@ -27,6 +27,7 @@ def test_redistributed_candidate_external_topology_lifecycle_executes(tmp_path):
             #include <string.h>
 
             #include "eigrp/code/eigrp.h"
+            #include "eigrp/test/uut/eigrp_uut_defs.h"
             #include "eigrp/code/eigrp_log.h"
             #include "eigrp/code/eigrp_structs.h"
             #include "eigrp/code/eigrp_debug.h"
@@ -42,7 +43,13 @@ def test_redistributed_candidate_external_topology_lifecycle_executes(tmp_path):
     const eigrp_prefix_limit_t *limit) { (void)runtime; (void)limit; }
 eigrp_result_t eigrp_pfxlimits_state_clear(eigrp_instance_t *runtime)
 { (void)runtime; return EIGRP_RESULT_SUCCESS; }
-static eigrp_af_config_t *test_runtime_af;
+bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
+            {
+                (void)ei;
+                return false;
+            }
+
+            static eigrp_af_config_t *test_runtime_af;
             static unsigned query_work;
             static unsigned update_work;
 
@@ -232,15 +239,15 @@ static eigrp_af_config_t *test_runtime_af;
                     .topology_id = EIGRP_TOPOLOGY_ID_BASE,
                 };
                 eigrp_redist_source_t source_id = {
-                    .protocol = EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP,
+                    .protocol = EIGRP_REDIST_PROTOCOL_EIGRP,
                     .route_instance = 100,
                 };
                 eigrp_metric_values_t seed = {
-                    .bandwidth = 100000,
-                    .delay = 100,
-                    .reliability = 255,
-                    .load = 1,
-                    .mtu = 1500,
+                    .bandwidth = EIGRP_INTF_FASTETH_BW,
+                    .delay = EIGRP_INTF_ETH_DELAY,
+                    .reliability = EIGRP_INTF_REL_100,
+                    .load = EIGRP_LOAD_DEFAULT,
+                    .mtu = EIGRP_INTF_MTU_1500,
                 };
                 eigrp_rib_route_t candidate = {0};
                 eigrp_rib_nexthop_t candidate_nexthop = {0};
@@ -428,14 +435,13 @@ static eigrp_af_config_t *test_runtime_af;
                     eigrp_metric_t old_redist_distance = route->distance;
                     eigrp_metrics_t redist_calculation = route->metric;
 
-                    link.params.bandwidth = 100000;
-                    link.params.delay = 100;
-                    link.params.load = 1;
-                    link.params.reliability = 255;
-                    local_metric.bandwidth = eigrp_bandwidth_to_scaled(
-                        link.params.bandwidth);
-                    local_metric.delay = eigrp_delay_to_scaled(
-                        link.params.delay);
+                    link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+                    link.params.delay = EIGRP_INTF_ETH_DELAY;
+                    link.params.load = EIGRP_LOAD_DEFAULT;
+                    link.params.reliability = EIGRP_INTF_REL_100;
+                    eigrp_metric_link_set(&local_metric,
+                                         link.params.bandwidth,
+                                         link.params.delay, false);
                     local_metric.load = link.params.load;
                     local_metric.reliability = link.params.reliability;
                     set_ipv4(&local_destination.address, 10, 88, 0, 0);
@@ -468,7 +474,9 @@ static eigrp_af_config_t *test_runtime_af;
                     link.params.delay = 200;
                     runtime.k_values[2] = 2;
                     eigrp_topology_metric_update(&runtime);
-                    local_metric.delay = eigrp_delay_to_scaled(200);
+                    eigrp_metric_link_set(&local_metric,
+                                         link.params.bandwidth,
+                                         link.params.delay, false);
                     assert(local_route->reported_distance == 0);
                     assert(local_route->metric.delay == local_metric.delay);
                     assert(eigrp_metrics_match(local_route->reported_metric,

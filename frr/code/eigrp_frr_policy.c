@@ -231,7 +231,7 @@ eigrp_result_t eigrp_policy_filter_evaluate(eigrp_instance_t *eigrp,
 	else
 		return EIGRP_RESULT_UNSUPPORTED;
 
-	if (type == EIGRP_DISTRIBUTE_ACCESS_LIST) {
+	if (type == EIGRP_DIST_ACCESS_LIST) {
 		access = access_list_lookup(afi, name);
 		if (!access)
 			return EIGRP_RESULT_NOT_FOUND;
@@ -239,7 +239,7 @@ eigrp_result_t eigrp_policy_filter_evaluate(eigrp_instance_t *eigrp,
 			*decision = EIGRP_FILTER_DECISION_DENY;
 		return EIGRP_RESULT_SUCCESS;
 	}
-	if (type == EIGRP_DISTRIBUTE_PREFIX_LIST) {
+	if (type == EIGRP_DIST_PREFIX_LIST) {
 		plist = prefix_list_lookup(afi, name);
 		if (!plist)
 			return EIGRP_RESULT_NOT_FOUND;

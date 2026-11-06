@@ -7,6 +7,7 @@
  * only host RIB/event boundaries.  An unknown QUERY creates a PASSIVE
  * destination with infinite local distance and a finite retained RDB.
  */
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -173,8 +174,8 @@ static eigrp_metrics_t metric(void)
 	eigrp_metrics_t m = {0};
 	m.bandwidth = eigrp_bandwidth_to_scaled(100000);
 	m.delay = eigrp_delay_to_scaled(200);
-	m.reliability = 255;
-	m.load = 1;
+	m.reliability = EIGRP_INTF_REL_100;
+	m.load = EIGRP_LOAD_DEFAULT;
 	return m;
 }
 
@@ -249,10 +250,10 @@ static void assert_usable_alternate_counts(void)
 	eigrp_intf_t link = {0};
 	eigrp_route_descriptor_t *selected, *alternate;
 	eigrp_prefix_t target = {0};
-	link.params.bandwidth = 100000;
-	link.params.delay = 100;
-	link.params.reliability = 255;
-	link.params.load = 1;
+	link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	link.params.delay = EIGRP_INTF_ETH_DELAY;
+	link.params.reliability = EIGRP_INTF_REL_100;
+	link.params.load = EIGRP_LOAD_DEFAULT;
 	init_runtime(&eigrp, &self);
 	memset(&policy, 0, sizeof(policy));
 	policy.topology_maximum_prefix_configured = true;
@@ -309,10 +310,10 @@ static void assert_active_frozen_distance_releases_capacity(void)
 	eigrp_fsm_action_message_t msg = {0};
 	eigrp_prefix_t target;
 
-	link.params.bandwidth = 100000;
-	link.params.delay = 100;
-	link.params.reliability = 255;
-	link.params.load = 1;
+	link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	link.params.delay = EIGRP_INTF_ETH_DELAY;
+	link.params.reliability = EIGRP_INTF_REL_100;
+	link.params.load = EIGRP_LOAD_DEFAULT;
 	init_runtime(&eigrp, &self);
 	memset(&policy, 0, sizeof(policy));
 	policy.topology_maximum_prefix_configured = true;
@@ -422,10 +423,10 @@ int main(void)
 	eigrp_route_descriptor_t *installed, *query_int, *query_ext,
 		*replacement;
 	eigrp_prefix_t absent = {0};
-	link.params.bandwidth = 100000;
-	link.params.delay = 100;
-	link.params.reliability = 255;
-	link.params.load = 1;
+	link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	link.params.delay = EIGRP_INTF_ETH_DELAY;
+	link.params.reliability = EIGRP_INTF_REL_100;
+	link.params.load = EIGRP_LOAD_DEFAULT;
 	init_runtime(&eigrp, &self);
 	memset(&policy, 0, sizeof(policy));
 	policy.topology_maximum_prefix_configured = true;

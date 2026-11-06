@@ -73,7 +73,7 @@ def test_runtime_ingress_enforces_seed_and_deferred_route_map_boundaries():
     assert "EIGRP_FILTER_DECISION_DENY" in redistribute
     assert "eigrp_topology_redistributed_route_remove" in redistribute
     assert "eigrp_redist_metric_select" in redistribute
-    assert "== EIGRP_REDISTRIBUTE_METRIC_NONE" in redistribute
+    assert "== EIGRP_REDIST_METRIC_NONE" in redistribute
     assert "return EIGRP_RESULT_SUCCESS;" in redistribute
 
     # Zebra ADD is intentionally both first appearance and route change; DELETE

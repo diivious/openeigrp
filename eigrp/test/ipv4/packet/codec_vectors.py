@@ -17,6 +17,8 @@ def read(path: str) -> str:
 def all_production_source() -> str:
     chunks = []
     for path in ROOT.rglob("*"):
+        if path.name.startswith(".") or not path.is_file():
+            continue
         if path.suffix not in {".c", ".h"}:
             continue
         if any(part in {".git", "test"} for part in path.parts):

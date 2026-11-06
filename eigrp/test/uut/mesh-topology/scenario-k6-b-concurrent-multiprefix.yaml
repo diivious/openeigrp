@@ -12,7 +12,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.120.0.0/24
@@ -24,15 +24,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.121.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.121.0.0/24
@@ -44,15 +44,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.122.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.122.0.0/24
@@ -64,15 +64,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.123.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.123.0.0/24
@@ -84,15 +84,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.124.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.124.0.0/24
@@ -104,15 +104,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.125.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.125.0.0/24
@@ -124,15 +124,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.126.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.126.0.0/24
@@ -144,15 +144,15 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
     - route:
         uut: r1
         prefix: 10.127.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.127.0.0/24
@@ -164,8 +164,8 @@ steps:
         table: path
         next_hop: 10.12.0.2
         successor: true
-        distance: 7864320
-        rd: 7208960
+        distance: 19660800
+        rd: 13107200
 # Wait for the full mesh INIT exchanges before injecting DUAL faults.
 - validate-convergence:
     timeout: 20
@@ -248,7 +248,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.120.0.0/24
@@ -265,7 +265,7 @@ steps:
         prefix: 10.120.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -273,7 +273,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.121.0.0/24
@@ -290,7 +290,7 @@ steps:
         prefix: 10.121.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -298,7 +298,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.122.0.0/24
@@ -315,7 +315,7 @@ steps:
         prefix: 10.122.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -323,7 +323,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.123.0.0/24
@@ -340,7 +340,7 @@ steps:
         prefix: 10.123.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -348,7 +348,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.124.0.0/24
@@ -365,7 +365,7 @@ steps:
         prefix: 10.124.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -373,7 +373,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.125.0.0/24
@@ -390,7 +390,7 @@ steps:
         prefix: 10.125.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -398,7 +398,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.126.0.0/24
@@ -415,7 +415,7 @@ steps:
         prefix: 10.126.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
     - route:
         uut: r1
@@ -423,7 +423,7 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 9175040
+        fd: 32768000
     - route:
         uut: r1
         prefix: 10.127.0.0/24
@@ -440,7 +440,7 @@ steps:
         prefix: 10.127.0.0/24
         table: rib
         next_hop: 10.13.0.3
-        metric: 9175040
+        metric: 32768000
         distance: 90
 - validate-packet:
     opcode: query
@@ -620,54 +620,54 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.121.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.122.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.123.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.124.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.125.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.126.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
     - route:
         uut: r1
         prefix: 10.127.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7864320
+        fd: 19660800
 - stop: all

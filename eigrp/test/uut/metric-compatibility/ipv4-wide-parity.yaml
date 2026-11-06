@@ -1,0 +1,16 @@
+schema: eigrp-uut-topology/v1
+segments:
+  transit: {}
+routers:
+  r1:
+    asn: 4473
+    router_id: 10.255.4.1
+    interfaces:
+      eth0: {segment: transit, ipv4: 10.44.53.1/30, bandwidth: 100000, delay: 10}
+    attached_networks:
+      - {prefix: 10.255.1.1/32, interface: lo1, bandwidth: 100000, delay: 10}
+  r2:
+    asn: 4473
+    router_id: 10.255.4.2
+    interfaces:
+      eth0: {segment: transit, ipv4: 10.44.53.2/30, bandwidth: 100000, delay: 10}

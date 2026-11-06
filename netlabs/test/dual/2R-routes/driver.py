@@ -160,8 +160,26 @@ def topology_metrics(lab, family, prefix, role):
 
 def require_distance_change(before, after):
     # FD is a historical feasibility bound, not the current computed metric.
-    require(after['cd'] != before['cd'], 'remote topology computed distance unchanged')
-    require(after['rd'] != before['rd'], 'remote topology reported distance unchanged')
+    require(after['cd'] > before['cd'], 'remote topology computed distance did not increase')
+    require(after['rd'] > before['rd'], 'remote topology reported distance did not increase')
+
+
+def cisco_metric(metric):
+    """Exact Cisco default-K TLV2 distance, keeping delay fractions."""
+    bandwidth = metric['bandwidth']
+    delay = metric['delay']
+    require(bandwidth > 0 and delay >= 0, 'invalid wide metric vector')
+    return (10000000 * 65536 // bandwidth
+            + delay * 65536 // 1000000)
+
+
+def require_metric_parity(topology, wire):
+    for receiver in ('oe', 'ce'):
+        sender = 'ce' if receiver == 'oe' else 'oe'
+        values = {cisco_metric(metric) for metric in wire[sender]['metrics']}
+        require(len(values) == 1 and topology[receiver]['rd'] in values,
+                f'{sender}->{receiver} RD {topology[receiver]["rd"]} '
+                f'does not match Cisco wire distance {sorted(values)}')
 
 
 def external_diagnostics(lab, family, label):
@@ -303,7 +321,13 @@ def run(lab, report, spec):
                         added.add(role)
                     route_rib(lab, family, 'external', external)
                     time.sleep(7)
-                return {'wire': provenance(capture.events, family, external, sources),
+                wire = provenance(capture.events, family, external, sources)
+                for sender in ('oe', 'ce'):
+                    for metric in wire[sender]['metrics']:
+                        require(metric['bandwidth'] == 100000 and
+                                metric['delay'] == 100000000,
+                                f'{sender} external TLV2 seed units differ from Cisco')
+                return {'wire': wire,
                         'rib': {r: lab.routes(r, family) for r in ('oe','ce')}}
             except Exception:
                 external_diagnostics(lab, family, 'dual02-failure')
@@ -384,6 +408,10 @@ def run(lab, report, spec):
                 data[receiver] = topology_metrics(lab, family, internal[sender], receiver)
             require(data['oe']['fd'] > 0 and data['ce']['fd'] > 0,
                     'zero feasible distance')
+            internal_result = report['objectives'][f'DUAL-01/{family}']
+            require(internal_result['status'] == 'PASS',
+                    'missing DUAL-01 wire metric evidence')
+            require_metric_parity(data, internal_result['wire'])
             return {'single_path_distances': data,
                     'scope': '2R RD/CD/FD only; alternate feasible successor requires 4R'}
         record(report, 'DUAL-04', family, check_metrics)

@@ -12,14 +12,14 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 7208960
+        fd: 13107200
     - route:
         uut: r2
         prefix: 10.12.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7208960
+        fd: 13107200
 - validate-convergence:
     timeout: 12
     expect:
@@ -173,12 +173,12 @@ steps:
         table: topology
         active: false
         successors: 1
-        fd: 7208960
+        fd: 13107200
     - route:
         uut: r2
         prefix: 10.12.0.0/24
         table: topology
         active: false
         successors: 1
-        fd: 7208960
+        fd: 13107200
 - stop: all

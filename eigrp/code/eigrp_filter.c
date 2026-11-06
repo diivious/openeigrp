@@ -262,11 +262,11 @@ eigrp_filter_runtime_state_denies(eigrp_instance_t *eigrp,
 				  const eigrp_filter_runtime_state_t *state,
 				  int direction, const eigrp_prefix_t *prefix)
 {
-	if (eigrp_filter_reference_denies(eigrp, EIGRP_DISTRIBUTE_ACCESS_LIST,
+	if (eigrp_filter_reference_denies(eigrp, EIGRP_DIST_ACCESS_LIST,
 					  state->access_list[direction],
 					  prefix))
 		return true;
-	if (eigrp_filter_reference_denies(eigrp, EIGRP_DISTRIBUTE_PREFIX_LIST,
+	if (eigrp_filter_reference_denies(eigrp, EIGRP_DIST_PREFIX_LIST,
 					  state->prefix_list[direction],
 					  prefix))
 		return true;
@@ -364,7 +364,7 @@ static bool eigrp_offset_acl_permits(eigrp_instance_t *eigrp,
 	eigrp_filter_decision_t decision = EIGRP_FILTER_DECISION_DENY;
 
 	return access_list && prefix
-	       && eigrp_sys_filter_evaluate(eigrp, EIGRP_DISTRIBUTE_ACCESS_LIST,
+	       && eigrp_sys_filter_evaluate(eigrp, EIGRP_DIST_ACCESS_LIST,
 					    access_list, prefix, &decision)
 			  == EIGRP_RESULT_SUCCESS
 	       && decision == EIGRP_FILTER_DECISION_PERMIT;
@@ -666,8 +666,7 @@ static eigrp_result_t eigrp_distribute_list_validate(
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (interface_name && !interface_name[0])
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	if (type != EIGRP_DISTRIBUTE_ACCESS_LIST
-	    && type != EIGRP_DISTRIBUTE_PREFIX_LIST)
+	if (type != EIGRP_DIST_ACCESS_LIST && type != EIGRP_DIST_PREFIX_LIST)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	if (direction != EIGRP_OFFSET_IN && direction != EIGRP_OFFSET_OUT)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
@@ -710,7 +709,7 @@ static eigrp_result_t eigrp_filter_runtime_reference_update(
 		snapshot.prefix_list[i] = state->prefix_list[i];
 	}
 
-	if (type == EIGRP_DISTRIBUTE_ACCESS_LIST)
+	if (type == EIGRP_DIST_ACCESS_LIST)
 		snapshot.access_list[slot] = remove ? NULL : name;
 	else
 		snapshot.prefix_list[slot] = remove ? NULL : name;

@@ -435,6 +435,21 @@ bool eigrp_intf_shutdown_effective(eigrp_intf_t *ei)
 	return eigrp_intf_config_shutdown_effective(af, specific);
 }
 
+/* Physical default delay mapping must not override an explicit CLI delay. */
+bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
+{
+	eigrp_af_config_t *af;
+	eigrp_intf_config_t *specific, *defaults;
+
+	if (!ei || !ei->eigrp)
+		return false;
+	af = eigrp_af_config_runtime_read(ei->eigrp);
+	specific = af ? eigrp_intf_config_read(af, ei->name) : NULL;
+	defaults = af ? eigrp_intf_config_read(af, "default") : NULL;
+	return !(specific && specific->delay_configured)
+	       && !(defaults && defaults->delay_configured);
+}
+
 static const eigrp_intf_config_t *
 eigrp_intf_effective_default(eigrp_intf_t *runtime)
 {
@@ -1571,8 +1586,9 @@ int eigrp_intf_up(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 	eigrp_timer_add(ei->eigrp, &ei->t_hello, eigrp_hello_timer, ei, 0);
 
 	/*Prepare metrics*/
-	metric.bandwidth = eigrp_bandwidth_to_scaled(ei->params.bandwidth);
-	metric.delay = eigrp_delay_to_scaled(ei->params.delay);
+	memset(&metric, 0, sizeof(metric));
+	eigrp_metric_link_set(&metric, ei->params.bandwidth, ei->params.delay,
+			      eigrp_intf_delay_is_default(ei));
 	metric.load = ei->params.load;
 	metric.reliability = ei->params.reliability;
 	metric.mtu[0] = 0xDC;

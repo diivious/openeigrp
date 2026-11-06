@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: ISC
 /* RFC 7868 4.3 finite/poisoned unknown QUERY storage regression. */
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -165,8 +166,8 @@ static eigrp_route_descriptor_t *query_route(eigrp_intf_t *ei, uint8_t last,
 	route->metric.delay =
 		poisoned ? EIGRP_MAX_METRIC : eigrp_delay_to_scaled(15);
 	route->metric.bandwidth = eigrp_bandwidth_to_scaled(100000);
-	route->metric.reliability = 255;
-	route->metric.load = 1;
+	route->metric.reliability = EIGRP_INTF_REL_100;
+	route->metric.load = EIGRP_LOAD_DEFAULT;
 	return route;
 }
 
@@ -185,8 +186,8 @@ int main(void)
 	eigrp.k_values[0] = 1;
 	eigrp.k_values[2] = 1;
 	eigrp.metric_version = EIGRP_TLV_32B_VERSION;
-	ei.params.bandwidth = 100000;
-	ei.params.delay = 10;
+	ei.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	ei.params.delay = EIGRP_INTF_FASTETH_DELAY;
 	nbr.ei = &ei;
 	nbr.decoder = decode_one;
 	finite = query_route(&ei, 1, false);

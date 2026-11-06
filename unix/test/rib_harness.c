@@ -76,7 +76,7 @@ int main(void)
 	eigrp_rib_route_t source = {0};
 	eigrp_rib_nexthop_t source_nh = {0};
 	eigrp_redist_source_t connected = {
-		.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED,
+		.protocol = EIGRP_REDIST_PROTOCOL_CONNECTED,
 	};
 	unsigned seen = 0;
 

@@ -4310,7 +4310,7 @@ eigrp_vty_topology_prefix_show(const eigrp_topology_prefix_state_t *state,
 	if (state->feasible_distance == EIGRP_MAX_METRIC)
 		vty_out(show->vty, "Inaccessible");
 	else
-		vty_out(show->vty, "%u", state->feasible_distance);
+		vty_out(show->vty, "%" PRIu64, state->feasible_distance);
 	if (show->include_serial)
 		vty_out(show->vty, ", serno %" PRIu64, state->serial_number);
 	vty_out(show->vty, "\n");
@@ -4329,7 +4329,8 @@ eigrp_vty_topology_route_show(const eigrp_topology_route_state_t *state,
 			state->interface_name ? state->interface_name
 					      : "<unknown>");
 	else
-		vty_out(show->vty, "        via %s (%u/%u), %s\n",
+		vty_out(show->vty,
+			"        via %s (%" PRIu64 "/%" PRIu64 "), %s\n",
 			eigrp_vty_address_string(&state->next_hop, address,
 						 sizeof(address)),
 			state->distance, state->reported_distance,

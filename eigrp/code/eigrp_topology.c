@@ -62,21 +62,21 @@ eigrp_topology_redistributed_protocol(const eigrp_redist_source_t *source)
 		return 0;
 
 	switch (source->protocol) {
-	case EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP:
+	case EIGRP_REDIST_PROTOCOL_EIGRP:
 		return 2;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_STATIC:
+	case EIGRP_REDIST_PROTOCOL_STATIC:
 		return 3;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_RIP:
+	case EIGRP_REDIST_PROTOCOL_RIP:
 		return 4;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_OSPF:
+	case EIGRP_REDIST_PROTOCOL_OSPF:
 		return 6;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_ISIS:
+	case EIGRP_REDIST_PROTOCOL_ISIS:
 		return 7;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_BGP:
+	case EIGRP_REDIST_PROTOCOL_BGP:
 		return 9;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED:
+	case EIGRP_REDIST_PROTOCOL_CONNECTED:
 		return 11;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED:
+	case EIGRP_REDIST_PROTOCOL_UNSPECIFIED:
 	default:
 		return 0;
 	}
@@ -89,7 +89,7 @@ eigrp_topology_redistributed_external_as(const eigrp_instance_t *eigrp,
 	if (!eigrp || !source)
 		return 0;
 
-	if (source->protocol == EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP)
+	if (source->protocol == EIGRP_REDIST_PROTOCOL_EIGRP)
 		return ((uint32_t)eigrp->virt_router->vrid << 16)
 		       | ((uint32_t)source->route_instance & 0xffffU);
 
@@ -169,7 +169,7 @@ eigrp_topology_redistributed_distance(eigrp_instance_t *eigrp,
 	 */
 	calculation.delay = eigrp_delay_to_scaled(calculation.delay);
 	distance = eigrp_metric_calculate(eigrp, calculation);
-	return distance > EIGRP_MAX_METRIC ? EIGRP_MAX_METRIC : distance;
+	return distance;
 }
 
 static eigrp_route_descriptor_t *
@@ -692,9 +692,10 @@ void eigrp_prefix_descriptor_add(eigrp_table_t *topology,
 		if (IS_DEBUG_EIGRP(0, DETAIL))
 			eigrp_log(
 				EIGRP_LOG_DEBUG,
-				"EIGRP event detail: prefix state %u distance %u fd %u rd %u",
-				pe->state, pe->distance, pe->fdistance,
-				pe->rdistance);
+				"EIGRP event detail: prefix state %u distance %llu fd %llu rd %llu",
+				pe->state, (unsigned long long)pe->distance,
+				(unsigned long long)pe->fdistance,
+				(unsigned long long)pe->rdistance);
 	}
 }
 
@@ -750,9 +751,11 @@ void eigrp_prefix_descriptor_delete(eigrp_instance_t *eigrp,
 		if (IS_DEBUG_EIGRP(0, DETAIL))
 			eigrp_log(
 				EIGRP_LOG_DEBUG,
-				"EIGRP event detail: AS %u prefix state %u distance %u fd %u rd %u",
-				eigrp->AS, pe->state, pe->distance,
-				pe->fdistance, pe->rdistance);
+				"EIGRP event detail: AS %u prefix state %u distance %llu fd %llu rd %llu",
+				eigrp->AS, pe->state,
+				(unsigned long long)pe->distance,
+				(unsigned long long)pe->fdistance,
+				(unsigned long long)pe->rdistance);
 	}
 
 	eigrp_list_delete_data(eigrp->topology_changes, pe);
@@ -1210,7 +1213,7 @@ eigrp_topology_update_distance(eigrp_fsm_action_message_t *msg)
 	eigrp_prefix_descriptor_t *prefix = msg->prefix;
 	eigrp_route_descriptor_t *route = msg->route;
 	enum metric_change change = METRIC_SAME;
-	uint32_t new_reported_distance;
+	eigrp_metric_t new_reported_distance;
 	bool class_changed;
 	bool stored;
 	bool first_peer_path;
@@ -1387,10 +1390,10 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 			!(route->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)
 			&& route->reported_distance < dest->fdistance;
 		bool within_variance =
-			route->distance != EIGRP_MAX_METRIC
-			&& (uint64_t)route->distance
-				   <= (uint64_t)dest->distance
-					      * (uint64_t)eigrp->variance;
+			route->distance != EIGRP_MAX_METRIC && eigrp->variance
+			&& (dest->distance > UINT64_MAX / eigrp->variance
+			    || route->distance
+				       <= dest->distance * eigrp->variance);
 
 		if (feasible) {
 			if (within_variance && successor_count < max_paths) {
@@ -1413,7 +1416,7 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 					      &dest->destination);
 			eigrp_log(
 				EIGRP_LOG_DEBUG,
-				"EIGRP AS %u prefix %s via %s: successor %s feasible-successor %s RD %u FD %u distance %u",
+				"EIGRP AS %u prefix %s via %s: successor %s feasible-successor %s RD %llu FD %llu distance %llu",
 				eigrp->AS, prefix_buf,
 				route->adv_router
 					? eigrp_print_addr(
@@ -1427,8 +1430,9 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 				 & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)
 					? "yes"
 					: "no",
-				route->reported_distance, dest->fdistance,
-				route->distance);
+				(unsigned long long)route->reported_distance,
+				(unsigned long long)dest->fdistance,
+				(unsigned long long)route->distance);
 		}
 	}
 	eigrp_topology_prefix_count_sync(eigrp, dest);
@@ -1550,12 +1554,12 @@ void eigrp_topology_metric_update(eigrp_instance_t *eigrp)
 					 * its local link. */
 					eigrp_metrics_t metric = route->metric;
 
-					metric.bandwidth =
-						eigrp_bandwidth_to_scaled(
-							route->ei->params
-								.bandwidth);
-					metric.delay = eigrp_delay_to_scaled(
-						route->ei->params.delay);
+					eigrp_metric_link_set(
+						&metric,
+						route->ei->params.bandwidth,
+						route->ei->params.delay,
+						eigrp_intf_delay_is_default(
+							route->ei));
 					metric.load = route->ei->params.load;
 					metric.reliability =
 						route->ei->params.reliability;
@@ -2096,9 +2100,9 @@ static eigrp_prefix_descriptor_t *eigrp_topology_prefix_recreate(
 
 static eigrp_result_t eigrp_topology_connected_recreate(
 	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination,
-	uint8_t type, const eigrp_metrics_t *reported_metric, uint32_t distance,
-	uint32_t feasible_distance, uint32_t reported_distance,
-	eigrp_list_t *routes)
+	uint8_t type, const eigrp_metrics_t *reported_metric,
+	eigrp_metric_t distance, eigrp_metric_t feasible_distance,
+	eigrp_metric_t reported_distance, eigrp_list_t *routes)
 {
 	eigrp_prefix_descriptor_t *prefix;
 	eigrp_route_descriptor_t *route;
@@ -2187,9 +2191,9 @@ eigrp_topology_clear_prefix(eigrp_instance_t *eigrp,
 	eigrp_list_t *connected_routes = NULL;
 	eigrp_route_descriptor_t *query_route = NULL;
 	eigrp_metrics_t reported_metric;
-	uint32_t distance;
-	uint32_t feasible_distance;
-	uint32_t reported_distance;
+	eigrp_metric_t distance;
+	eigrp_metric_t feasible_distance;
+	eigrp_metric_t reported_distance;
 	uint8_t type;
 	eigrp_result_t result;
 
@@ -2664,7 +2668,7 @@ bool eigrp_topology_default_information_denies(
 	if (!access_list)
 		return false;
 
-	result = eigrp_sys_filter_evaluate(eigrp, EIGRP_DISTRIBUTE_ACCESS_LIST,
+	result = eigrp_sys_filter_evaluate(eigrp, EIGRP_DIST_ACCESS_LIST,
 					   access_list, prefix, &decision);
 	return result != EIGRP_RESULT_SUCCESS
 	       || decision != EIGRP_FILTER_DECISION_PERMIT;

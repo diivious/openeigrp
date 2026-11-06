@@ -325,8 +325,11 @@ enum eigrp_fsm_events {
  *
  * extdata flag field definitions
  */
-#define EIGRP_OPAQUE_EXT 0x01 /*!< Route is external */
-#define EIGRP_OPAQUE_CD 0x02  /*!< Candidate default route */
+#define EIGRP_OPAQUE_EXT 0x01	 /*!< Legacy external-route indicator */
+#define EIGRP_OPAQUE_SRCWD 0x01	 /*!< Route Source Withdraw */
+#define EIGRP_OPAQUE_CD 0x02	 /*!< Candidate default route */
+#define EIGRP_OPAQUE_ACTIVE 0x04 /*!< Route is currently in active state */
+#define EIGRP_OPAQUE_REPL 0x08	 /*!< Route replicated from different tableid */
 
 /**
  * Address-Family types are taken from:
@@ -351,14 +354,6 @@ enum eigrp_fsm_events {
 #define EIGRP_AUTH_TYPE_MD5_LEN 16
 #define EIGRP_AUTH_TYPE_SHA256 3
 #define EIGRP_AUTH_TYPE_SHA256_LEN 32
-
-/**
- * opaque flag field definitions
- */
-#define EIGRP_OPAQUE_SRCWD 0x01	 /*!< Route Source Withdraw */
-#define EIGRP_OPAQUE_ACTIVE 0x04 /*!< Route is currently in active state */
-#define EIGRP_OPAQUE_REPL                                                      \
-	0x08 /*!< Route is replicated from different tableid */
 
 /**
  * pak flag bit field definitions - 0 (none)-7 source priority

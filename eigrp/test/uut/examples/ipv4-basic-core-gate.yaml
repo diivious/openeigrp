@@ -15,10 +15,10 @@ steps:
       stable_for: 0.2
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 8519680, distance: 90}
-        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, metric: 8519680, distance: 90}
-        - route: {uut: r1, prefix: 10.3.0.0/24, table: topology, active: false, successors: 1, fd: 8519680}
-        - route: {uut: r3, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1, fd: 8519680}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 26214400, distance: 90}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, metric: 26214400, distance: 90}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: topology, active: false, successors: 1, fd: 26214400}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1, fd: 26214400}
   - packet-mark: failure
   - link-down: {uut: r2, interface: eth23}
   - link-down: {uut: r3, interface: eth32}
@@ -46,7 +46,7 @@ steps:
       stable_for: 0.2
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 8519680, distance: 90}
-        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, metric: 8519680, distance: 90}
-        - route: {uut: r1, prefix: 10.3.0.0/24, table: topology, active: false, successors: 1, fd: 8519680}
-        - route: {uut: r3, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1, fd: 8519680}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 26214400, distance: 90}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, metric: 26214400, distance: 90}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: topology, active: false, successors: 1, fd: 26214400}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1, fd: 26214400}

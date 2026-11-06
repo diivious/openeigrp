@@ -3643,25 +3643,24 @@ static bool eigrpd_named_redistribute_source_get(const struct lyd_node *dnode,
 	if (strcmp(protocol, "eigrp") == 0) {
 		if (route_instance == 0 || route_instance > UINT16_MAX)
 			return false;
-		source->protocol = EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
+		source->protocol = EIGRP_REDIST_PROTOCOL_EIGRP;
 	} else if (strcmp(protocol, "ospf") == 0) {
 		if (route_instance > UINT16_MAX)
 			return false;
-		source->protocol = EIGRP_REDISTRIBUTE_PROTOCOL_OSPF;
+		source->protocol = EIGRP_REDIST_PROTOCOL_OSPF;
 	} else {
 		if (route_instance != 0)
 			return false;
 		if (strcmp(protocol, "connected") == 0)
-			source->protocol =
-				EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED;
+			source->protocol = EIGRP_REDIST_PROTOCOL_CONNECTED;
 		else if (strcmp(protocol, "static") == 0)
-			source->protocol = EIGRP_REDISTRIBUTE_PROTOCOL_STATIC;
+			source->protocol = EIGRP_REDIST_PROTOCOL_STATIC;
 		else if (strcmp(protocol, "rip") == 0)
-			source->protocol = EIGRP_REDISTRIBUTE_PROTOCOL_RIP;
+			source->protocol = EIGRP_REDIST_PROTOCOL_RIP;
 		else if (strcmp(protocol, "isis") == 0)
-			source->protocol = EIGRP_REDISTRIBUTE_PROTOCOL_ISIS;
+			source->protocol = EIGRP_REDIST_PROTOCOL_ISIS;
 		else if (strcmp(protocol, "bgp") == 0)
-			source->protocol = EIGRP_REDISTRIBUTE_PROTOCOL_BGP;
+			source->protocol = EIGRP_REDIST_PROTOCOL_BGP;
 		else
 			return false;
 	}
@@ -4079,8 +4078,8 @@ static int eigrpd_named_distribute_list_modify(struct nb_cb_modify_args *args)
 						     &context))
 		return NB_ERR_INCONSISTENCY;
 	type = strcmp(args->dnode->schema->name, "prefix-list") == 0
-		       ? EIGRP_DISTRIBUTE_PREFIX_LIST
-		       : EIGRP_DISTRIBUTE_ACCESS_LIST;
+		       ? EIGRP_DIST_PREFIX_LIST
+		       : EIGRP_DIST_ACCESS_LIST;
 	direction = direction_node->schema->name;
 	dir = strcmp(direction, "out") == 0 ? EIGRP_OFFSET_OUT
 					    : EIGRP_OFFSET_IN;
@@ -4128,8 +4127,8 @@ static int eigrpd_named_distribute_list_destroy(struct nb_cb_destroy_args *args)
 						     &context))
 		return NB_ERR_INCONSISTENCY;
 	type = strcmp(args->dnode->schema->name, "prefix-list") == 0
-		       ? EIGRP_DISTRIBUTE_PREFIX_LIST
-		       : EIGRP_DISTRIBUTE_ACCESS_LIST;
+		       ? EIGRP_DIST_PREFIX_LIST
+		       : EIGRP_DIST_ACCESS_LIST;
 	direction = direction_node->schema->name;
 	dir = strcmp(direction, "out") == 0 ? EIGRP_OFFSET_OUT
 					    : EIGRP_OFFSET_IN;

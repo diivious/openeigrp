@@ -4,8 +4,8 @@
  *
  * Copyright (C) 2026 Donnie V. Savage
  */
-#ifndef EIGRPD_EIGRP_REDISTRIBUTE_H_
-#define EIGRPD_EIGRP_REDISTRIBUTE_H_
+#ifndef EIGRPD_EIGRP_REDIST_H_
+#define EIGRPD_EIGRP_REDIST_H_
 
 #include "eigrp_instance.h"
 #include "eigrp_metric.h"
@@ -34,4 +34,4 @@ void eigrp_redist_limit_restart_expired(void *runtime);
 eigrp_result_t eigrp_redist_limit_clear(eigrp_instance_t *runtime);
 void eigrp_redist_policy_delete_all(eigrp_af_config_t *af);
 
-#endif /* EIGRPD_EIGRP_REDISTRIBUTE_H_ */
+#endif /* EIGRPD_EIGRP_REDIST_H_ */

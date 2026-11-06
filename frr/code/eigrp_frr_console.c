@@ -393,7 +393,7 @@ void show_ip_eigrp_prefix_descriptor(struct vty *vty,
 	if (tn->fdistance == EIGRP_MAX_METRIC)
 		vty_out(vty, "Inaccessible");
 	else
-		vty_out(vty, "%u", tn->fdistance);
+		vty_out(vty, "%llu", (unsigned long long)tn->fdistance);
 	if (include_serial)
 		vty_out(vty, ", serno %" PRIu64, tn->serno);
 	vty_out(vty, "\n");
@@ -419,9 +419,11 @@ void show_ip_eigrp_route_descriptor(struct vty *vty, eigrp_instance_t *eigrp,
 		vty_out(vty, "        via Connected, %s\n",
 			eigrp_intf_name_string(te->ei));
 	else
-		vty_out(vty, "        via %s (%u/%u), %s\n",
-			eigrp_print_addr(&te->adv_router->src), te->distance,
-			te->reported_distance, eigrp_intf_name_string(te->ei));
+		vty_out(vty, "        via %s (%llu/%llu), %s\n",
+			eigrp_print_addr(&te->adv_router->src),
+			(unsigned long long)te->distance,
+			(unsigned long long)te->reported_distance,
+			eigrp_intf_name_string(te->ei));
 }
 
 

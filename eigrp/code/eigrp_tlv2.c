@@ -34,7 +34,6 @@
 #define EIGRP_TLV2_METRIC_SIZE 24
 #define EIGRP_TLV2_DEST_PREFIX_SIZE 1
 #define EIGRP_TLV2_EXTDATA_SIZE 20
-#define EIGRP_TLV2_INACCESSIBLE 0xffffffffffffULL
 #define EIGRP_TLV2_EXTATTR_HEADER_SIZE 2
 
 /* eigrp_instance::router_id is stored as struct in_addr (network-order
@@ -165,18 +164,30 @@ static uint16_t eigrp_tlv2_metric_decode(eigrp_stream_t *pkt,
 	metric->mtu[1] = eigrp_stream_getc(pkt);
 	metric->mtu[0] = eigrp_stream_getc(pkt);
 	metric->hop_count = eigrp_stream_getc(pkt);
-	metric->delay = eigrp_tlv2_get48(pkt);
-	metric->bandwidth = eigrp_tlv2_get48(pkt);
+	metric->wide_delay = eigrp_tlv2_get48(pkt);
+	metric->wide_bandwidth = eigrp_tlv2_get48(pkt);
+	if (metric->wide_delay != EIGRP_TLV2_INACCESSIBLE
+	    && metric->wide_bandwidth != EIGRP_TLV2_INACCESSIBLE
+	    && metric->wide_bandwidth) {
+		metric->delay =
+			eigrp_metric_delay_wide2classic(metric->wide_delay,
+							metric->wide_bandwidth)
+			* EIGRP_CLASSIC_SCALE;
+		metric->bandwidth =
+			eigrp_bandwidth_to_scaled(metric->wide_bandwidth);
+	}
 	reserved = eigrp_stream_getw(pkt);
 	opaque = eigrp_stream_getw(pkt);
-	metric->flags = opaque & 0xff;
+	metric->flags = opaque & UINT8_MAX;
 
 	(void)reserved;
 
-	if (metric->delay == EIGRP_TLV2_INACCESSIBLE)
+	if (metric->wide_delay == EIGRP_TLV2_INACCESSIBLE
+	    || metric->wide_bandwidth == EIGRP_TLV2_INACCESSIBLE
+	    || !metric->wide_bandwidth) {
 		metric->delay = EIGRP_MAX_METRIC;
-	if (metric->bandwidth == EIGRP_TLV2_INACCESSIBLE)
 		metric->bandwidth = EIGRP_MAX_METRIC;
+	}
 
 	attr_len = (uint16_t)attr_words * 2U;
 	decoded = eigrp_tlv2_extended_decode(pkt, attr_len);
@@ -204,12 +215,28 @@ static uint16_t eigrp_tlv2_metric_encode(eigrp_stream_t *pkt,
 	eigrp_stream_putc(pkt, metric->mtu[1]);
 	eigrp_stream_putc(pkt, metric->mtu[0]);
 	eigrp_stream_putc(pkt, metric->hop_count);
-	eigrp_tlv2_put48(pkt, metric->delay == EIGRP_MAX_METRIC
-				      ? EIGRP_TLV2_INACCESSIBLE
-				      : metric->delay);
-	eigrp_tlv2_put48(pkt, metric->bandwidth == EIGRP_MAX_METRIC
-				      ? EIGRP_TLV2_INACCESSIBLE
-				      : metric->bandwidth);
+	/* Advertise Cisco TLV2 units, not the internal classic components.
+	 * A classic-only source has no exact wide data; reconstruct it without
+	 * discarding a previously decoded Cisco wide vector.
+	 */
+	uint64_t bandwidth = metric->wide_bandwidth;
+	uint64_t delay = metric->wide_delay;
+
+	if (!bandwidth && metric->bandwidth
+	    && metric->bandwidth != EIGRP_MAX_METRIC)
+		bandwidth = (EIGRP_BANDWIDTH * (uint64_t)EIGRP_CLASSIC_SCALE)
+			    / metric->bandwidth;
+	if (!metric->wide_bandwidth)
+		delay = eigrp_metric_delay_classic2wide(
+			metric->delay / EIGRP_CLASSIC_SCALE, bandwidth, false);
+	if (metric->delay == EIGRP_MAX_METRIC || !bandwidth
+	    || bandwidth >= EIGRP_TLV2_INACCESSIBLE
+	    || delay >= EIGRP_TLV2_INACCESSIBLE) {
+		bandwidth = EIGRP_TLV2_INACCESSIBLE;
+		delay = EIGRP_TLV2_INACCESSIBLE;
+	}
+	eigrp_tlv2_put48(pkt, delay);
+	eigrp_tlv2_put48(pkt, bandwidth);
 	eigrp_stream_putw(pkt, 0);
 	eigrp_stream_putw(pkt, metric->flags);
 

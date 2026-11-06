@@ -56,6 +56,20 @@ class DualValidators(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'provenance absent'):
             dual.provenance(missing,'ipv4',routes,SRC)
 
+    def test_exact_cisco_metric_parity_and_monotonicity(self):
+        wire = {
+            'oe': {'metrics': [{'bandwidth': 25600, 'delay': 2560}]},
+            'ce': {'metrics': [{'bandwidth': 8000000, 'delay': 1250000}]},
+        }
+        distances = {'oe': {'rd': 163840}, 'ce': {'rd': 25600167}}
+        dual.require_metric_parity(distances, wire)
+        distances['oe']['rd'] = 2368000000
+        with self.assertRaisesRegex(AssertionError, 'does not match Cisco'):
+            dual.require_metric_parity(distances, wire)
+        with self.assertRaisesRegex(AssertionError, 'did not increase'):
+            dual.require_distance_change({'fd':100, 'cd':200, 'rd':150},
+                                         {'fd':100, 'cd':190, 'rd':140})
+
     def test_fd_cd_rd_no_fake_feasibility(self):
         self.assertEqual(dual.numeric_metric('FD is 28160\n via (28160/2560)'),
                          {'fd':28160,'cd':28160,'rd':2560})
@@ -98,9 +112,9 @@ class DualValidators(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'exceeds computed distance'):
             dual.topology_metrics(Lab(1100, 1000, 900), 'ipv4', prefix, 'ce')
         before = {'fd': 1000, 'cd': 1000, 'rd': 900}
-        with self.assertRaisesRegex(AssertionError, 'computed distance unchanged'):
+        with self.assertRaisesRegex(AssertionError, 'computed distance did not increase'):
             dual.require_distance_change(before, before)
-        with self.assertRaisesRegex(AssertionError, 'reported distance unchanged'):
+        with self.assertRaisesRegex(AssertionError, 'reported distance did not increase'):
             dual.require_distance_change(before, {'fd': 1000, 'cd': 1100, 'rd': 900})
 
     def test_next_hop_must_be_on_selected_route(self):
