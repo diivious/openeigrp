@@ -309,7 +309,7 @@ typedef struct eigrp_redist_source {
 ```
 
 Host-independent identity of a redistribution source. `protocol` is one of the
-OpenEIGRP-owned `EIGRP_REDISTRIBUTE_PROTOCOL_*` values. The shim maps host route
+OpenEIGRP-owned `EIGRP_REDIST_PROTOCOL_*` values. The shim maps host route
 protocol identifiers into this enum.
 
 #### `eigrp_state_request_t`

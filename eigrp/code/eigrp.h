@@ -70,6 +70,13 @@ typedef struct eigrp_metrics {
 	uint8_t load;
 	uint8_t tag;
 	uint8_t flags;
+	/* Cisco TLV2 native units: bandwidth in kbit/s, delay in picoseconds.
+	 * Zero bandwidth means only the legacy/classic vector is available.
+	 * Keep these with the vector through DUAL and re-advertisement to avoid
+	 * quantizing wide-metric values to classic 256-scaled units.
+	 */
+	eigrp_bandwidth_t wide_bandwidth;
+	eigrp_delay_t wide_delay;
 } eigrp_metrics_t;
 
 typedef struct eigrp_metric_values {
@@ -146,8 +153,8 @@ typedef enum eigrp_offset_direction {
 } eigrp_offset_direction_t;
 
 typedef enum eigrp_distribute_list_type {
-	EIGRP_DISTRIBUTE_ACCESS_LIST = 0,
-	EIGRP_DISTRIBUTE_PREFIX_LIST,
+	EIGRP_DIST_ACCESS_LIST = 0,
+	EIGRP_DIST_PREFIX_LIST,
 } eigrp_distribute_list_type_t;
 
 typedef enum eigrp_filter_decision {
@@ -156,14 +163,14 @@ typedef enum eigrp_filter_decision {
 } eigrp_filter_decision_t;
 
 typedef enum eigrp_redist_protocol {
-	EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED = 0,
-	EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED,
-	EIGRP_REDISTRIBUTE_PROTOCOL_STATIC,
-	EIGRP_REDISTRIBUTE_PROTOCOL_RIP,
-	EIGRP_REDISTRIBUTE_PROTOCOL_OSPF,
-	EIGRP_REDISTRIBUTE_PROTOCOL_ISIS,
-	EIGRP_REDISTRIBUTE_PROTOCOL_BGP,
-	EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP,
+	EIGRP_REDIST_PROTOCOL_UNSPECIFIED = 0,
+	EIGRP_REDIST_PROTOCOL_CONNECTED,
+	EIGRP_REDIST_PROTOCOL_STATIC,
+	EIGRP_REDIST_PROTOCOL_RIP,
+	EIGRP_REDIST_PROTOCOL_OSPF,
+	EIGRP_REDIST_PROTOCOL_ISIS,
+	EIGRP_REDIST_PROTOCOL_BGP,
+	EIGRP_REDIST_PROTOCOL_EIGRP,
 } eigrp_redist_protocol_t;
 
 typedef uint32_t eigrp_route_instance_t;

@@ -90,7 +90,7 @@ static void eigrp_unix_connected_route(const eigrp_unix_interface_t *interface,
 	nexthop->ifindex = interface->ifindex;
 	route->nexthops = nexthop;
 	route->nexthop_count = 1;
-	route->redist.source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED;
+	route->redist.source.protocol = EIGRP_REDIST_PROTOCOL_CONNECTED;
 	values.bandwidth = interface->bandwidth ? interface->bandwidth
 						: EIGRP_BANDWIDTH_DEFAULT;
 	values.delay = EIGRP_DELAY_DEFAULT;

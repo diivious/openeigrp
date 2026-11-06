@@ -40,6 +40,7 @@ def prefix_admission_executable(tmp_path_factory):
             #include <string.h>
 
             #include "eigrp/code/eigrp.h"
+            #include "eigrp/test/uut/eigrp_uut_defs.h"
             #include "eigrp/code/eigrp_log.h"
             #include "eigrp/code/eigrp_structs.h"
             #include "eigrp/code/eigrp_debug.h"
@@ -254,8 +255,8 @@ static eigrp_af_config_t *test_runtime_af;
                 eigrp_metrics_t metric = {0};
                 metric.bandwidth = eigrp_bandwidth_to_scaled(100000);
                 metric.delay = 400; /* native redistribution seed, 10-us units */
-                metric.reliability = 255;
-                metric.load = 1;
+                metric.reliability = EIGRP_INTF_REL_100;
+                metric.load = EIGRP_LOAD_DEFAULT;
                 metric.mtu[0] = 0xdc;
                 metric.mtu[1] = 0x05;
                 return metric;
@@ -275,10 +276,10 @@ static eigrp_af_config_t *test_runtime_af;
             static void link_init(eigrp_intf_t *link)
             {
                 memset(link, 0, sizeof(*link));
-                link->params.bandwidth = 100000;
-                link->params.delay = 100;
-                link->params.reliability = 255;
-                link->params.load = 1;
+                link->params.bandwidth = EIGRP_INTF_FASTETH_BW;
+                link->params.delay = EIGRP_INTF_ETH_DELAY;
+                link->params.reliability = EIGRP_INTF_REL_100;
+                link->params.load = EIGRP_LOAD_DEFAULT;
             }
 
             /* Build the same destination/path relationship as the live ingress
@@ -482,7 +483,7 @@ static eigrp_af_config_t *test_runtime_af;
                  * vector must not count as a reachable prefix. */
                 r->distance = 123456;
                 assert(eigrp_topology_prefix_admit(&runtime, &target));
-                r->metric.delay = 100;
+                r->metric.delay = EIGRP_INTF_ETH_DELAY;
                 eigrp_topology_update_node_flags(&runtime, r->prefix);
                 assert(!eigrp_topology_prefix_admit(&runtime, &target));
                 runtime_destroy(&runtime);
@@ -669,6 +670,7 @@ static eigrp_af_config_t *test_runtime_af;
          "-ffunction-sections", "-fdata-sections",
          f"-I{ROOT}", f"-I{ROOT / 'test' / 'build' / 'include'}",
          str(source),
+         str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
          *[str(ROOT / "eigrp" / "code" / f) for f in (
              "eigrp_topology.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
              "eigrp_table.c", "eigrp_prefix.c")],

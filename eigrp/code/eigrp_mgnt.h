@@ -105,7 +105,7 @@ eigrp_nbr_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime,
 typedef struct eigrp_topology_prefix_state {
 	eigrp_prefix_t destination;
 	bool active;
-	uint32_t feasible_distance;
+	eigrp_metric_t feasible_distance;
 	uint32_t successor_count;
 	uint64_t serial_number;
 } eigrp_topology_prefix_state_t;
@@ -116,8 +116,8 @@ typedef struct eigrp_topology_route_state {
 	bool connected;
 	bool successor;
 	bool feasible_successor;
-	uint32_t distance;
-	uint32_t reported_distance;
+	eigrp_metric_t distance;
+	eigrp_metric_t reported_distance;
 } eigrp_topology_route_state_t;
 
 typedef eigrp_result_t (*eigrp_topology_prefix_state_cb)(

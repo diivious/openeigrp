@@ -9,9 +9,9 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.13.0.3, successor: false, feasible_successor: true, distance: 9830400, rd: 7864320}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.13.0.3, successor: false, feasible_successor: true, distance: 39321600, rd: 19660800}
   # Lose the successor: immediate FC-qualified switch to R3, no Query for N1.
   - packet-mark: square-isolate-r1-r2-down
   - link-down: {uut: r1, interface: eth12}
@@ -19,8 +19,8 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.13.0.3, metric: 9830400}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.13.0.3, metric: 39321600}
   - validate-packet: {uut: r1, opcode: query, prefix: 10.4.0.0/24, since: square-isolate-r1-r2-down, min: 0, max: 0, timeout: 2, event: any}
   # Remove the last R1 core edge while the first remains down. R1 must withdraw N1.
   - packet-mark: square-isolate-r1-r3-down
@@ -31,8 +31,8 @@ steps:
       expect:
         - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, present: false}
         - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, present: false}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.24.0.4, metric: 7864320}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 7864320}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.24.0.4, metric: 19660800}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 19660800}
   # Restore only R1-R3: R1 must recover through R3 while R1-R2 is still down.
   - packet-mark: square-isolate-r1-r3-up
   - link-up: {uut: r3, interface: eth31}
@@ -41,8 +41,8 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9830400}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.13.0.3, metric: 9830400}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 39321600}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.13.0.3, metric: 39321600}
   # Restore the preferred edge and prove exact deterministic baseline recovery.
   - packet-mark: square-isolate-r1-r2-up
   - link-up: {uut: r2, interface: eth21}
@@ -51,6 +51,6 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.13.0.3, successor: false, feasible_successor: true, distance: 9830400, rd: 7864320}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.13.0.3, successor: false, feasible_successor: true, distance: 39321600, rd: 19660800}

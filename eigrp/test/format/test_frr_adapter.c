@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /* Executable FRR host interface adaptation contract. */
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,8 +20,8 @@ int main(void)
 		       "FRR interface name buffer too small");
 	memcpy(host.name, "eth12", sizeof("eth12"));
 	host.ifindex = 12;
-	host.bandwidth = 100000;
-	host.mtu = 1500;
+	host.bandwidth = EIGRP_INTF_FASTETH_BW;
+	host.mtu = EIGRP_INTF_MTU_1500;
 	address.family = AF_INET6;
 	address.prefixlen = 64;
 	address.u.prefix6.s6_addr[0] = 0x20;

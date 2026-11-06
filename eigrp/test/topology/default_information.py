@@ -41,7 +41,7 @@ def test_default_information_policy_is_default_prefix_only_and_fail_closed():
     assert "EIGRP_AFI_IPV4" in body(topology, "eigrp_topology_default_prefix")
     assert "EIGRP_AFI_IPV6" in body(topology, "eigrp_topology_default_prefix")
     assert "eigrp_sys_filter_evaluate" in decision
-    assert "EIGRP_DISTRIBUTE_ACCESS_LIST" in decision
+    assert "EIGRP_DIST_ACCESS_LIST" in decision
     assert "result != EIGRP_RESULT_SUCCESS" in decision
     assert "decision != EIGRP_FILTER_DECISION_PERMIT" in decision
 

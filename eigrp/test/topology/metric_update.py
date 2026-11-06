@@ -32,6 +32,7 @@ def metric_update_executable(tmp_path_factory):
             #include <string.h>
 
             #include "eigrp/code/eigrp.h"
+            #include "eigrp/test/uut/eigrp_uut_defs.h"
             #include "eigrp/code/eigrp_log.h"
             #include "eigrp/code/eigrp_structs.h"
             #include "eigrp/code/eigrp_debug.h"
@@ -41,6 +42,12 @@ def metric_update_executable(tmp_path_factory):
             #include "eigrp/code/eigrp_redistribute.h"
             #include "eigrp/code/eigrp_rib.h"
             #include "eigrp/code/eigrp_topology.h"
+
+            bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
+            {
+                (void)ei;
+                return false;
+            }
 
             static eigrp_af_config_t *test_runtime_af;
             static unsigned query_work;
@@ -240,8 +247,8 @@ def metric_update_executable(tmp_path_factory):
                 eigrp_metrics_t metric = {0};
                 metric.bandwidth = eigrp_bandwidth_to_scaled(100000);
                 metric.delay = 400; /* native redistribution seed, 10-us units */
-                metric.reliability = 255;
-                metric.load = 1;
+                metric.reliability = EIGRP_INTF_REL_100;
+                metric.load = EIGRP_LOAD_DEFAULT;
                 metric.mtu[0] = 0xdc;
                 metric.mtu[1] = 0x05;
                 return metric;
@@ -250,8 +257,8 @@ def metric_update_executable(tmp_path_factory):
             static eigrp_metrics_t connected_metric(const eigrp_intf_t *link)
             {
                 eigrp_metrics_t metric = seed_metric();
-                metric.bandwidth = eigrp_bandwidth_to_scaled(link->params.bandwidth);
-                metric.delay = eigrp_delay_to_scaled(link->params.delay);
+                eigrp_metric_link_set(&metric, link->params.bandwidth,
+                                      link->params.delay, false);
                 metric.reliability = link->params.reliability;
                 metric.load = link->params.load;
                 metric.hop_count = 0;
@@ -261,10 +268,10 @@ def metric_update_executable(tmp_path_factory):
             static void link_init(eigrp_intf_t *link)
             {
                 memset(link, 0, sizeof(*link));
-                link->params.bandwidth = 100000;
-                link->params.delay = 100;
-                link->params.reliability = 255;
-                link->params.load = 1;
+                link->params.bandwidth = EIGRP_INTF_FASTETH_BW;
+                link->params.delay = EIGRP_INTF_ETH_DELAY;
+                link->params.reliability = EIGRP_INTF_REL_100;
+                link->params.load = EIGRP_LOAD_DEFAULT;
             }
 
             /* Build the same destination/path relationship as the live ingress
@@ -383,7 +390,7 @@ def metric_update_executable(tmp_path_factory):
                     assert(route->distance != previous);
                     assert(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
                 }
-                link.params.delay = 100;
+                link.params.delay = EIGRP_INTF_ETH_DELAY;
                 expected = connected_metric(&link);
                 eigrp_topology_metric_update(&runtime);
                 assert(eigrp_metrics_match(route->total_metric, expected));

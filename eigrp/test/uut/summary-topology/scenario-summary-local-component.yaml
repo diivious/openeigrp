@@ -8,8 +8,8 @@ steps:
       timeout: 7
       expect:
         - route: {uut: r1, prefix: 10.12.0.0/24, table: topology, active: false, successors: 1}
-        - route: {uut: r2, prefix: 10.0.0.0/8, table: rib, metric: 7864320}
-  - validate-event: {uut: r1, contains: "Summary component: 10.12.0.0/24 metric 7208960"}
+        - route: {uut: r2, prefix: 10.0.0.0/8, table: rib, metric: 19660800}
+  - validate-event: {uut: r1, contains: "Summary component: 10.12.0.0/24 metric 13107200"}
   - packet-mark: connected-down
   - link-down: {uut: r1, interface: eth12}
   - validate-convergence:
@@ -21,5 +21,5 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r2, prefix: 10.0.0.0/8, table: rib, metric: 7864320}
+        - route: {uut: r2, prefix: 10.0.0.0/8, table: rib, metric: 19660800}
   - stop: all

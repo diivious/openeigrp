@@ -1,0 +1,29 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-wide-parity.yaml
+name: Cisco wide-metric scalar parity and recovery
+steps:
+  - start: all
+  - validate-neighbor: {uut: r2, neighbor: 10.44.53.1, interface: eth0, timeout: 10}
+  # Cisco default-K wide metric: inverse bandwidth contribution 6553600,
+  # attached delay contribution 6553600, transit delay contribution 6553600.
+  - validate-convergence:
+      timeout: 10
+      expect:
+        - route: {uut: r2, prefix: 10.255.1.1/32, table: topology, active: false, fd: 19660800, successors: 1}
+        - route: {uut: r2, prefix: 10.255.1.1/32, table: rib, metric: 19660800}
+  - packet-mark: connected-withdrawal
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: 10.255.1.1/32, table: rib, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: 10.255.1.1/32, table: rib, metric: 19660800}
+  - stop: all

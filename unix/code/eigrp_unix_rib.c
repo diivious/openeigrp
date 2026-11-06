@@ -354,7 +354,7 @@ eigrp_result_t eigrp_rib_redistribute_add(eigrp_instance_t *eigrp,
 	eigrp_unix_rib_source_entry_t *entry;
 
 	if (!eigrp || !source
-	    || source->protocol == EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED)
+	    || source->protocol == EIGRP_REDIST_PROTOCOL_UNSPECIFIED)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	for (subscription = subscriptions; subscription;
 	     subscription = subscription->next)
@@ -414,7 +414,7 @@ eigrp_unix_rib_source_route_update(const eigrp_rib_route_t *route)
 	size_t bucket;
 	if (!route || !eigrp_unix_rib_prefix_valid(&route->prefix)
 	    || route->redist.source.protocol
-		       == EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED)
+		       == EIGRP_REDIST_PROTOCOL_UNSPECIFIED)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	entry = eigrp_unix_rib_source_lookup(route);
 	if (entry) {

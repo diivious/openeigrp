@@ -574,9 +574,9 @@ typedef struct eigrp_prefix_descriptor {
 	eigrp_prefix_t destination;
 
 	eigrp_metrics_t reported_metric; // RD for sending
-	uint32_t fdistance;		 // FD
-	uint32_t rdistance;		 // RD
-	uint32_t distance;		 // D
+	eigrp_metric_t fdistance;	 // FD
+	eigrp_metric_t rdistance;	 // RD
+	eigrp_metric_t distance;	 // D
 
 	uint8_t nt;	    // network type
 	uint8_t state;	    // route FSM state
@@ -608,11 +608,11 @@ typedef struct eigrp_route_descriptor {
 	/* An installed RDB retains its peer through withdrawal. */
 	bool owner_ref;
 
-	eigrp_metrics_t reported_metric; // neighbors vector metrics
-	uint32_t reported_distance;	 // neighbors distance (RD)
+	eigrp_metrics_t reported_metric;  // neighbors vector metrics
+	eigrp_metric_t reported_distance; // neighbors distance (RD)
 
 	eigrp_metrics_t total_metric; // calculated vector metrics
-	uint32_t distance;	      // calculatd distance (RD + link cost)
+	eigrp_metric_t distance;      // calculatd distance (RD + link cost)
 
 	eigrp_metrics_t metric;
 	eigrp_extdata_t extdata;

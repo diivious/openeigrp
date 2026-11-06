@@ -86,15 +86,42 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 return "test";
             }
 
+            eigrp_scaled_t eigrp_bandwidth_to_scaled(eigrp_bandwidth_t bandwidth)
+            {
+                assert(bandwidth);
+                return (256ULL * 10000000ULL) / bandwidth;
+            }
+
+            eigrp_delay_t eigrp_metric_delay_classic2wide(
+                eigrp_delay_t delay, eigrp_bandwidth_t bandwidth, bool interface_default)
+            {
+                if (interface_default && bandwidth >= EIGRP_GIGABIT_KBPS)
+                    return EIGRP_CLASSIC_DELAY_PICO * EIGRP_GIGABIT_KBPS
+                           / bandwidth;
+                if (delay > (EIGRP_TLV2_INACCESSIBLE - 1) / EIGRP_CLASSIC_DELAY_PICO)
+                    return EIGRP_TLV2_INACCESSIBLE;
+                return delay * EIGRP_CLASSIC_DELAY_PICO;
+            }
+
+            eigrp_delay_t eigrp_metric_delay_wide2classic(
+                eigrp_delay_t delay, eigrp_bandwidth_t bandwidth)
+            {
+                if (bandwidth >= EIGRP_GIGABIT_KBPS
+                    && delay == EIGRP_CLASSIC_DELAY_PICO * EIGRP_GIGABIT_KBPS
+                                / bandwidth)
+                    return EIGRP_GIGABIT_CLASSIC_DELAY;
+                return delay / EIGRP_CLASSIC_DELAY_PICO;
+            }
+
             eigrp_scaled_t eigrp_delay_to_scaled(eigrp_delay_t delay)
             {
                 delay = delay ? delay : EIGRP_DELAY_MIN;
-                return delay * EIGRP_CLASSIC_SCALER;
+                return delay * EIGRP_CLASSIC_SCALE;
             }
 
             eigrp_delay_t eigrp_scaled_to_delay(eigrp_scaled_t scaled)
             {
-                eigrp_delay_t delay = scaled / EIGRP_CLASSIC_SCALER;
+                eigrp_delay_t delay = scaled / EIGRP_CLASSIC_SCALE;
                 return delay ? delay : EIGRP_DELAY_MIN;
             }
 
@@ -149,6 +176,8 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 memset(metric, 0, sizeof(*metric));
                 metric->delay = 10;
                 metric->bandwidth = 0x000a0000;
+                metric->wide_bandwidth = 100000;
+                metric->wide_delay = 100000000;
                 metric->mtu[0] = 0xdc;
                 metric->mtu[1] = 0x05;
                 metric->mtu[2] = 0x00;
@@ -191,8 +220,10 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
 
             static void assert_metric(const eigrp_metrics_t *metric)
             {
-                assert(metric->delay == 10);
-                assert(metric->bandwidth == 0x000a0000);
+                assert(metric->wide_delay == 100000000);
+                assert(metric->wide_bandwidth == 100000);
+                assert(metric->delay == 2560);
+                assert(metric->bandwidth == 25600);
                 assert(metric->mtu[0] == 0xdc);
                 assert(metric->mtu[1] == 0x05);
                 assert(metric->mtu[2] == 0x00);

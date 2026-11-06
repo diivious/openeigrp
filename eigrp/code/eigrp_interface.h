@@ -53,6 +53,7 @@ struct eigrp_intf_config {
 /* Prototypes */
 extern bool eigrp_intf_is_passive(eigrp_intf_t *ei);
 bool eigrp_intf_shutdown_effective(eigrp_intf_t *ei);
+bool eigrp_intf_delay_is_default(eigrp_intf_t *ei);
 extern void eigrp_del_intf_params(eigrp_intf_params_t *);
 eigrp_intf_t *
 eigrp_intf_runtime_create(eigrp_instance_t *eigrp,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /* Portable EIGRP Unix UUT process. Copyright (C) 2026 Donnie V. Savage */
 #define _POSIX_C_SOURCE 200809L
+#include "eigrp_uut_defs.h"
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -139,9 +140,9 @@ static eigrp_result_t topo_pfx_cb(const eigrp_topology_prefix_state_t *s,
 	char p[160];
 	(void)arg;
 	prefix_text(&s->destination, p, sizeof(p));
-	printf("TOPO|prefix=%s|active=%u|feasible_distance=%u|successors=%u|serial=%llu\n",
-	       p, s->active ? 1 : 0, s->feasible_distance, s->successor_count,
-	       (unsigned long long)s->serial_number);
+	printf("TOPO|prefix=%s|active=%u|feasible_distance=%llu|successors=%u|serial=%llu\n",
+	       p, s->active ? 1 : 0, (unsigned long long)s->feasible_distance,
+	       s->successor_count, (unsigned long long)s->serial_number);
 	return EIGRP_RESULT_SUCCESS;
 }
 static eigrp_result_t topo_route_cb(const eigrp_topology_route_state_t *s,
@@ -150,11 +151,11 @@ static eigrp_result_t topo_route_cb(const eigrp_topology_route_state_t *s,
 	char a[INET6_ADDRSTRLEN];
 	(void)arg;
 	addr_text(&s->next_hop, a, sizeof(a));
-	printf("PATH|next_hop=%s|interface=%s|connected=%u|successor=%u|feasible_successor=%u|distance=%u|reported_distance=%u\n",
+	printf("PATH|next_hop=%s|interface=%s|connected=%u|successor=%u|feasible_successor=%u|distance=%llu|reported_distance=%llu\n",
 	       a, s->interface_name ? s->interface_name : "-",
 	       s->connected ? 1 : 0, s->successor ? 1 : 0,
-	       s->feasible_successor ? 1 : 0, s->distance,
-	       s->reported_distance);
+	       s->feasible_successor ? 1 : 0, (unsigned long long)s->distance,
+	       (unsigned long long)s->reported_distance);
 	return EIGRP_RESULT_SUCCESS;
 }
 static void source_cb(const eigrp_rib_route_t *r, void *arg)
@@ -379,7 +380,7 @@ static eigrp_result_t uut_source_route_change(const char *prefix_name,
 	eigrp_rib_route_t source = {0};
 
 	source.prefix = prefix_parse(prefix_name);
-	source.redist.source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_STATIC;
+	source.redist.source.protocol = EIGRP_REDIST_PROTOCOL_STATIC;
 	source.metric = metric;
 	return add ? eigrp_unix_rib_source_route_update(&source)
 		   : eigrp_unix_rib_source_route_remove(&source);
@@ -389,14 +390,14 @@ static eigrp_result_t uut_redist_change(bool add)
 {
 	eigrp_instance_context_t context = {0};
 	eigrp_redist_source_t source = {
-		.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_STATIC,
+		.protocol = EIGRP_REDIST_PROTOCOL_STATIC,
 	};
 	eigrp_metric_values_t seed = {
-		.bandwidth = 100000,
-		.delay = 100,
-		.reliability = 255,
-		.load = 1,
-		.mtu = 1500,
+		.bandwidth = EIGRP_INTF_FASTETH_BW,
+		.delay = EIGRP_INTF_ETH_DELAY,
+		.reliability = EIGRP_INTF_REL_100,
+		.load = EIGRP_LOAD_DEFAULT,
+		.mtu = EIGRP_INTF_MTU_1500,
 	};
 	eigrp_result_t result = eigrp_af_config_context_read(
 		instance_name, afi, EIGRP_UNIX_DEFAULT_VRF_NAME, asn, &context);
@@ -414,7 +415,7 @@ uut_redist_metric_update(bool is_default, bool reset,
 {
 	eigrp_instance_context_t context = {0};
 	eigrp_redist_source_t source = {
-		.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_STATIC,
+		.protocol = EIGRP_REDIST_PROTOCOL_STATIC,
 	};
 	eigrp_result_t result = eigrp_af_config_context_read(
 		instance_name, afi, EIGRP_UNIX_DEFAULT_VRF_NAME, asn, &context);
@@ -809,7 +810,7 @@ static void load(const char *path)
 				eigrp_rib_route_t sr = {0};
 				sr.prefix = prefix_parse(a);
 				sr.redist.source.protocol =
-					EIGRP_REDISTRIBUTE_PROTOCOL_STATIC;
+					EIGRP_REDIST_PROTOCOL_STATIC;
 				sr.metric = (uint64_t)strtoull(b, NULL, 10);
 				r = eigrp_unix_rib_source_route_update(&sr);
 				if (r != EIGRP_RESULT_SUCCESS)

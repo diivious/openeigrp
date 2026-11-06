@@ -88,12 +88,12 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
             eigrp_scaled_t eigrp_delay_to_scaled(eigrp_delay_t delay)
             {
                 delay = delay ? delay : EIGRP_DELAY_MIN;
-                return delay * EIGRP_CLASSIC_SCALER;
+                return delay * EIGRP_CLASSIC_SCALE;
             }
 
             eigrp_delay_t eigrp_scaled_to_delay(eigrp_scaled_t scaled)
             {
-                eigrp_delay_t delay = scaled / EIGRP_CLASSIC_SCALER;
+                eigrp_delay_t delay = scaled / EIGRP_CLASSIC_SCALE;
                 return delay ? delay : EIGRP_DELAY_MIN;
             }
 

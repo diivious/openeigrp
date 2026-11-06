@@ -27,6 +27,8 @@ NEW_LIFECYCLE_NAMES = {
 def production_sources() -> list[Path]:
     sources = []
     for path in ROOT.rglob("*"):
+        if path.name.startswith(".") or not path.is_file():
+            continue
         if path.suffix not in PRODUCTION_SUFFIXES:
             continue
         if any(part in {".git", "test"} for part in path.parts):

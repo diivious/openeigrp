@@ -58,9 +58,9 @@ def test_zebra_subscription_uses_exact_afi_type_instance_and_vrf():
 
     # FRR carries OSPF and EIGRP route instances, but a BGP ASN is not a
     # Zebra route-instance value.
-    assert "EIGRP_REDISTRIBUTE_PROTOCOL_OSPF" in valid
-    assert "EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP" in valid
-    assert "EIGRP_REDISTRIBUTE_PROTOCOL_BGP" in valid
+    assert "EIGRP_REDIST_PROTOCOL_OSPF" in valid
+    assert "EIGRP_REDIST_PROTOCOL_EIGRP" in valid
+    assert "EIGRP_REDIST_PROTOCOL_BGP" in valid
     assert "return route_instance == 0;" in valid
     assert "BGP ASN is not a Zebra route-instance value" in valid
 
@@ -156,14 +156,14 @@ def test_subscription_parameters_and_route_normalization_execute(tmp_path):
             };
 
             typedef enum eigrp_redist_protocol {
-                EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED = 0,
-                EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED,
-                EIGRP_REDISTRIBUTE_PROTOCOL_STATIC,
-                EIGRP_REDISTRIBUTE_PROTOCOL_RIP,
-                EIGRP_REDISTRIBUTE_PROTOCOL_OSPF,
-                EIGRP_REDISTRIBUTE_PROTOCOL_ISIS,
-                EIGRP_REDISTRIBUTE_PROTOCOL_BGP,
-                EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP,
+                EIGRP_REDIST_PROTOCOL_UNSPECIFIED = 0,
+                EIGRP_REDIST_PROTOCOL_CONNECTED,
+                EIGRP_REDIST_PROTOCOL_STATIC,
+                EIGRP_REDIST_PROTOCOL_RIP,
+                EIGRP_REDIST_PROTOCOL_OSPF,
+                EIGRP_REDIST_PROTOCOL_ISIS,
+                EIGRP_REDIST_PROTOCOL_BGP,
+                EIGRP_REDIST_PROTOCOL_EIGRP,
             } eigrp_redist_protocol_t;
 
             typedef struct eigrp_address {
@@ -369,7 +369,7 @@ def test_subscription_parameters_and_route_normalization_execute(tmp_path):
                 struct in_addr v4;
                 struct in6_addr v6;
 
-                source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_OSPF;
+                source.protocol = EIGRP_REDIST_PROTOCOL_OSPF;
                 source.route_instance = 100;
                 assert(eigrp_zebra_subscription_params_build(
                            &eigrp, &source, &params) == EIGRP_RESULT_SUCCESS);
@@ -389,7 +389,7 @@ def test_subscription_parameters_and_route_normalization_execute(tmp_path):
                            &eigrp, &source, &params) == EIGRP_RESULT_SUCCESS);
                 assert(params.afi == AFI_IP6);
 
-                source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
+                source.protocol = EIGRP_REDIST_PROTOCOL_EIGRP;
                 source.route_instance = 4454;
                 assert(eigrp_zebra_subscription_params_build(
                            &eigrp, &source, &params) == EIGRP_RESULT_SUCCESS);
@@ -400,7 +400,7 @@ def test_subscription_parameters_and_route_normalization_execute(tmp_path):
                            &eigrp, &source, &params)
                        == EIGRP_RESULT_INVALID_ARGUMENT);
 
-                source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_BGP;
+                source.protocol = EIGRP_REDIST_PROTOCOL_BGP;
                 source.route_instance = 0;
                 assert(eigrp_zebra_subscription_params_build(
                            &eigrp, &source, &params) == EIGRP_RESULT_SUCCESS);
@@ -429,7 +429,7 @@ def test_subscription_parameters_and_route_normalization_execute(tmp_path):
                                  &api.nexthops[1].gate.ipv4) == 1);
                 assert(eigrp_zebra_redist_route_import(&api, 42, &route, &route_nh)
                        == EIGRP_RESULT_SUCCESS);
-                assert(route.redist.source.protocol == EIGRP_REDISTRIBUTE_PROTOCOL_OSPF);
+                assert(route.redist.source.protocol == EIGRP_REDIST_PROTOCOL_OSPF);
                 assert(route.redist.source.route_instance == 123);
                 assert(route.prefix.address.afi == EIGRP_AFI_IPV4);
                 assert(route.prefix.prefix_length == 24);

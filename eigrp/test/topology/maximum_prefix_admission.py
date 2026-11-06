@@ -20,6 +20,7 @@ def test_maximum_prefix_query_retention_and_replacement(tmp_path):
            *([] if topology_only else ['-DTEST_NEIGHBOR_LIMIT']), '-I', str(ROOT),
            '-I', str(ROOT / 'eigrp' / 'code'),
            str(Path(__file__).with_suffix('.c')),
+           str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
            *(str(ROOT / 'eigrp' / 'code' / src) for src in sources),
            *(['-Wl,-dead_strip'] if sys.platform == 'darwin' else
              ['-Wl,--gc-sections']), "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), '-o', str(binary)]

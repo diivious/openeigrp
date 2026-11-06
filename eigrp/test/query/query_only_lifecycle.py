@@ -22,6 +22,7 @@ def test_query_only_lifecycle(tmp_path):
            '-ffunction-sections', '-fdata-sections', '-pthread',
            '-I', str(ROOT), '-I', str(CODE),
            str(Path(__file__).with_suffix('.c')),
+           str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
            *(str(CODE / name) for name in sources),
            '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections',
            str(ROOT / 'unix/code/eigrp_unix_format.c'), '-o', str(binary)]

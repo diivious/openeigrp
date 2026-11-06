@@ -298,19 +298,19 @@ static const char *eigrp_eventlog_redist_reject_name(eventmsg_arg_t reason)
 static const char *eigrp_eventlog_redist_source_name(eventmsg_arg_t protocol)
 {
 	switch (protocol) {
-	case EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED:
+	case EIGRP_REDIST_PROTOCOL_CONNECTED:
 		return "CONNECTED";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_STATIC:
+	case EIGRP_REDIST_PROTOCOL_STATIC:
 		return "STATIC";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_RIP:
+	case EIGRP_REDIST_PROTOCOL_RIP:
 		return "RIP";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_OSPF:
+	case EIGRP_REDIST_PROTOCOL_OSPF:
 		return "OSPF";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_ISIS:
+	case EIGRP_REDIST_PROTOCOL_ISIS:
 		return "ISIS";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_BGP:
+	case EIGRP_REDIST_PROTOCOL_BGP:
 		return "BGP";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP:
+	case EIGRP_REDIST_PROTOCOL_EIGRP:
 		return "EIGRP";
 	default:
 		return "UNKNOWN";

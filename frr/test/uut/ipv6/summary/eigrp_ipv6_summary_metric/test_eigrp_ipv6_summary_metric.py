@@ -36,7 +36,7 @@ def test_ipv6_auto_summary_remains_explicitly_unsupported():
 
 def test_metric_weights_and_version_recompute_existing_topology():
     assert "eigrp_topology_metric_update(context->runtime)" in METRIC
-    assert "EIGRP_METRIC_SCALER / EIGRP_CLASSIC_SCALER" in METRIC
+    assert "EIGRP_WIDE_SCALE / EIGRP_CLASSIC_SCALE" in METRIC
     assert "eigrp->metric_version >= EIGRP_TLV_64B_VERSION" in METRIC
     assert "eigrp_topology_route_queue_resort" in TOPOLOGY
 

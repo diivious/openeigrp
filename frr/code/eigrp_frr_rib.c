@@ -381,21 +381,21 @@ static eigrp_redist_protocol_t eigrp_zebra_redistribute_protocol(int type)
 {
 	switch (type) {
 	case ZEBRA_ROUTE_CONNECT:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED;
+		return EIGRP_REDIST_PROTOCOL_CONNECTED;
 	case ZEBRA_ROUTE_STATIC:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_STATIC;
+		return EIGRP_REDIST_PROTOCOL_STATIC;
 	case ZEBRA_ROUTE_RIP:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_RIP;
+		return EIGRP_REDIST_PROTOCOL_RIP;
 	case ZEBRA_ROUTE_OSPF:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_OSPF;
+		return EIGRP_REDIST_PROTOCOL_OSPF;
 	case ZEBRA_ROUTE_ISIS:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_ISIS;
+		return EIGRP_REDIST_PROTOCOL_ISIS;
 	case ZEBRA_ROUTE_BGP:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_BGP;
+		return EIGRP_REDIST_PROTOCOL_BGP;
 	case ZEBRA_ROUTE_EIGRP:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
+		return EIGRP_REDIST_PROTOCOL_EIGRP;
 	default:
-		return EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED;
+		return EIGRP_REDIST_PROTOCOL_UNSPECIFIED;
 	}
 }
 
@@ -403,21 +403,21 @@ static const char *
 eigrp_zebra_redistribute_protocol_name(eigrp_redist_protocol_t protocol)
 {
 	switch (protocol) {
-	case EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED:
+	case EIGRP_REDIST_PROTOCOL_CONNECTED:
 		return "connected";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_STATIC:
+	case EIGRP_REDIST_PROTOCOL_STATIC:
 		return "static";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_RIP:
+	case EIGRP_REDIST_PROTOCOL_RIP:
 		return "rip";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_OSPF:
+	case EIGRP_REDIST_PROTOCOL_OSPF:
 		return "ospf";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_ISIS:
+	case EIGRP_REDIST_PROTOCOL_ISIS:
 		return "isis";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_BGP:
+	case EIGRP_REDIST_PROTOCOL_BGP:
 		return "bgp";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP:
+	case EIGRP_REDIST_PROTOCOL_EIGRP:
 		return "eigrp";
-	case EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED:
+	case EIGRP_REDIST_PROTOCOL_UNSPECIFIED:
 	default:
 		return "unknown";
 	}
@@ -497,10 +497,8 @@ static void eigrp_zebra_redist_vecmetric_import(eigrp_rib_route_t *route,
 
 	if (!route || !route->nexthops || !route->nexthop_count)
 		return;
-	if (route->redist.source.protocol
-		    != EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED
-	    && (route->redist.source.protocol
-			!= EIGRP_REDISTRIBUTE_PROTOCOL_STATIC
+	if (route->redist.source.protocol != EIGRP_REDIST_PROTOCOL_CONNECTED
+	    && (route->redist.source.protocol != EIGRP_REDIST_PROTOCOL_STATIC
 		|| !interface_static))
 		return;
 
@@ -538,7 +536,7 @@ eigrp_zebra_redist_route_import(const struct zapi_route *api, vrf_id_t vrf_id,
 	if (!api || !route || !nexthop || api->safi != SAFI_UNICAST)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	protocol = eigrp_zebra_redistribute_protocol(api->type);
-	if (protocol == EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED)
+	if (protocol == EIGRP_REDIST_PROTOCOL_UNSPECIFIED)
 		return EIGRP_RESULT_UNSUPPORTED;
 
 	memset(route, 0, sizeof(*route));
@@ -602,8 +600,7 @@ static int eigrp_zebra_redistribute_route(ZAPI_CALLBACK_ARGS)
 		 * reflected back through the generic redistribution receive
 		 * path.
 		 */
-		if (route.redist.source.protocol
-			    == EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP
+		if (route.redist.source.protocol == EIGRP_REDIST_PROTOCOL_EIGRP
 		    && route.redist.source.route_instance
 			       == eigrp_instance_asn(state->eigrp))
 			continue;
@@ -761,12 +758,19 @@ static uint32_t eigrp_zebra_rib_metric(const eigrp_instance_t *eigrp,
 				       uint64_t metric)
 {
 	if (eigrp->metric_version == EIGRP_TLV_64B_VERSION) {
-		if (metric >= EIGRP_64BIT_METRIC_INFINITY)
+		uint64_t scaled;
+
+		if (metric == EIGRP_MAX_METRIC
+		    || metric == EIGRP_64BIT_METRIC_INFINITY)
 			return EIGRP_RIB_METRIC_INFINITY;
-		return (uint32_t)(metric / 128U);
+		scaled = metric / 128U;
+		return scaled >= EIGRP_RIB_METRIC_INFINITY
+			       ? EIGRP_RIB_METRIC_INFINITY - 1
+			       : (uint32_t)scaled;
 	}
 
-	return (uint32_t)metric;
+	return metric >= EIGRP_RIB_METRIC_INFINITY ? EIGRP_RIB_METRIC_INFINITY
+						   : (uint32_t)metric;
 }
 
 eigrp_result_t eigrp_zebra_route_add(eigrp_instance_t *eigrp,
@@ -871,21 +875,21 @@ eigrp_result_t eigrp_zebra_route_del(eigrp_instance_t *eigrp,
 static int eigrp_zebra_redistribute_type(eigrp_redist_protocol_t protocol)
 {
 	switch (protocol) {
-	case EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED:
+	case EIGRP_REDIST_PROTOCOL_CONNECTED:
 		return ZEBRA_ROUTE_CONNECT;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_STATIC:
+	case EIGRP_REDIST_PROTOCOL_STATIC:
 		return ZEBRA_ROUTE_STATIC;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_RIP:
+	case EIGRP_REDIST_PROTOCOL_RIP:
 		return ZEBRA_ROUTE_RIP;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_OSPF:
+	case EIGRP_REDIST_PROTOCOL_OSPF:
 		return ZEBRA_ROUTE_OSPF;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_ISIS:
+	case EIGRP_REDIST_PROTOCOL_ISIS:
 		return ZEBRA_ROUTE_ISIS;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_BGP:
+	case EIGRP_REDIST_PROTOCOL_BGP:
 		return ZEBRA_ROUTE_BGP;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP:
+	case EIGRP_REDIST_PROTOCOL_EIGRP:
 		return ZEBRA_ROUTE_EIGRP;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED:
+	case EIGRP_REDIST_PROTOCOL_UNSPECIFIED:
 	default:
 		return -1;
 	}
@@ -903,20 +907,20 @@ eigrp_zebra_source_instance_valid(eigrp_redist_protocol_t protocol,
 				  eigrp_route_instance_t route_instance)
 {
 	switch (protocol) {
-	case EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP:
+	case EIGRP_REDIST_PROTOCOL_EIGRP:
 		return route_instance != 0 && route_instance <= UINT16_MAX;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_OSPF:
+	case EIGRP_REDIST_PROTOCOL_OSPF:
 		return route_instance <= UINT16_MAX;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_CONNECTED:
-	case EIGRP_REDISTRIBUTE_PROTOCOL_STATIC:
-	case EIGRP_REDISTRIBUTE_PROTOCOL_RIP:
-	case EIGRP_REDISTRIBUTE_PROTOCOL_ISIS:
-	case EIGRP_REDISTRIBUTE_PROTOCOL_BGP:
+	case EIGRP_REDIST_PROTOCOL_CONNECTED:
+	case EIGRP_REDIST_PROTOCOL_STATIC:
+	case EIGRP_REDIST_PROTOCOL_RIP:
+	case EIGRP_REDIST_PROTOCOL_ISIS:
+	case EIGRP_REDIST_PROTOCOL_BGP:
 		/* FRR does not carry a route instance for these source types.
 		 * In particular, a BGP ASN is not a Zebra route-instance value.
 		 */
 		return route_instance == 0;
-	case EIGRP_REDISTRIBUTE_PROTOCOL_UNSPECIFIED:
+	case EIGRP_REDIST_PROTOCOL_UNSPECIFIED:
 	default:
 		return false;
 	}

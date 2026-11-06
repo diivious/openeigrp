@@ -48,10 +48,61 @@ void eigrp_metric_values_convert(const eigrp_metric_values_t *values,
 	 */
 	metric->bandwidth = eigrp_bandwidth_to_scaled(values->bandwidth);
 	metric->delay = values->delay;
+	metric->wide_bandwidth = values->bandwidth;
+	metric->wide_delay = eigrp_metric_delay_classic2wide(
+		values->delay, values->bandwidth, false);
 	metric->reliability = values->reliability;
 	metric->load = values->load;
 	metric->mtu[0] = values->mtu & 0xff;
 	metric->mtu[1] = (values->mtu >> 8) & 0xff;
+}
+
+void eigrp_metric_link_set(eigrp_metrics_t *metric, eigrp_bandwidth_t bandwidth,
+			   eigrp_delay_t delay, bool interface_default)
+{
+	if (!metric)
+		return;
+	metric->bandwidth = eigrp_bandwidth_to_scaled(bandwidth);
+	metric->delay = eigrp_delay_to_scaled(
+		interface_default && bandwidth >= EIGRP_GIGABIT_KBPS
+			? EIGRP_GIGABIT_CLASSIC_DELAY
+			: delay);
+	metric->wide_bandwidth = bandwidth;
+	metric->wide_delay = eigrp_metric_delay_classic2wide(delay, bandwidth,
+							     interface_default);
+}
+
+/* RFC 7868 section 5.6.1.2: the default classic delay is 10,000 ns
+ * at 1 Gbit/s and above. Wide delay reflects the actual link speed.
+ * Only the interface-default value is translated this way. Explicitly
+ * configured (non-default) classic delays retain their requested duration.
+ * Keep the picosecond conversion before division to avoid truncation.
+ */
+eigrp_delay_t eigrp_metric_delay_classic2wide(eigrp_delay_t delay,
+					      eigrp_bandwidth_t bandwidth,
+					      bool interface_default)
+{
+	if (interface_default && bandwidth >= EIGRP_GIGABIT_KBPS)
+		return (EIGRP_CLASSIC_DELAY_PICO * EIGRP_GIGABIT_KBPS)
+		       / bandwidth;
+	if (delay > (EIGRP_TLV2_INACCESSIBLE - 1) / EIGRP_CLASSIC_DELAY_PICO)
+		return EIGRP_TLV2_INACCESSIBLE;
+	return delay * EIGRP_CLASSIC_DELAY_PICO;
+}
+
+/* A sub-10-us high-speed default cannot be represented in classic units.
+ * Reconstitute the canonical classic default for that physical bandwidth;
+ * other values are truncated in 10-us units, consistent with TLV1.
+ */
+eigrp_delay_t eigrp_metric_delay_wide2classic(eigrp_delay_t delay,
+					      eigrp_bandwidth_t bandwidth)
+{
+	if (bandwidth >= EIGRP_GIGABIT_KBPS
+	    && delay
+		       == (EIGRP_CLASSIC_DELAY_PICO * EIGRP_GIGABIT_KBPS)
+				  / bandwidth)
+		return EIGRP_GIGABIT_CLASSIC_DELAY;
+	return delay / EIGRP_CLASSIC_DELAY_PICO;
 }
 
 eigrp_scaled_t eigrp_bandwidth_to_scaled(eigrp_bandwidth_t bandwidth)
@@ -59,7 +110,7 @@ eigrp_scaled_t eigrp_bandwidth_to_scaled(eigrp_bandwidth_t bandwidth)
 	eigrp_bandwidth_t scaled = EIGRP_BANDWIDTH_MAX;
 
 	if (bandwidth != EIGRP_BANDWIDTH_MAX) {
-		scaled = (EIGRP_CLASSIC_SCALER * EIGRP_BANDWIDTH_SCALER);
+		scaled = (EIGRP_CLASSIC_SCALE * EIGRP_BANDWIDTH);
 		scaled = scaled / bandwidth;
 
 		scaled = scaled ? scaled : EIGRP_BANDWIDTH_MIN;
@@ -74,7 +125,7 @@ eigrp_bandwidth_t eigrp_scaled_to_bandwidth(eigrp_scaled_t scaled)
 	eigrp_bandwidth_t bandwidth = EIGRP_BANDWIDTH_MAX;
 
 	if (scaled != EIGRP_CLASSIC_MAX) {
-		bandwidth = (EIGRP_CLASSIC_SCALER * EIGRP_BANDWIDTH_SCALER);
+		bandwidth = (EIGRP_CLASSIC_SCALE * EIGRP_BANDWIDTH);
 		bandwidth = scaled * bandwidth;
 		bandwidth = (bandwidth < EIGRP_METRIC_MAX)
 				    ? bandwidth
@@ -87,12 +138,12 @@ eigrp_bandwidth_t eigrp_scaled_to_bandwidth(eigrp_scaled_t scaled)
 eigrp_scaled_t eigrp_delay_to_scaled(eigrp_delay_t delay)
 {
 	delay = delay ? delay : EIGRP_DELAY_MIN;
-	return delay * EIGRP_CLASSIC_SCALER;
+	return delay * EIGRP_CLASSIC_SCALE;
 }
 
 eigrp_delay_t eigrp_scaled_to_delay(eigrp_scaled_t scaled)
 {
-	scaled = scaled / EIGRP_CLASSIC_SCALER;
+	scaled = scaled / EIGRP_CLASSIC_SCALE;
 	scaled = scaled ? scaled : EIGRP_DELAY_MIN;
 
 	return scaled;
@@ -110,24 +161,46 @@ eigrp_metric_t eigrp_metric_calculate(eigrp_instance_t *eigrp,
 		return EIGRP_METRIC_MAX;
 	if (metric.delay == EIGRP_MAX_METRIC)
 		return EIGRP_MAX_METRIC;
+	if (metric.wide_bandwidth
+	    && (metric.wide_delay >= EIGRP_TLV2_INACCESSIBLE
+		|| metric.wide_bandwidth >= EIGRP_TLV2_INACCESSIBLE))
+		return EIGRP_MAX_METRIC;
 
-	/* Native vector storage uses the classic 256-scaled bandwidth/delay
-	 * components. Release-2/Wide metric calculation promotes those values
-	 * to the RFC 7868 65536 scale; forced 32-bit policy retains classic
-	 * scale.
+	/* Cisco TLV2 carries actual kbit/s and picoseconds, not classic
+	 * inverse-bandwidth/delay values. Retain each integer quotient's
+	 * precision instead of scaling an already-truncated classic vector.
 	 */
-	scale = eigrp->metric_version >= EIGRP_TLV_64B_VERSION
-			? (EIGRP_METRIC_SCALER / EIGRP_CLASSIC_SCALER)
-			: 1;
-	if (eigrp->k_values[0])
-		throughput =
-			(uint64_t)eigrp->k_values[0] * metric.bandwidth * scale;
-	if (eigrp->k_values[1])
-		throughput += ((uint64_t)eigrp->k_values[1] * metric.bandwidth
-			       * scale)
-			      / (EIGRP_MAX_LOAD - metric.load);
-	if (eigrp->k_values[2])
-		latency = (uint64_t)eigrp->k_values[2] * metric.delay * scale;
+	if (eigrp->metric_version >= EIGRP_TLV_64B_VERSION
+	    && metric.wide_bandwidth) {
+		uint64_t bw = (EIGRP_BANDWIDTH * (uint64_t)EIGRP_WIDE_SCALE)
+			      / metric.wide_bandwidth;
+		uint64_t delay = (metric.wide_delay / EIGRP_DELAY_PICO)
+					 * EIGRP_WIDE_SCALE
+				 + (metric.wide_delay % EIGRP_DELAY_PICO)
+					   * EIGRP_WIDE_SCALE
+					   / EIGRP_DELAY_PICO;
+
+		throughput = (uint64_t)eigrp->k_values[0] * bw;
+		if (eigrp->k_values[1])
+			throughput += ((uint64_t)eigrp->k_values[1] * bw)
+				      / (EIGRP_MAX_LOAD - metric.load);
+		latency = (uint64_t)eigrp->k_values[2] * delay;
+	} else {
+		/* The legacy/classic route calculation remains unchanged. */
+		scale = eigrp->metric_version >= EIGRP_TLV_64B_VERSION
+				? (EIGRP_WIDE_SCALE / EIGRP_CLASSIC_SCALE)
+				: 1;
+		if (eigrp->k_values[0])
+			throughput = (uint64_t)eigrp->k_values[0]
+				     * metric.bandwidth * scale;
+		if (eigrp->k_values[1])
+			throughput += ((uint64_t)eigrp->k_values[1]
+				       * metric.bandwidth * scale)
+				      / (EIGRP_MAX_LOAD - metric.load);
+		if (eigrp->k_values[2])
+			latency = (uint64_t)eigrp->k_values[2] * metric.delay
+				  * scale;
+	}
 
 	composite = throughput + latency;
 	/* K6 controls RFC 7868 extended attributes. This implementation does
@@ -135,8 +208,8 @@ eigrp_metric_t eigrp_metric_calculate(eigrp_instance_t *eigrp,
 	if (eigrp->k_values[4]) {
 		uint64_t denominator =
 			(uint64_t)metric.reliability + eigrp->k_values[3];
-		if (!denominator)
-			return EIGRP_METRIC_MAX;
+		if (!denominator || composite > UINT64_MAX / eigrp->k_values[4])
+			return EIGRP_MAX_METRIC;
 		composite = (composite * eigrp->k_values[4]) / denominator;
 	}
 
@@ -152,6 +225,7 @@ eigrp_metric_t eigrp_metric_total_calculate(eigrp_instance_t *eigrp,
 	eigrp_intf_t *ei = entry->ei;
 	eigrp_delay_t link_delay;
 	eigrp_bandwidth_t bw;
+	bool interface_default;
 
 	entry->total_metric = entry->reported_metric;
 	if (entry->reported_metric.delay == EIGRP_MAX_METRIC) {
@@ -162,7 +236,12 @@ eigrp_metric_t eigrp_metric_total_calculate(eigrp_instance_t *eigrp,
 		entry->total_metric.delay = EIGRP_METRIC_MAX;
 		return EIGRP_METRIC_MAX;
 	}
-	link_delay = eigrp_delay_to_scaled(ei->params.delay);
+	interface_default = ei->params.bandwidth >= EIGRP_GIGABIT_KBPS
+			    && eigrp_intf_delay_is_default(ei);
+	link_delay = eigrp_delay_to_scaled(
+		interface_default && ei->params.bandwidth >= EIGRP_GIGABIT_KBPS
+			? EIGRP_GIGABIT_CLASSIC_DELAY
+			: ei->params.delay);
 	if (entry->total_metric.delay >= EIGRP_METRIC_MAX - link_delay)
 		entry->total_metric.delay = EIGRP_METRIC_MAX;
 	else
@@ -179,6 +258,23 @@ eigrp_metric_t eigrp_metric_total_calculate(eigrp_instance_t *eigrp,
 	entry->total_metric.bandwidth = (bw > entry->total_metric.bandwidth)
 						? bw
 						: entry->total_metric.bandwidth;
+	if (eigrp->metric_version >= EIGRP_TLV_64B_VERSION
+	    && entry->total_metric.wide_bandwidth) {
+		eigrp_delay_t link = eigrp_metric_delay_classic2wide(
+			ei->params.delay, ei->params.bandwidth,
+			interface_default);
+
+		if (link >= EIGRP_TLV2_INACCESSIBLE
+		    || entry->total_metric.wide_delay
+			       >= EIGRP_TLV2_INACCESSIBLE - link) {
+			entry->total_metric.delay = EIGRP_MAX_METRIC;
+			return EIGRP_MAX_METRIC;
+		}
+		entry->total_metric.wide_delay += link;
+		if (ei->params.bandwidth < entry->total_metric.wide_bandwidth)
+			entry->total_metric.wide_bandwidth =
+				ei->params.bandwidth;
+	}
 
 	return eigrp_metric_calculate(eigrp, entry->total_metric);
 }
@@ -187,6 +283,8 @@ bool eigrp_metrics_match(eigrp_metrics_t metric1, eigrp_metrics_t metric2)
 {
 	if ((metric1.bandwidth == metric2.bandwidth)
 	    && (metric1.delay == metric2.delay)
+	    && (metric1.wide_bandwidth == metric2.wide_bandwidth)
+	    && (metric1.wide_delay == metric2.wide_delay)
 	    && (metric1.hop_count == metric2.hop_count)
 	    && (metric1.load == metric2.load)
 	    && (metric1.reliability == metric2.reliability)

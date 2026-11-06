@@ -65,7 +65,7 @@ eigrp_result_t eigrp_sys_filter_evaluate(eigrp_instance_t *eigrp,
 	*decision = EIGRP_FILTER_DECISION_PERMIT;
 #ifdef EIGRP_UUT_TEST
 	if (uut_denied_active && name && prefix
-	    && type == EIGRP_DISTRIBUTE_ACCESS_LIST
+	    && type == EIGRP_DIST_ACCESS_LIST
 	    && strcmp(name, "uut-inbound-deny") == 0
 	    && prefix->address.afi == uut_denied_prefix.address.afi
 	    && prefix->prefix_length == uut_denied_prefix.prefix_length

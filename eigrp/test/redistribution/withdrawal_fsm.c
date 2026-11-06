@@ -2,6 +2,7 @@
 /* Copyright (C) 2026 Donnie V. Savage */
 /* Portable real-FSM regression for redistributed route withdrawal. */
 
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <arpa/inet.h>
 #include <stdarg.h>
@@ -329,11 +330,11 @@ struct fixture {
 static void fixture_init_afi(struct fixture *f, eigrp_afi_t afi)
 {
 	eigrp_metric_values_t seed = {
-		.bandwidth = 100000,
-		.delay = 100,
-		.reliability = 255,
-		.load = 1,
-		.mtu = 1500,
+		.bandwidth = EIGRP_INTF_FASTETH_BW,
+		.delay = EIGRP_INTF_ETH_DELAY,
+		.reliability = EIGRP_INTF_REL_100,
+		.load = EIGRP_LOAD_DEFAULT,
+		.mtu = EIGRP_INTF_MTU_1500,
 	};
 	eigrp_instance_context_t context;
 
@@ -357,7 +358,7 @@ static void fixture_init_afi(struct fixture *f, eigrp_afi_t afi)
 	assert(f->runtime.topology_table && f->runtime.topology_changes);
 	assert(inet_pton(AF_INET, "192.0.2.45", &f->runtime.router_id) == 1);
 	test_runtime_af = &f->af;
-	f->source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
+	f->source.protocol = EIGRP_REDIST_PROTOCOL_EIGRP;
 	f->source.route_instance = 100;
 	context = (eigrp_instance_context_t){
 		.config = &f->af,
@@ -487,8 +488,8 @@ static void test_query_waits_for_peer_reply(void)
 	assert(prefix->state == EIGRP_FSM_STATE_ACTIVE_1);
 
 	/* The packetizer added the eligible UP neighbor to reply status. */
-	intf.params.bandwidth = 100000;
-	intf.params.delay = 100;
+	intf.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	intf.params.delay = EIGRP_INTF_ETH_DELAY;
 	intf.eigrp = &f.runtime;
 	peer.ei = &intf;
 	eigrp_fsm_reply_status_add(prefix, &peer);
@@ -508,9 +509,9 @@ static void test_query_waits_for_peer_reply(void)
 	reply.prefix = prefix;
 	reply.data_type = EIGRP_EXT;
 	reply.metrics.bandwidth = eigrp_bandwidth_to_scaled(100000);
-	reply.metrics.delay = 100;
-	reply.metrics.reliability = 255;
-	reply.metrics.load = 1;
+	reply.metrics.delay = EIGRP_INTF_ETH_DELAY;
+	reply.metrics.reliability = EIGRP_INTF_REL_100;
+	reply.metrics.load = EIGRP_LOAD_DEFAULT;
 	eigrp_fsm_event(&reply);
 	assert(prefix->rij->count == 0);
 	assert(prefix->state == EIGRP_FSM_STATE_PASSIVE);
@@ -1123,8 +1124,8 @@ static void test_process_batch_dual(void)
 	fixture_init(&f);
 	fixture_drain_initial_update(&f);
 	intf.eigrp = &f.runtime;
-	intf.params.bandwidth = 100000;
-	intf.params.delay = 100;
+	intf.params.bandwidth = EIGRP_INTF_FASTETH_BW;
+	intf.params.delay = EIGRP_INTF_ETH_DELAY;
 	a.ei = b.ei = unaffected.ei = &intf;
 	a.published = b.published = unaffected.published = true;
 	a.eigrp_pfxlimits_af_suspended = b.eigrp_pfxlimits_af_suspended = true;
@@ -1136,9 +1137,9 @@ static void test_process_batch_dual(void)
 	peer_path->type = EIGRP_TLV_IPv4_INT;
 	peer_path->dest = owned->destination;
 	peer_path->metric.bandwidth = eigrp_bandwidth_to_scaled(100000);
-	peer_path->metric.delay = 100;
-	peer_path->metric.reliability = 255;
-	peer_path->metric.load = 1;
+	peer_path->metric.delay = EIGRP_INTF_ETH_DELAY;
+	peer_path->metric.reliability = EIGRP_INTF_REL_100;
+	peer_path->metric.load = EIGRP_LOAD_DEFAULT;
 	peer_path->reported_metric = peer_path->metric;
 	peer_path->reported_distance =
 		eigrp_metric_calculate(&f.runtime, peer_path->metric);

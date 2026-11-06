@@ -72,8 +72,10 @@ def test_multicast_af_is_not_exposed_by_current_frr_cli():
 def test_no_eigrp_stub_runtime_symbols_added():
     production = []
     for base in (ROOT / "eigrp/code", ROOT / "frr/code", ROOT / "unix/code"):
-        production.extend(base.glob("*.c"))
-        production.extend(base.glob("*.h"))
+        production.extend(path for path in base.glob("*.c")
+                          if path.is_file() and not path.name.startswith("."))
+        production.extend(path for path in base.glob("*.h")
+                          if path.is_file() and not path.name.startswith("."))
     text = "\n".join(read(path) for path in production)
     assert not re.search(r"\\beigrp_(?:stub|stub_router|stub_route)_", text)
 
@@ -103,6 +105,8 @@ def test_completed_runtime_paths_do_not_tolerate_not_implemented():
 def test_production_targets_do_not_return_or_tolerate_not_implemented():
     for base in (ROOT / "eigrp/code", ROOT / "frr/code", ROOT / "unix/code"):
         for source in base.glob("*.c"):
+            if source.name.startswith(".") or not source.is_file():
+                continue
             text = read(source)
             assert "return EIGRP_RESULT_NOT_IMPLEMENTED" not in text, source
             assert "== EIGRP_RESULT_NOT_IMPLEMENTED" not in text, source

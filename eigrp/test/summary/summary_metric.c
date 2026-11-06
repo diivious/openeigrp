@@ -2,6 +2,7 @@
 /* Copyright (C) 2026 Donnie V. Savage
  * Real eigrp_summary.c implementation with isolated topology/config adapters.
  */
+#include "../uut/eigrp_uut_defs.h"
 #include <assert.h>
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -220,11 +221,11 @@ int main(void)
 	state.metrics = &override;
 	override.prefix = sc.prefix;
 	override.config.metric_configured = true;
-	override.config.metric.bandwidth = 100000;
-	override.config.metric.delay = 100;
-	override.config.metric.reliability = 255;
-	override.config.metric.load = 1;
-	override.config.metric.mtu = 1500;
+	override.config.metric.bandwidth = EIGRP_INTF_FASTETH_BW;
+	override.config.metric.delay = EIGRP_INTF_ETH_DELAY;
+	override.config.metric.reliability = EIGRP_INTF_REL_100;
+	override.config.metric.load = EIGRP_LOAD_DEFAULT;
+	override.config.metric.mtu = EIGRP_INTF_MTU_1500;
 	assert(eigrp_summary_route_build(&eigrp, &out, &p1, &r1, &sp, &sr));
 	assert(sr.metric.delay == 100);
 	assert(sr.total_metric.delay == 100 && sp.reported_metric.delay == 100);

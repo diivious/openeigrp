@@ -29,6 +29,7 @@ def process_executable(tmp_path_factory):
         f"-I{ROOT}", f"-I{ROOT / 'test' / 'build' / 'include'}",
         str(TEST_SOURCE),
         str(TEST_SOURCE.with_name("metric_restart_stubs.c")),
+        str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
         *(str(CODE / file) for file in sources),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
         "-pthread", "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), "-o", str(binary),

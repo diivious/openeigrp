@@ -10,15 +10,15 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.14.0.4, successor: false, feasible_successor: true, distance: 9830400, rd: 7208960}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.13.0.3, successor: false, feasible_successor: true, distance: 10485760, rd: 8519680}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 7864320}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.24.0.4, metric: 7864320}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 8519680}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 8519680}
-        - route: {uut: r4, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 7208960}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.14.0.4, successor: false, feasible_successor: true, distance: 39321600, rd: 13107200}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: path, next_hop: 10.13.0.3, successor: false, feasible_successor: true, distance: 45875200, rd: 26214400}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 19660800}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.24.0.4, metric: 19660800}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 26214400}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 26214400}
+        - route: {uut: r4, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 13107200}
   # B3: R2-R4 fails. R1 immediately uses direct R4 FS; R2 diffuses to R3.
   - packet-mark: cross-r2-r4-down
   - link-down: {uut: r2, interface: eth24}
@@ -26,11 +26,11 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.14.0.4, metric: 9830400}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 10813440}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.23.0.3, metric: 10813440}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 8519680}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.14.0.4, metric: 39321600}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 49152000}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.23.0.3, metric: 49152000}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 26214400}
   - validate-packet: {uut: r1, opcode: query, prefix: 10.4.0.0/24, since: cross-r2-r4-down, min: 0, max: 0, timeout: 2, event: any}
   - validate-packet: {uut: r2, opcode: query, prefix: 10.4.0.0/24, since: cross-r2-r4-down, min: 1, timeout: 2, event: delivered}
   # B4: while R2-R4 remains down, remove R3-R4. Direct R1-R4 preserves reachability.
@@ -40,11 +40,11 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.14.0.4, metric: 9830400}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.1, metric: 11141120}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 11796480}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.13.0.1, metric: 11796480}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.14.0.4, metric: 39321600}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.1, metric: 52428800}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 58982400}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.13.0.1, metric: 58982400}
   - validate-packet: {opcode: query, prefix: 10.4.0.0/24, since: cross-r3-r4-down, min: 1, timeout: 2, event: delivered}
   - validate-packet: {opcode: reply, prefix: 10.4.0.0/24, since: cross-r3-r4-down, min: 1, timeout: 2, event: delivered}
   # Restore one link at a time: first R3-R4, then R2-R4, ending at exact baseline.
@@ -55,9 +55,9 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.14.0.4, metric: 9830400}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.23.0.3, metric: 10813440}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 8519680}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.14.0.4, metric: 39321600}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.23.0.3, metric: 49152000}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 26214400}
   - packet-mark: cross-r2-r4-up
   - link-up: {uut: r4, interface: eth42}
   - link-up: {uut: r2, interface: eth24}
@@ -65,7 +65,7 @@ steps:
   - validate-convergence:
       timeout: 7
       expect:
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 9175040}
-        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 9175040}
-        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.24.0.4, metric: 7864320}
-        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 8519680}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: topology, active: false, successors: 1, fd: 32768000}
+        - route: {uut: r1, prefix: 10.4.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 32768000}
+        - route: {uut: r2, prefix: 10.4.0.0/24, table: rib, next_hop: 10.24.0.4, metric: 19660800}
+        - route: {uut: r3, prefix: 10.4.0.0/24, table: rib, next_hop: 10.34.0.4, metric: 26214400}

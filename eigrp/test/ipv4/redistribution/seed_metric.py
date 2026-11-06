@@ -28,6 +28,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
              * this focused translation unit.  Link-time GC discards unrelated
              * protocol functions from these implementation files.
              */
+            #include "eigrp/test/uut/eigrp_uut_defs.h"
             #include "eigrp/code/eigrp_metric.c"
             #include "eigrp/code/eigrp_redistribute.c"
 
@@ -211,18 +212,18 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 eigrp_rib_route_t route = {0};
                 eigrp_metrics_t selected;
                 eigrp_metric_values_t explicit_metric = {
-                    .bandwidth = 10000,
+                    .bandwidth = EIGRP_INTF_ETH_BW,
                     .delay = 101,
                     .reliability = 250,
                     .load = 11,
-                    .mtu = 1500,
+                    .mtu = EIGRP_INTF_MTU_1500,
                 };
                 eigrp_metric_values_t default_metric = {
                     .bandwidth = 20000,
                     .delay = 202,
                     .reliability = 240,
                     .load = 22,
-                    .mtu = 1400,
+                    .mtu = EIGRP_INTF_MTU_1400,
                 };
                 eigrp_metrics_t source_vector = {
                     .delay = 0x0000112233445566ULL,
@@ -238,7 +239,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
 
                 metric_config.default_metric_configured = true;
                 metric_config.default_metric = default_metric;
-                config.source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_EIGRP;
+                config.source.protocol = EIGRP_REDIST_PROTOCOL_EIGRP;
                 config.source.route_instance = 100;
                 route.redist.source = config.source;
                                 route.redist.vecmetric = source_vector;
@@ -250,7 +251,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 config.metric = explicit_metric;
                 origin = eigrp_redist_metric_select(
                     &af, &config, &route, &selected);
-                assert(origin == EIGRP_REDISTRIBUTE_METRIC_EXPLICIT);
+                assert(origin == EIGRP_REDIST_METRIC_EXPLICIT);
                 assert_seed_values(&selected, &explicit_metric);
 
                 /* 2. Without an explicit override, preserve the complete
@@ -261,7 +262,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 memset(&selected, 0, sizeof(selected));
                 origin = eigrp_redist_metric_select(
                     &af, &config, &route, &selected);
-                assert(origin == EIGRP_REDISTRIBUTE_METRIC_ROUTE);
+                assert(origin == EIGRP_REDIST_METRIC_ROUTE);
                 assert(memcmp(&selected, &source_vector,
                               sizeof(source_vector)) == 0);
 
@@ -272,20 +273,20 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 memset(&selected, 0, sizeof(selected));
                 origin = eigrp_redist_metric_select(
                     &af, &config, &route, &selected);
-                assert(origin == EIGRP_REDISTRIBUTE_METRIC_DEFAULT);
+                assert(origin == EIGRP_REDIST_METRIC_DEFAULT);
                 assert_seed_values(&selected, &default_metric);
 
                 /* Any valid parent-populated vector is authoritative regardless
                  * of source protocol.  Source identity does not change metric
                  * validity at the portable RIB boundary.
                  */
-                route.redist.source.protocol = EIGRP_REDISTRIBUTE_PROTOCOL_OSPF;
+                route.redist.source.protocol = EIGRP_REDIST_PROTOCOL_OSPF;
                 route.redist.source.route_instance = 10;
                 route.redist.vecmetric = source_vector;
                 memset(&selected, 0, sizeof(selected));
                 origin = eigrp_redist_metric_select(
                     &af, &config, &route, &selected);
-                assert(origin == EIGRP_REDISTRIBUTE_METRIC_ROUTE);
+                assert(origin == EIGRP_REDIST_METRIC_ROUTE);
                 assert(memcmp(&selected, &source_vector,
                               sizeof(source_vector)) == 0);
 
@@ -296,7 +297,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 memset(&selected, 0, sizeof(selected));
                 origin = eigrp_redist_metric_select(
                     &af, &config, &route, &selected);
-                assert(origin == EIGRP_REDISTRIBUTE_METRIC_DEFAULT);
+                assert(origin == EIGRP_REDIST_METRIC_DEFAULT);
                 assert_seed_values(&selected, &default_metric);
 
                 /* 4. With no usable vector and no configured seed, the route
@@ -308,7 +309,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 memset(&selected, 0xff, sizeof(selected));
                 origin = eigrp_redist_metric_select(
                     &af, &config, &route, &selected);
-                assert(origin == EIGRP_REDISTRIBUTE_METRIC_NONE);
+                assert(origin == EIGRP_REDIST_METRIC_NONE);
                 {
                     eigrp_metrics_t zero = {0};
                     assert(memcmp(&selected, &zero, sizeof(zero)) == 0);
