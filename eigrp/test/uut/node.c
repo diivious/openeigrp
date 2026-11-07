@@ -16,6 +16,7 @@
 #include "eigrp_structs.h"
 #include "eigrp_summary.h"
 #include "eigrp_redistribute.h"
+#include "eigrp_metric.h"
 #include "eigrp_pfxlimits.h"
 #include "eigrp_filter.h"
 #include "eigrp_prefix.h"
@@ -777,6 +778,41 @@ static void load(const char *path)
 					EIGRP_SET, &ctx, ntohl(v.s_addr));
 				if (r != EIGRP_RESULT_SUCCESS)
 					die("router-id", r);
+			} else if (!strcmp(op, "metric-version")) {
+				if (strcmp(a, "32bit"))
+					die("unsupported metric version",
+					    EIGRP_RESULT_INVALID_ARGUMENT);
+				r = eigrp_metric_version_update(EIGRP_SET,
+								&ctx);
+				if (r != EIGRP_RESULT_SUCCESS)
+					die("metric version", r);
+			} else if (!strcmp(op, "metric-weights")) {
+				unsigned values[5];
+				char extra;
+				if (sscanf(line,
+					   "metric-weights %u %u %u %u %u %c",
+					   &values[0], &values[1], &values[2],
+					   &values[3], &values[4], &extra)
+				    != 5)
+					die("metric weights syntax",
+					    EIGRP_RESULT_INVALID_ARGUMENT);
+				for (size_t i = 0; i < 5; i++) {
+					if (values[i] > UINT8_MAX)
+						die("metric weights range",
+						    EIGRP_RESULT_INVALID_ARGUMENT);
+				}
+				eigrp_metric_weights_t weights = {
+					.tos = 0,
+					.k1 = (uint8_t)values[0],
+					.k2 = (uint8_t)values[1],
+					.k3 = (uint8_t)values[2],
+					.k4 = (uint8_t)values[3],
+					.k5 = (uint8_t)values[4],
+				};
+				r = eigrp_metric_weights_update(EIGRP_SET, &ctx,
+								&weights);
+				if (r != EIGRP_RESULT_SUCCESS)
+					die("metric weights", r);
 			} else if (!strcmp(op, "network")) {
 				eigrp_prefix_t p = prefix_parse(a);
 				r = eigrp_network_create(&ctx, &p);
@@ -822,6 +858,19 @@ static void load(const char *path)
 				r = uut_redist_change(true);
 				if (r != EIGRP_RESULT_SUCCESS)
 					die("redistribute static", r);
+			} else if (!strcmp(op, "metric-bandwidth")) {
+				eigrp_intf_context_t ic = {
+					.address_family = af,
+					.runtime = eigrp_intf_lookup_by_name(
+						runtime, a)};
+				if (!ic.runtime)
+					die("bandwidth interface",
+					    EIGRP_RESULT_NOT_FOUND);
+				r = eigrp_intf_bandwidth_update(
+					EIGRP_SET, &ic,
+					(uint32_t)strtoul(b, NULL, 10));
+				if (r != EIGRP_RESULT_SUCCESS)
+					die("interface bandwidth", r);
 			} else if (!strcmp(op, "delay")) {
 				eigrp_intf_context_t ic = {
 					.address_family = af,

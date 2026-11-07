@@ -1,0 +1,25 @@
+schema: eigrp-uut-topology/v1
+# Portable 3-router differential test. All routers are OpenEIGRP UUTs.
+# Live Cisco CE1 and CE2 are qualified separately by netlabs.
+segments:
+  ce2-ce1: {}
+  ce2-oe1: {}
+routers:
+  ce2:
+    asn: 4473
+    router_id: 10.255.4.2
+    interfaces:
+      eth0: {segment: ce2-ce1, ipv4: 10.44.60.1/30, bandwidth: 100000, delay: 10}
+      eth1: {segment: ce2-oe1, ipv4: 10.44.61.1/30, bandwidth: 100000, delay: 10}
+    attached_networks:
+      - {prefix: 10.255.50.1/32, interface: lo1, bandwidth: 100000, delay: 10}
+  ce1:
+    asn: 4473
+    router_id: 10.255.4.1
+    interfaces:
+      eth0: {segment: ce2-ce1, ipv4: 10.44.60.2/30, bandwidth: 100000, delay: 10}
+  oe1:
+    asn: 4473
+    router_id: 10.255.4.3
+    interfaces:
+      eth0: {segment: ce2-oe1, ipv4: 10.44.61.2/30, bandwidth: 100000, delay: 10}

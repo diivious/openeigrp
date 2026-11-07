@@ -325,7 +325,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                  * advertisement without a further host route event. */
                 assert(update_work == 2);
                 assert(only_route(&runtime, &candidate.prefix)->metric.delay
-                       == 250U);
+                       == 250U * EIGRP_CLASSIC_SCALE);
                 candidate.metric = 1234;
                 candidate.tag = 0xaabbccddU;
                 set_ipv4(&candidate_nexthop.gateway, 203, 0, 113, 9);
@@ -342,7 +342,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 assert(route->extdata.tag == 0xaabbccddU);
                 assert(((const uint8_t *)&route->nexthop.ip.v4)[0] == 203U);
                 assert(((const uint8_t *)&route->nexthop.ip.v4)[3] == 9U);
-                assert(route->metric.delay == 250U);
+                assert(route->metric.delay == 250U * EIGRP_CLASSIC_SCALE);
 
                 /* While Active, a redistribution change may update path-level
                  * observations, but the destination FD/current/reported state
@@ -364,7 +364,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 assert(memcmp(&pd->reported_metric, &frozen_reported_metric,
                               sizeof(frozen_reported_metric)) == 0);
                 route = only_route(&runtime, &candidate.prefix);
-                assert(route->metric.delay == 400U);
+                assert(route->metric.delay == 400U * EIGRP_CLASSIC_SCALE);
                 assert(route->extdata.tag == 77U);
                 assert(((const uint8_t *)&route->nexthop.ip.v4)[3] == 99U);
 
@@ -407,14 +407,14 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 assert(route->distance == EIGRP_MAX_METRIC);
 
                 /* Reintroduce the local redistribution candidate. Its seed
-                 * delay is unscaled (10-us units), unlike its DUAL distance.
+                 * delay is already scaled, just like its DUAL metric input.
                  */
                 assert(eigrp_rib_redist_add(&runtime, &candidate)
                        == EIGRP_RESULT_SUCCESS);
                 pd = eigrp_topology_table_lookup(runtime.topology_table,
                                                  &candidate.prefix);
                 route = only_route(&runtime, &candidate.prefix);
-                assert(route->metric.delay == 400);
+                assert(route->metric.delay == 400 * EIGRP_CLASSIC_SCALE);
                 assert(route->reported_distance == 0);
                 assert(route->distance != EIGRP_MAX_METRIC);
                 assert(eigrp_metrics_match(route->reported_metric, route->metric));
@@ -495,7 +495,6 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                                                local_route->total_metric));
 
                     /* No second link-delay addition for redistributed seeds. */
-                    redist_calculation.delay = eigrp_delay_to_scaled(400);
                     assert(route->reported_distance == 0);
                     assert(route->distance != old_redist_distance);
                     assert(route->distance == eigrp_metric_calculate(

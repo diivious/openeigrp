@@ -189,7 +189,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
             {
                 assert(metric->bandwidth ==
                        eigrp_bandwidth_to_scaled(values->bandwidth));
-                assert(metric->delay == values->delay);
+                assert(metric->delay == eigrp_delay_to_scaled(values->delay));
                 assert(metric->reliability == values->reliability);
                 assert(metric->load == values->load);
                 assert(metric->mtu[0] == (values->mtu & 0xff));

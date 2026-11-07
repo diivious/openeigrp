@@ -227,8 +227,9 @@ int main(void)
 	override.config.metric.load = EIGRP_LOAD_DEFAULT;
 	override.config.metric.mtu = EIGRP_INTF_MTU_1500;
 	assert(eigrp_summary_route_build(&eigrp, &out, &p1, &r1, &sp, &sr));
-	assert(sr.metric.delay == 100);
-	assert(sr.total_metric.delay == 100 && sp.reported_metric.delay == 100);
+	assert(sr.metric.delay == 100 * EIGRP_CLASSIC_SCALE);
+	assert(sr.total_metric.delay == 100 * EIGRP_CLASSIC_SCALE
+	       && sp.reported_metric.delay == 100 * EIGRP_CLASSIC_SCALE);
 	local_metric = eigrp_metric_calculate(&eigrp, sr.metric);
 	assert(sr.distance == local_metric);
 	p1.distance = r1.distance = EIGRP_MAX_METRIC;
@@ -244,7 +245,7 @@ int main(void)
 	assert(eigrp_summary_query_route_build(&eigrp, &out, &sc.prefix, &sp,
 					       &sr));
 	assert(sr.metric.delay == r2.total_metric.delay
-	       || sr.metric.delay == 100);
+	       || sr.metric.delay == 100 * EIGRP_CLASSIC_SCALE);
 	assert(eigrp_summary_query_route_build(&eigrp, &out, &specific, &sp,
 					       &sr));
 	assert(sr.metric.delay == EIGRP_MAX_METRIC

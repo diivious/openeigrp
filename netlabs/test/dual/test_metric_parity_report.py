@@ -35,6 +35,13 @@ class MetricParityReportTest(unittest.TestCase):
         import json
         fixture = Path(__file__).parent / 'fixtures' / 'metric-parity-20261105.json'
         report = json.loads(fixture.read_text(encoding='utf-8'))
+        for af in ('ipv4', 'ipv6'):
+            for route in report['objectives'][f'DUAL-01/{af}']['wire'].values():
+                route['types'] = [0x0602]
+            for route in report['objectives'][f'DUAL-02/{af}']['wire'].values():
+                route['types'] = [0x0603]
+            for role in ('oe', 'ce'):
+                report['objectives'][f'DUAL-03/{af}'][role]['changed_types'] = [0x0603]
         failures = module.audit_report(report)
         self.assertTrue(any('ce->oe' in f and 'reported distance' in f
                             for f in failures), failures)
@@ -43,22 +50,55 @@ class MetricParityReportTest(unittest.TestCase):
         self.assertTrue(any('non-increasing RD/CD' in f
                             for f in failures), failures)
 
+    def test_rejects_missing_or_mixed_codec_evidence(self):
+        import json
+        fixture = Path(__file__).parent / 'fixtures' / 'metric-parity-20261105.json'
+        report = json.loads(fixture.read_text(encoding='utf-8'))
+        failures = module.audit_report(report)
+        self.assertTrue(any('TLV2 codec evidence' in f for f in failures), failures)
+
     def test_corrected_reference_report_passes(self):
         import copy
         import json
         fixture = Path(__file__).parent / 'fixtures' / 'metric-parity-20261105.json'
         report = copy.deepcopy(json.loads(fixture.read_text(encoding='utf-8')))
         for af in ('ipv4', 'ipv6'):
+            internal = report['objectives'][f'DUAL-01/{af}']['wire']
+            for route in internal.values():
+                route['types'] = [0x0602]
             topology = report['objectives'][f'DUAL-04/{af}']['single_path_distances']
             topology['oe']['rd'] = 163840
-            external = report['objectives'][f'DUAL-02/{af}']['wire']['oe']
-            for vector in external['metrics']:
-                vector['bandwidth'] = 100000
-                vector['delay'] = 100000000
-            cycle = report['objectives'][f'DUAL-03/{af}']['ce']
-            cycle['after_distance']['rd'] = cycle['before_distance']['rd'] + 1
-            cycle['after_distance']['cd'] = cycle['before_distance']['cd'] + 1
+            external = report['objectives'][f'DUAL-02/{af}']['wire']
+            for route in external.values():
+                route['types'] = [0x0603]
+                for vector in route['metrics']:
+                    vector['bandwidth'] = 100000
+                    vector['delay'] = 100000000
+                    vector['mtu'] = 1500
+            for sender in ('oe', 'ce'):
+                cycle = report['objectives'][f'DUAL-03/{af}'][sender]
+                cycle['changed_types'] = [0x0603]
+                for vector in cycle['changed_metrics']:
+                    vector['bandwidth'] = 100000
+                    vector['delay'] = 1000000000
+                    vector['mtu'] = 1500
+                # The corrected report must agree with the changed wire vector.
+                cycle['after_distance']['rd'] = module.cisco_wide_metric(
+                    cycle['changed_metrics'][0])
+                cycle['before_distance']['rd'] = cycle['after_distance']['rd'] - 1
+                cycle['after_distance']['cd'] = max(cycle['before_distance']['cd'] + 1,
+                                                   cycle['after_distance']['rd'] + 1)
         self.assertEqual(module.audit_report(report), [])
+        # A report cannot PASS merely because RD increased; its value must
+        # equal an actually observed TLV2 vector. MTU is part of seed parity.
+        changed = report['objectives']['DUAL-03/ipv4']['oe']['after_distance']
+        changed['rd'] += 1
+        self.assertTrue(any('changed RD' in f for f in module.audit_report(report)))
+        changed['rd'] -= 1
+        external = report['objectives']['DUAL-02/ipv6']['wire']['ce']['metrics'][0]
+        external['mtu'] = 14419200
+        self.assertTrue(any('external seed TLV2 units' in f
+                            for f in module.audit_report(report)))
 
 
 if __name__ == '__main__':

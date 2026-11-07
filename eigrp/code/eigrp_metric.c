@@ -42,12 +42,11 @@ void eigrp_metric_values_convert(const eigrp_metric_values_t *values,
 	if (!values)
 		return;
 
-	/* CLI seed bandwidth is Kbit/s; the route metric stores the classic
-	 * inverse-bandwidth component used by the TLV codecs.  Delay stays in
-	 * the normalized 10-microsecond units consumed by the classic codec.
+	/* CLI seeds are expressed in Kbit/s and 10-microsecond delay units.
+	 * Route vectors retain scaled classic components, including TLV1.
 	 */
 	metric->bandwidth = eigrp_bandwidth_to_scaled(values->bandwidth);
-	metric->delay = values->delay;
+	metric->delay = eigrp_delay_to_scaled(values->delay);
 	metric->wide_bandwidth = values->bandwidth;
 	metric->wide_delay = eigrp_metric_delay_classic2wide(
 		values->delay, values->bandwidth, false);
@@ -109,9 +108,15 @@ eigrp_scaled_t eigrp_bandwidth_to_scaled(eigrp_bandwidth_t bandwidth)
 {
 	eigrp_bandwidth_t scaled = EIGRP_BANDWIDTH_MAX;
 
+	if (!bandwidth)
+		return EIGRP_CLASSIC_MAX;
+
 	if (bandwidth != EIGRP_BANDWIDTH_MAX) {
-		scaled = (EIGRP_CLASSIC_SCALE * EIGRP_BANDWIDTH);
-		scaled = scaled / bandwidth;
+		/* Cisco classic arithmetic truncates the inverse bandwidth
+		 * before applying the 256 scaling factor.
+		 */
+		scaled = EIGRP_BANDWIDTH / bandwidth;
+		scaled *= EIGRP_CLASSIC_SCALE;
 
 		scaled = scaled ? scaled : EIGRP_BANDWIDTH_MIN;
 	}
@@ -122,27 +127,28 @@ eigrp_scaled_t eigrp_bandwidth_to_scaled(eigrp_bandwidth_t bandwidth)
 
 eigrp_bandwidth_t eigrp_scaled_to_bandwidth(eigrp_scaled_t scaled)
 {
-	eigrp_bandwidth_t bandwidth = EIGRP_BANDWIDTH_MAX;
+	eigrp_bandwidth_t bandwidth;
 
-	if (scaled != EIGRP_CLASSIC_MAX) {
-		bandwidth = (EIGRP_CLASSIC_SCALE * EIGRP_BANDWIDTH);
-		bandwidth = scaled * bandwidth;
-		bandwidth = (bandwidth < EIGRP_METRIC_MAX)
-				    ? bandwidth
-				    : EIGRP_BANDWIDTH_MAX;
-	}
+	if (!scaled || scaled >= EIGRP_CLASSIC_MAX)
+		return EIGRP_BANDWIDTH_MAX;
 
-	return bandwidth;
+	/* Invert the scaled classic component before truncation. */
+	bandwidth = (EIGRP_CLASSIC_SCALE * EIGRP_BANDWIDTH) / scaled;
+	return bandwidth ? bandwidth : EIGRP_BANDWIDTH_MIN;
 }
 
 eigrp_scaled_t eigrp_delay_to_scaled(eigrp_delay_t delay)
 {
+	if (delay == EIGRP_MAX_METRIC || delay == EIGRP_METRIC_MAX)
+		return EIGRP_MAX_METRIC;
 	delay = delay ? delay : EIGRP_DELAY_MIN;
 	return delay * EIGRP_CLASSIC_SCALE;
 }
 
 eigrp_delay_t eigrp_scaled_to_delay(eigrp_scaled_t scaled)
 {
+	if (scaled == EIGRP_MAX_METRIC)
+		return EIGRP_MAX_METRIC;
 	scaled = scaled / EIGRP_CLASSIC_SCALE;
 	scaled = scaled ? scaled : EIGRP_DELAY_MIN;
 
@@ -186,17 +192,21 @@ eigrp_metric_t eigrp_metric_calculate(eigrp_instance_t *eigrp,
 				      / (EIGRP_MAX_LOAD - metric.load);
 		latency = (uint64_t)eigrp->k_values[2] * delay;
 	} else {
-		/* The legacy/classic route calculation remains unchanged. */
+		/* Classic vectors already contain scaled bandwidth and delay.
+		 */
 		scale = eigrp->metric_version >= EIGRP_TLV_64B_VERSION
 				? (EIGRP_WIDE_SCALE / EIGRP_CLASSIC_SCALE)
 				: 1;
 		if (eigrp->k_values[0])
 			throughput = (uint64_t)eigrp->k_values[0]
 				     * metric.bandwidth * scale;
-		if (eigrp->k_values[1])
-			throughput += ((uint64_t)eigrp->k_values[1]
-				       * metric.bandwidth * scale)
-				      / (EIGRP_MAX_LOAD - metric.load);
+		if (eigrp->k_values[1]) {
+			/* TLV1 bandwidth is already scaled by 256. */
+			uint64_t weighted = eigrp->k_values[1];
+			weighted *= metric.bandwidth;
+			weighted /= EIGRP_MAX_LOAD - metric.load;
+			throughput += weighted * scale;
+		}
 		if (eigrp->k_values[2])
 			latency = (uint64_t)eigrp->k_values[2] * metric.delay
 				  * scale;

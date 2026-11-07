@@ -6,14 +6,16 @@ exchange EIGRP messages correctly and make interoperable routing decisions.
 It is not an educational lab curriculum and is not a replacement for the
 portable EIGRP unit and YAML UUT suites.
 
-**Source of authority:** [RFC 7868](https://www.rfc-editor.org/rfc/rfc7868.html),
-with the OpenEIGRP design contracts in [`../eigrp/specs/rtp.md`](../eigrp/specs/rtp.md),
+**Source of authority:** verified Cisco packet captures and on-wire decodes
+are primary for encoding and field layout; observed IOS XE behavior supplies
+protocol semantics. [RFC 7868](https://www.rfc-editor.org/rfc/rfc7868.html)
+is the reference where consistent with Cisco, alongside the OpenEIGRP design
+contracts in [`../eigrp/specs/rtp.md`](../eigrp/specs/rtp.md),
 [`../eigrp/specs/dual.md`](../eigrp/specs/dual.md), and
 [`../eigrp/specs/route-selection-spec.md`](../eigrp/specs/route-selection-spec.md).
-Where RFC 7868 leaves behavior unspecified or ambiguous, establish the expected
-Cisco behavior from the router version under test and captured protocol
-exchanges. Distinguish specification requirements, observations, and test
-assumptions. Do not treat an FRR/BIRD behavior as EIGRP protocol authority.
+When Cisco evidence is ambiguous or implementations differ, record the
+observation and leave the protocol decision to the project owner.
+Distinguish specification requirements, observations, and test assumptions. Do not treat an FRR/BIRD behavior as EIGRP protocol authority.
 
 ## Repository boundary
 
@@ -47,7 +49,7 @@ Live interoperability tests answer two different questions:
    select successors, exchange QUERY/REPLY messages, and converge correctly
    as the network changed?
 
-These test does not recreate every portable UUT scenario in netlab. Portable UUT remains
+These tests do not recreate every portable UUT scenario in netlab. Portable UUT remains
 responsible for exhaustive FSM transitions, crafted malformed packets,
 internal object ownership and retirement, memory safety, and deterministic
 implementation-level edge cases. Live tests concentrate on meaningful
@@ -314,15 +316,18 @@ New runnable scenarios follow the established convention:
   has supposedly configured the topology. Explicit runtime fault stimuli
   and their restoration are allowed when they are the subject of the test.
 
-### Existing implementation status on the `netlabs` baseline
+### Existing implementation status
 
 | Item | State | Meaning |
 | --- | --- | --- |
-| `2R-neighbor` | **Driver and scenario fixture present** | Checks bidirectional IPv4/IPv6 neighbor tables; does not yet qualify full RTP initialization, routes, or packet exchanges |
-| `2R-internal.py` | **Incomplete scenario** | Driver exists, but a matching `2R-internal/scenario.yaml` and `topology.yml` are absent; not discoverable/runnable through the current live runner |
-| RTP-02 through RTP-14 | **Planned** | No completed live test is asserted by this plan |
-| DUAL-02 through DUAL-15 | **Planned** | No completed live test is asserted by this plan |
-| Packet capture and controlled packet loss/delay | **Helpers present; live evidence not yet independently qualified** | Packet and fault assertions require live verification before RTP objectives can PASS |
+| `2R-neighbor` | **Runnable** | Neighbor-table formation in both AFs; RTP initialization remains unqualified without wire proof |
+| `2R-internal` | **Runnable legacy case** | Route exchange and capture assertions; must be evaluated by its own recorded objectives |
+| `2R-transport` | **Runnable** | Packetization, ACK/retransmission, loss stimuli, codec/neighbor validation as supported by its driver |
+| `2R-restart` | **Runnable** | Controlled cold restart, peer loss, recovery and wire evidence |
+| `2R-routes` | **Runnable** | Bidirectional internal/external, lifecycle and exact default-K TLV2 RD/seed checks; no alternate-path proof |
+| 3R-6R live scenarios | **Not implemented** | Runner supports the sizes; no complete 3R-6R scenario currently exists |
+| Multi-gig default delay and classic/wide arithmetic | **Local regression vectors only** | 1G-500G arithmetic/codec tests are not live Cisco speed/latency qualification |
+| Packet capture and network fault helpers | **Unit-tested; live evidence pending** | Real-router qualification depends on per-scenario artifacts and recorded execution |
 
 This is a **repository-content inventory**, not a claim that any scenario has
 passed against StormTrooper or the selected Cisco and OE images. Track actual

@@ -125,18 +125,18 @@ wait "$lock_pid"
 echo 'PASS: remote runner enforces exclusive locking'
 
 # Instructional labs must retain ownership and reject concurrent starts.
-bash "$runner" status | grep -F 'No active lab'
-bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 | grep -F 'ACTIVE LAB 101'
+bash "$runner" status | grep -Fq 'No active lab'
+bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 | grep -Fq 'ACTIVE LAB 101'
 grep -Fqx up "$tmp/actions.log"
 if bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 2>"$tmp/busy"; then
     echo 'FAIL: second lab was allowed' >&2
     exit 1
 fi
-grep -F 'BUSY:' "$tmp/busy"
-bash "$runner" status | grep -F 'Active: lab 101 (running)'
-printf '1\n' | bash "$runner" connect | grep -F 'Routers:'
+grep -Fq 'BUSY:' "$tmp/busy"
+bash "$runner" status | grep -Fq 'Active: lab 101 (running)'
+printf '1\n' | bash "$runner" connect | grep -Fq 'Routers:'
 grep -Fqx connect "$tmp/actions.log"
-bash "$runner" stop | grep -F 'Lab stopped'
+bash "$runner" stop | grep -Fq 'Lab stopped'
 grep -Fqx down "$tmp/actions.log"
 test ! -e "$tmp/state/session/session"
 
@@ -151,10 +151,12 @@ source = source.replace('up|down|status|connect)', 'up) exit 1 ;;\n    down|stat
 with open(path, 'w', encoding='utf8') as file:
     file.write(source)
 PY
-if bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101; then
+if bash "$runner" lab-start "$tmp/state/runs/upload.abc" 101 \
+        >"$tmp/deploy-failed.log" 2>&1; then
     echo 'FAIL: broken netlab up was accepted' >&2
     exit 1
 fi
+grep -Fq 'Lab deployment failed; attempting teardown' "$tmp/deploy-failed.log"
 test ! -e "$tmp/state/session/session"
 echo 'PASS: runner lifecycle, mutual exclusion, status, teardown and failed deploy cleanup'
 
@@ -318,7 +320,7 @@ if [[ "$client_started" -ne 1 ]] || ! kill -0 "$pid" 2>/dev/null; then
 fi
 wait "$pid"
 grep -F 'PASS: 2R-neighbor' "$tmp/client-out.txt"
-grep -F 'Report: ' "$tmp/client-out.txt"
+grep -Fq 'Report: ' "$tmp/client-out.txt"
 [[ -f "$tmp/client/netlabs/results/uut-mocktest/run-status.txt" ]]
 echo 'PASS: remote client streams progress and retrieves reports'
 
@@ -334,7 +336,7 @@ fi
     echo "FAIL: remote error became exit $client_rc" >&2
     exit 1
 }
-grep -F 'Report: ' "$tmp/client-failed.txt"
+grep -Fq 'Report: ' "$tmp/client-failed.txt"
 unset MOCK_CLIENT_RC
 echo 'PASS: client preserves failure status after report transfer'
 
@@ -345,7 +347,7 @@ if bash "$runner" uut-start "$tmp/state/runs/upload.fail" 2R-neighbor >"$tmp/uut
     echo 'FAIL: rejected UUT test exit was reported PASS' >&2
     exit 1
 fi
-grep -F 'FAIL: 2R-neighbor' "$tmp/uut-failed.txt"
+grep -Fq 'FAIL: 2R-neighbor' "$tmp/uut-failed.txt"
 [[ ! -f "$tmp/state/session/session" ]]
 [[ $(grep -c '^down$' "$tmp/actions.log") -ge 3 ]]
 echo 'PASS: UUT success/failure propagation, retained reports, and teardown'
@@ -355,11 +357,13 @@ echo 'PASS: UUT success/failure propagation, retained reports, and teardown'
 [[ -f "$root/netlabs/tools/remote/common.sh" ]]
 [[ -f "$root/netlabs/tools/remote/runner.sh" ]]
 grep -Fq 'COPYFILE_DISABLE=1 tar --format=ustar --no-xattrs' "$root/netlabs/tools/remote/common.sh"
-"$root/netlabs/tools/remote-lab.sh" --help | grep -F 'netlabs/tools/remote-lab.sh'
-# 2R-internal has a driver but no scenario/topology; never list it as runnable.
-# Future cases must not invalidate the historical fixture discovery test.
-"$root/netlabs/tools/remote-uut.sh" --list | grep -Fxq '2R-neighbor'
-! "$root/netlabs/tools/remote-uut.sh" --list | grep -Fxq '2R-internal'
+"$root/netlabs/tools/remote-lab.sh" --help | grep -Fq 'netlabs/tools/remote-lab.sh'
+# Both legacy cases have complete scenario, topology and driver fixtures.
+# Capture the full list first so grep -q cannot cause a false PASS through
+# SIGPIPE with pipefail enabled.
+list="$("$root/netlabs/tools/remote-uut.sh" --list)"
+grep -Fxq '2R-neighbor' <<<"$list"
+grep -Fxq '2R-internal' <<<"$list"
 if "$root/netlabs/tools/remote-uut.sh" --scenario neighbor-two-router >"$tmp/legacy.txt" 2>&1; then
     echo 'FAIL: legacy scenario identifier unexpectedly accepted' >&2
     exit 1
@@ -383,6 +387,6 @@ SH
 chmod +x "$tmp/bin/ssh"
 export LAB_MOCK_SSH_LOG="$tmp/ssh.log"
 REMOTE_LAB_CONFIG="$tmp/localhost.cfg" "$root/netlabs/tools/remote-lab.sh" --status |
-    grep -F 'No active lab or UUT session'
+    grep -Fq 'No active lab or UUT session'
 grep -Fq 'netlab@127.0.0.1' "$tmp/ssh.log"
 echo 'PASS: localhost is accepted as an SSH execution host'

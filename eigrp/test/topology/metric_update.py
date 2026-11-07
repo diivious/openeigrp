@@ -246,7 +246,7 @@ def metric_update_executable(tmp_path_factory):
             {
                 eigrp_metrics_t metric = {0};
                 metric.bandwidth = eigrp_bandwidth_to_scaled(100000);
-                metric.delay = 400; /* native redistribution seed, 10-us units */
+                metric.delay = eigrp_delay_to_scaled(400); /* canonical classic units */
                 metric.reliability = EIGRP_INTF_REL_100;
                 metric.load = EIGRP_LOAD_DEFAULT;
                 metric.mtu[0] = 0xdc;
@@ -287,8 +287,6 @@ def metric_update_executable(tmp_path_factory):
                 eigrp_prefix_descriptor_t *prefix = eigrp_topology_prefix_create();
                 eigrp_route_descriptor_t *route = eigrp_topology_route_create(link);
                 bool self = advertiser == runtime->neighbor_self;
-                eigrp_metrics_t calculation;
-
                 assert(prefix && route);
                 set_ipv4(&prefix->destination.address, id);
                 prefix->destination.prefix_length = 32;
@@ -305,9 +303,7 @@ def metric_update_executable(tmp_path_factory):
                 route->reported_distance = self ? 0
                     : eigrp_metric_calculate(runtime, metric);
                 if (self && !link) {
-                    calculation = metric;
-                    calculation.delay = eigrp_delay_to_scaled(metric.delay);
-                    route->distance = eigrp_metric_calculate(runtime, calculation);
+                    route->distance = eigrp_metric_calculate(runtime, metric);
                 } else if (self) {
                     route->distance = eigrp_metric_calculate(runtime, metric);
                 } else {
@@ -398,8 +394,8 @@ def metric_update_executable(tmp_path_factory):
                 runtime_destroy(&runtime);
             }
 
-            /* Defect 3: redistribution seed delay is native and must be scaled
-             * for distance calculations, without modifying the advertised seed. */
+            /* Defect 3: a scaled redistribution seed is retained unchanged
+             * for distance calculations and advertisements. */
             static void test_redistributed_seed_scaled_without_mutating_vector(void)
             {
                 eigrp_instance_t runtime;
@@ -409,7 +405,6 @@ def metric_update_executable(tmp_path_factory):
                 eigrp_metrics_t calculation = seed;
                 runtime_init(&runtime, &self);
                 route = add_route(&runtime, &self, NULL, seed, true, 4);
-                calculation.delay = eigrp_delay_to_scaled(seed.delay);
                 for (unsigned pass = 0; pass < 3; pass++) {
                     runtime.k_values[0] = pass + 1;
                     runtime.metric_version = pass ? EIGRP_TLV_64B_VERSION
@@ -418,7 +413,7 @@ def metric_update_executable(tmp_path_factory):
                     assert(route->distance == eigrp_metric_calculate(&runtime,
                                                                      calculation));
                     assert(route->reported_distance == 0);
-                    assert(route->distance != eigrp_metric_calculate(&runtime, seed));
+                    assert(route->distance == eigrp_metric_calculate(&runtime, seed));
                     assert(eigrp_metrics_match(route->metric, seed));
                     assert(eigrp_metrics_match(route->total_metric, seed));
                     assert(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
@@ -600,8 +595,8 @@ def metric_update_executable(tmp_path_factory):
             }
 
             /* Cisco's local Redistributed (CD/0) stores the entire seed
-             * unchanged in its vectors; only the scalar CD calculation scales
-             * seed delay by 256. Changes to the seed and withdrawn metrics
+             * unchanged in its vectors. Seed delay is already scaled before
+             * route admission. Changes to the seed and withdrawn metrics
              * cannot leave stale reported/total/advertised vectors behind.
              */
             static void test_redistributed_all_six_invariants(void)
@@ -620,7 +615,7 @@ def metric_update_executable(tmp_path_factory):
                     if (pass == 1) {
                         /* Simulate a new locally selected seed.  The route's
                          * canonical seed must replace any earlier vectors. */
-                        seed.delay = 700;
+                        seed.delay = eigrp_delay_to_scaled(700);
                         seed.bandwidth = eigrp_bandwidth_to_scaled(200000);
                         seed.tag = 55;
                         route->metric = seed;
@@ -629,7 +624,7 @@ def metric_update_executable(tmp_path_factory):
                     if (pass == 2)
                         runtime.metric_version = EIGRP_TLV_64B_VERSION;
                     calculation = seed;
-                    calculation.delay = eigrp_delay_to_scaled(seed.delay);
+
                     eigrp_topology_metric_update(&runtime);
                     assert(route->total_metric.delay == seed.delay);
                     assert(route->total_metric.hop_count == seed.hop_count);
@@ -649,10 +644,10 @@ def metric_update_executable(tmp_path_factory):
                 assert(route->prefix->rdistance == EIGRP_MAX_METRIC);
                 assert(!(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG));
                 /* A later fresh redistribution can become a valid successor. */
-                seed.delay = 550;
+                seed.delay = eigrp_delay_to_scaled(550);
                 route->metric = seed;
                 calculation = seed;
-                calculation.delay = eigrp_delay_to_scaled(seed.delay);
+
                 eigrp_topology_metric_update(&runtime);
                 assert_local_six_invariants(&runtime, route, seed,
                     eigrp_metric_calculate(&runtime, calculation));

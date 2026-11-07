@@ -85,9 +85,10 @@ discover() {
         name="${dir##*/}"
         [[ -f "$dir/topology.yml" &&
            -f "$REMOTE_REPO_ROOT/netlabs/uut/$name.py" ]] || continue
-        declared="$(sed -n 's/^[[:space:]]*group:[[:space:]]*\(rtp\|dual\)[[:space:]]*$/\1/p' "$spec" | head -n 1)"
+        # POSIX ERE alternation works with GNU and macOS/BSD sed.
+        declared="$(sed -n -E 's/^[[:space:]]*group:[[:space:]]*(rtp|dual)[[:space:]]*$/\1/p' "$spec" | head -n 1)"
         # Historical 2R-neighbor is a peer/RTP test; do not infer arbitrary
-        # groups from names or claim the incomplete 2R-internal is runnable.
+        # groups from case names when scenario metadata is missing.
         if [[ -z "$declared" && "$name" == 2R-neighbor ]]; then
             declared=rtp
         fi

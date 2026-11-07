@@ -102,6 +102,37 @@ class DecoderTests(unittest.TestCase):
         self.assertEqual([item['tlvs'][0]['next_hop'] for item in events],
                          ['0.0.0.0', '::'])
 
+    def test_cisco_captured_mtu_network_byte_order(self):
+        # Cisco IOS XE 17.3.6 packets carry 0x0005ea (1514 bytes), not
+        # little-endian 0xea0500. The old decoder silently inverted this.
+        for raw, family in ((CISCO_V4, 4), (CISCO_V6, 6)):
+            with self.subTest(family=family):
+                tlv = wire.decode_eigrp(eigrp(opcode=1, tlvs=raw), family,
+                                        '10.44.53.2', '224.0.0.10', 0)['tlvs'][0]
+                self.assertEqual(tlv['metric']['mtu'], 1514)
+        for raw, family in ((CISCO_TAGGED_V4, 4), (CISCO_TAGGED_V6, 6)):
+            with self.subTest(family=family, external=True):
+                tlv = wire.decode_eigrp(eigrp(opcode=1, tlvs=raw), family,
+                                        '10.44.53.2', '224.0.0.10', 0)['tlvs'][0]
+                self.assertEqual(tlv['metric']['mtu'], 1500)
+
+    def test_multiprotocol_multigig_wire_vector(self):
+        # Exercise the actual TLV2 decoder at 1G-500G, including fractional
+        # wide delay at >1G and fields wider than 32 bits.
+        for gbps in (1, 2, 5, 10, 20, 50, 100, 200, 500):
+            with self.subTest(gbps=gbps):
+                raw = bytearray(CISCO_V4)
+                bandwidth = gbps * 1000000  # Cisco TLV2 bandwidth is kbit/s
+                delay_ps = 10000000 // gbps  # default 1G latency is 10 us
+                raw[20:26] = delay_ps.to_bytes(6, 'big')
+                raw[26:32] = bandwidth.to_bytes(6, 'big')
+                route = wire.decode_eigrp(eigrp(opcode=1, tlvs=raw), 4,
+                                          '10.44.53.2', '224.0.0.10', 0)['tlvs'][0]
+                self.assertEqual(route['codec'], 'TLV2')
+                self.assertEqual(route['metric']['bandwidth'], bandwidth)
+                self.assertEqual(route['metric']['delay'], delay_ps)
+                self.assertEqual(route['metric']['mtu'], 1514)
+
     def test_cisco_tagged_external_exactly_one_destination(self):
         vectors = ((CISCO_TAGGED_V4, 4, '198.19.255.2/32', 7),
                    (CISCO_TAGGED_V6, 6, '2001:db8:4473:200::ff/128', 7))
@@ -181,7 +212,7 @@ class DecoderTests(unittest.TestCase):
         mcast = tlv(5, struct.pack('!I', 99))
         ver = tlv(4, bytes([17, 3, 2, 0]))
         addr = ipaddress.IPv4Address('0.0.0.0').packed
-        metric = struct.pack('!II', 100, 200) + b'\xdc\x05\x00' + bytes([1, 255, 1, 0, 0])
+        metric = struct.pack('!II', 100, 200) + b'\x00\x05\xdc' + bytes([1, 255, 1, 0, 0])
         route = tlv(0x0102, addr + metric + bytes([24, 192, 0, 2]))
         ext = struct.pack('!IIIIHBB', 0x01020304, 4473, 7, 1234, 0, 2, 0)
         external = tlv(0x0103, addr + ext + metric + bytes([24, 203, 0, 113]))

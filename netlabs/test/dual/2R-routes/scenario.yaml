@@ -3,6 +3,7 @@ name: 2R-routes
 group: dual
 process: OpenEIGRP
 asn: 4473
+metric_codec: TLV2
 families: [ipv4, ipv6]
 objectives: [DUAL-01, DUAL-02, DUAL-03, DUAL-04]
 
@@ -26,3 +27,9 @@ objectives: [DUAL-01, DUAL-02, DUAL-03, DUAL-04]
 # sending an unreachable-metric QUERY instead of a poisoned UPDATE. Require
 # a reachable UPDATE before the withdrawal, verified peer RIB removal,
 # and a subsequent reachable UPDATE plus peer RIB recovery in either case.
+
+# Default-K Cisco TLV2 is the only qualified live metric mode for this
+# named-mode topology. Regression vectors cover 1G-500G and TLV1 decoding;
+# those vectors do not constitute live Cisco multi-gig or classic qualification.
+# DUAL-02 requires exact Cisco seed BW/delay/MTU. DUAL-03 requires changed
+# TLV2 vectors to equal measured RD, not merely increase monotonically.
