@@ -1,0 +1,34 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-three-router-parity.yaml
+name: Three-router independent same-vector metric parity and recovery
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - neighbor: {uut: ce2, neighbor: 10.44.60.2, interface: eth0, state: up}
+        - neighbor: {uut: ce2, neighbor: 10.44.61.2, interface: eth1, state: up}
+        # Cisco documented wide default-K formula: 100M BW/10 delay at
+        # origin = 13107200; adding one such link = 19660800.
+        - route: {uut: ce1, prefix: 10.255.50.1/32, table: topology, fd: 19660800, active: false, successors: 1}
+        - route: {uut: oe1, prefix: 10.255.50.1/32, table: topology, fd: 19660800, active: false, successors: 1}
+        - route: {uut: ce1, prefix: 10.255.50.1/32, table: path, next_hop: 10.44.60.1, distance: 19660800, rd: 13107200, successor: true}
+        - route: {uut: oe1, prefix: 10.255.50.1/32, table: path, next_hop: 10.44.61.1, distance: 19660800, rd: 13107200, successor: true}
+  - packet-mark: withdraw
+  - links-down:
+      - {uut: ce2, interface: eth1}
+      - {uut: oe1, interface: eth0}
+  - validate-convergence:
+      timeout: 20
+      expect:
+        - route: {uut: oe1, prefix: 10.255.50.1/32, table: rib, present: false}
+        - route: {uut: ce1, prefix: 10.255.50.1/32, table: rib, metric: 19660800}
+  - links-up:
+      - {uut: ce2, interface: eth1}
+      - {uut: oe1, interface: eth0}
+  - validate-convergence:
+      timeout: 20
+      expect:
+        - route: {uut: ce1, prefix: 10.255.50.1/32, table: rib, metric: 19660800}
+        - route: {uut: oe1, prefix: 10.255.50.1/32, table: rib, metric: 19660800}
+  - stop: all

@@ -13,6 +13,7 @@
 
 #include "eigrp/code/eigrp.h"
 #include "eigrp/code/eigrp_log.h"
+#include "eigrp/code/eigrp_metric.h"
 #include "eigrp/code/eigrp_structs.h"
 #include "eigrp/code/eigrp_debug.h"
 #include "eigrp/code/eigrp_fsm.h"
@@ -949,11 +950,11 @@ static void test_config_refresh(eigrp_afi_t afi)
 	};
 	subscribed = redist_subscriptions;
 	route = only_route(&f.runtime, &f.candidate.prefix);
-	assert(route->metric.delay == 100);
+	assert(route->metric.delay == eigrp_delay_to_scaled(100));
 	assert(eigrp_redist_add(&context, &f.source, &changed, NULL)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(redist_subscriptions == subscribed);
-	assert(route->metric.delay == 150);
+	assert(route->metric.delay == eigrp_delay_to_scaled(150));
 	assert(update_work >= 1);
 	fixture_drain_initial_update(&f);
 	assert(eigrp_redist_add(&context, &f.source, &changed, NULL)
@@ -963,19 +964,19 @@ static void test_config_refresh(eigrp_afi_t afi)
 	/* The default must not override an explicit source metric. */
 	assert(eigrp_metric_default_update(EIGRP_SET, &context, &seed)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 150);
+	assert(route->metric.delay == eigrp_delay_to_scaled(150));
 	assert(update_work == 0);
 
 	/* Remove the override: the cached host vector (or default) must be
 	 * selected immediately without a new route event. */
 	assert(eigrp_redist_add(&context, &f.source, NULL, NULL)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 100);
+	assert(route->metric.delay == eigrp_delay_to_scaled(100));
 	assert(update_work >= 1);
 	fixture_drain_initial_update(&f);
 	assert(eigrp_metric_default_update(EIGRP_SET, &context, &changed)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 150);
+	assert(route->metric.delay == eigrp_delay_to_scaled(150));
 	assert(update_work >= 1);
 	fixture_drain_initial_update(&f);
 
@@ -983,21 +984,21 @@ static void test_config_refresh(eigrp_afi_t afi)
 	 */
 	source_vector = f.candidate;
 	source_vector.redist.vecmetric = route->metric;
-	source_vector.redist.vecmetric.delay = 73;
+	source_vector.redist.vecmetric.delay = eigrp_delay_to_scaled(73);
 	assert(eigrp_rib_redist_add(&f.runtime, &source_vector)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 73);
+	assert(route->metric.delay == eigrp_delay_to_scaled(73));
 	fixture_drain_initial_update(&f);
 	assert(eigrp_metric_default_update(EIGRP_SET, &context, &seed)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 73);
+	assert(route->metric.delay == eigrp_delay_to_scaled(73));
 	assert(update_work == 0);
 
 	/* Clearing the source vector falls back to the selected default.
 	 * Clearing that default must poison the existing topology path. */
 	assert(eigrp_rib_redist_add(&f.runtime, &f.candidate)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 100);
+	assert(route->metric.delay == eigrp_delay_to_scaled(100));
 	fixture_drain_initial_update(&f);
 	assert(eigrp_metric_default_update(EIGRP_RESET, &context, NULL)
 	       == EIGRP_RESULT_SUCCESS);
@@ -1006,7 +1007,7 @@ static void test_config_refresh(eigrp_afi_t afi)
 	fixture_drain_initial_update(&f);
 	assert(eigrp_metric_default_update(EIGRP_SET, &context, &changed)
 	       == EIGRP_RESULT_SUCCESS);
-	assert(route->metric.delay == 150);
+	assert(route->metric.delay == eigrp_delay_to_scaled(150));
 	assert(update_work >= 1);
 	fixture_drain_initial_update(&f);
 
@@ -1021,7 +1022,7 @@ static void test_config_refresh(eigrp_afi_t afi)
 	assert(eigrp_redist_add(&context, &f.source, NULL, "permit-all")
 	       == EIGRP_RESULT_SUCCESS);
 	assert(redist_subscriptions == subscribed);
-	assert(route->metric.delay == 150);
+	assert(route->metric.delay == eigrp_delay_to_scaled(150));
 	assert(route->distance != EIGRP_MAX_METRIC);
 	assert(update_work >= 1);
 	fixture_drain_initial_update(&f);

@@ -124,8 +124,8 @@ static uint16_t eigrp_tlv1_metric_decode(eigrp_stream_t *pkt,
 	if (!eigrp_tlv1_stream_has(pkt, EIGRP_TLV1_METRIC_SIZE))
 		return 0;
 
-	/* TLV1.2 provides metric in 32bit form, need to scale */
-	metric->delay = eigrp_scaled_to_delay(eigrp_stream_getl(pkt));
+	/* TLV1 carries the same scaled classic units as the route vector. */
+	metric->delay = eigrp_stream_getl(pkt);
 	metric->bandwidth = eigrp_stream_getl(pkt);
 	metric->mtu[2] = eigrp_stream_getc(pkt);
 	metric->mtu[1] = eigrp_stream_getc(pkt);
@@ -142,12 +142,16 @@ static uint16_t eigrp_tlv1_metric_decode(eigrp_stream_t *pkt,
 static uint16_t eigrp_tlv1_metric_encode(eigrp_stream_t *pkt,
 					 eigrp_metrics_t *metric)
 {
-	/*
-	 * TLV1.2 supports classic metrics, need to scale it down to 32 bits.
+	/* Preserve the scaled classic vector and the 32-bit infinity marker.
+	 * Saturate accumulated delays rather than wrap when writing TLV1.
 	 */
-	eigrp_stream_putl(pkt, eigrp_delay_to_scaled(metric->delay));
+	eigrp_stream_putl(pkt, metric->delay >= EIGRP_CLASSIC_MAX
+				       ? EIGRP_CLASSIC_MAX
+				       : (uint32_t)metric->delay);
 
-	eigrp_stream_putl(pkt, metric->bandwidth);
+	eigrp_stream_putl(pkt, metric->bandwidth >= EIGRP_CLASSIC_MAX
+				       ? EIGRP_CLASSIC_MAX
+				       : (uint32_t)metric->bandwidth);
 	eigrp_stream_putc(pkt, metric->mtu[2]);
 	eigrp_stream_putc(pkt, metric->mtu[1]);
 	eigrp_stream_putc(pkt, metric->mtu[0]);

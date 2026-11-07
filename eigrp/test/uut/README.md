@@ -53,7 +53,12 @@ specific failure/recovery boundary.  `validate-convergence` contains declarative
 and/or route expectations and polls until all are true or the timeout expires.
 
 Topology interfaces may specify `delay` to drive the real EIGRP-owned interface-delay
-configuration target after the address family and networks exist. `validate-route` also
+configuration target after the address family and networks exist. The optional
+`metric_bandwidth` field similarly configures the real EIGRP metric bandwidth
+(1..10,000,000 Kbit/s), distinct from the Unix-host `bandwidth` field. It is
+available on both transit and attached interfaces. A router can set
+`metric_version: 32bit` before interface startup to exercise TLV1 metric
+encoding and DUAL convergence; the default remains wide metrics. `validate-route` also
 supports `table: path` with `next_hop`, `interface`, `successor`,
 `feasible_successor`, `distance`, and `rd` fields for per-neighbor topology paths.
 `present: false` applies to the fully filtered row, so it can reject a specific stale

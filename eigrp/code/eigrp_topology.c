@@ -163,11 +163,7 @@ eigrp_topology_redistributed_distance(eigrp_instance_t *eigrp,
 		return EIGRP_MAX_METRIC;
 
 	calculation = *metric;
-	/* Locally selected redistribution seed delay is retained in the native
-	 * route object in CLI/TLV 10-microsecond units.  The DUAL calculation
-	 * consumes scaled delay, matching eigrp_topology_update_distance().
-	 */
-	calculation.delay = eigrp_delay_to_scaled(calculation.delay);
+	/* Seed vectors are already in scaled classic units. */
 	distance = eigrp_metric_calculate(eigrp, calculation);
 	return distance;
 }
@@ -1571,8 +1567,9 @@ void eigrp_topology_metric_update(eigrp_instance_t *eigrp)
 						eigrp_metric_calculate(eigrp,
 								       metric);
 				} else {
-					/* Redistribution seed delay is still in
-					 * 10-us units. */
+					/* The retained redistribution seed
+					 * already contains scaled classic
+					 * delay. */
 					route->distance =
 						eigrp_topology_redistributed_distance(
 							eigrp, &route->metric);

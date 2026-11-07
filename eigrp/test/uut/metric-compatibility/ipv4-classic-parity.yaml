@@ -1,0 +1,26 @@
+schema: eigrp-uut-topology/v1
+segments:
+  r1-r2: {}
+  r2-r3: {}
+routers:
+  r1:
+    asn: 4473
+    router_id: 10.255.4.1
+    metric_version: 32bit
+    interfaces:
+      eth12: {segment: r1-r2, ipv4: 10.12.0.1/30, bandwidth: 10000, metric_bandwidth: 10000, delay: 100}
+  r2:
+    asn: 4473
+    router_id: 10.255.4.2
+    metric_version: 32bit
+    interfaces:
+      eth21: {segment: r1-r2, ipv4: 10.12.0.2/30, bandwidth: 10000, metric_bandwidth: 10000, delay: 100}
+      eth23: {segment: r2-r3, ipv4: 10.23.0.2/30, bandwidth: 10000, metric_bandwidth: 10000, delay: 100}
+  r3:
+    asn: 4473
+    router_id: 10.255.4.3
+    metric_version: 32bit
+    interfaces:
+      eth32: {segment: r2-r3, ipv4: 10.23.0.3/30, bandwidth: 10000, metric_bandwidth: 10000, delay: 100}
+    attached_networks:
+      - {prefix: 10.255.3.1/32, interface: lo1, bandwidth: 56, metric_bandwidth: 56, delay: 2000}

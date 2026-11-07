@@ -1,0 +1,38 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-classic-parity.yaml
+name: Cisco classic 56-kbit integer parity and three-router recovery
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.12.0.2, interface: eth12, timeout: 12}
+  - validate-neighbor: {uut: r2, neighbor: 10.23.0.3, interface: eth23, timeout: 12}
+  # Cisco classic: floor(10^7/56) = 178571, delay 2000 + 100 + 100.
+  # The FD must be 46277376, not the post-scale division result.
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: 10.255.3.1/32, table: topology, active: false, fd: 46251776, successors: 1}
+        - route: {uut: r2, prefix: 10.255.3.1/32, table: path, rd: 46226176, distance: 46251776, successor: true}
+        - route: {uut: r1, prefix: 10.255.3.1/32, table: topology, active: false, fd: 46277376, successors: 1}
+        - route: {uut: r1, prefix: 10.255.3.1/32, table: path, rd: 46251776, distance: 46277376, successor: true}
+        - route: {uut: r1, prefix: 10.255.3.1/32, table: rib, metric: 46277376}
+  - packet-mark: link-failure
+  - links-down:
+      - {uut: r2, interface: eth23}
+      - {uut: r3, interface: eth32}
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.255.3.1/32, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.255.3.1/32, table: rib, present: false}
+  - links-up:
+      - {uut: r2, interface: eth23}
+      - {uut: r3, interface: eth32}
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.255.3.1/32, table: topology, active: false, fd: 46277376, successors: 1}
+        - route: {uut: r1, prefix: 10.255.3.1/32, table: rib, metric: 46277376}
+  - stop: all

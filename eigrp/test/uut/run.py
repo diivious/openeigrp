@@ -34,13 +34,24 @@ def validate_topology(t):
     if not isinstance(t.get("segments",{}),dict): raise SpecError("topology.segments must be a mapping")
     for rn,r in t["routers"].items():
         if not isinstance(r,dict): raise SpecError(f"router {rn} must be a mapping")
-        check_keys(r,{"asn","router_id","active_time","interfaces","attached_networks","source_networks","summary_metrics","redistribute"},f"router {rn}")
+        check_keys(r,{"asn","router_id","active_time","interfaces","attached_networks","source_networks","summary_metrics","redistribute","metric_version","k_values"},f"router {rn}")
+        if "k_values" in r:
+            k = r["k_values"]
+            if (not isinstance(k, list) or len(k) != 5 or
+                    any(type(v) is not int or not 0 <= v <= 255 for v in k)):
+                raise SpecError(f"router {rn}: k_values must contain five integers in 0..255")
         if not 1<=int(r.get("asn",0))<=65535: raise SpecError(f"router {rn}: invalid asn")
+        if "metric_version" in r and r["metric_version"] != "32bit":
+            raise SpecError(f"router {rn}: metric_version supports only '32bit'")
         ipaddress.IPv4Address(r.get("router_id"))
         if "active_time" in r and not 1 <= int(r["active_time"]) <= 65535: raise SpecError(f"router {rn}: active_time must be 1..65535 seconds")
         if not isinstance(r.get("interfaces",{}),dict): raise SpecError(f"router {rn}.interfaces must be a mapping")
         for name,i in r.get("interfaces",{}).items():
-            check_keys(i,{"segment","ipv4","ipv6","mtu","bandwidth","delay","up","summaries","authentication"},f"{rn}.{name}")
+            check_keys(i,{"segment","ipv4","ipv6","mtu","bandwidth","metric_bandwidth","delay","up","summaries","authentication"},f"{rn}.{name}")
+            if "metric_bandwidth" in i and (
+                    type(i["metric_bandwidth"]) is not int or
+                    not 1 <= i["metric_bandwidth"] <= 10000000):
+                raise SpecError(f"{rn}.{name}.metric_bandwidth must be 1..10000000 Kbit/s")
             auth=i.get("authentication")
             if auth is not None:
                 if not isinstance(auth,dict): raise SpecError(f"{rn}.{name}.authentication must be a mapping")
@@ -77,7 +88,11 @@ def validate_topology(t):
             if not isinstance(vals,list): raise SpecError(f"{rn}.{key} must be a list")
             for n in vals:
                 if not isinstance(n,dict): raise SpecError(f"{rn}.{key} entries must be mappings")
-                check_keys(n,{"prefix","interface","protocol","metric","bandwidth","delay","mtu"},f"{rn}.{key}")
+                check_keys(n,{"prefix","interface","protocol","metric","bandwidth","metric_bandwidth","delay","mtu"},f"{rn}.{key}")
+                if "metric_bandwidth" in n and (
+                        type(n["metric_bandwidth"]) is not int or
+                        not 1 <= n["metric_bandwidth"] <= 10000000):
+                    raise SpecError(f"{rn}.{key}.metric_bandwidth must be 1..10000000 Kbit/s")
                 address=ipaddress.ip_interface(n["prefix"])
                 if key=="attached_networks" and address.version==6 and (
                         address.ip.is_link_local or address.ip.is_multicast or address.ip.is_unspecified or address.ip.is_loopback):
@@ -619,6 +634,9 @@ class Runner:
             for source in r.get("redistribute", []):
                 lines.append(f"redistribute {source}")
             lines.append(f"router-id {r['router_id']}")
+            if r.get("metric_version") == "32bit": lines.append("metric-version 32bit")
+            if "k_values" in r:
+                lines.append("metric-weights " + " ".join(map(str, r["k_values"])))
             if "active_time" in r: lines.append(f"active-time {int(r['active_time'])}")
             for name,i in r.get("interfaces",{}).items():
                 for p in (i.get("ipv4",[]) if isinstance(i.get("ipv4",[]),list) else [i["ipv4"]]): lines.append(f"network {ipaddress.ip_interface(p).network}")
@@ -628,9 +646,12 @@ class Runner:
                     lines.append(f"network {p.network}")
                 else:
                     lines.append(f"passive {n.get('interface',f'attached{idx}')}")
-            for n in r.get("attached_networks",[]):
-                if "delay" in n: lines.append(f"delay {n.get('interface')} {int(n['delay'])}")
+            for idx,n in enumerate(r.get("attached_networks",[]),1):
+                name = n.get("interface",f"attached{idx}")
+                if "metric_bandwidth" in n: lines.append(f"metric-bandwidth {name} {int(n['metric_bandwidth'])}")
+                if "delay" in n: lines.append(f"delay {name} {int(n['delay'])}")
             for name,i in r.get("interfaces",{}).items():
+                if "metric_bandwidth" in i: lines.append(f"metric-bandwidth {name} {int(i['metric_bandwidth'])}")
                 if "delay" in i: lines.append(f"delay {name} {int(i['delay'])}")
                 for summary in i.get("summaries",[]): lines.append(f"summary {name} {ipaddress.ip_network(summary,strict=False)}")
             for name,i in r.get("interfaces",{}).items():

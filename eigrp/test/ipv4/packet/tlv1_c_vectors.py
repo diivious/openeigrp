@@ -146,7 +146,7 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
             static void metric_set(eigrp_metrics_t *metric)
             {
                 memset(metric, 0, sizeof(*metric));
-                metric->delay = 10;
+                metric->delay = 10 * EIGRP_CLASSIC_SCALE;
                 metric->bandwidth = 0x000a0000;
                 metric->mtu[0] = 0xdc;
                 metric->mtu[1] = 0x05;
@@ -190,7 +190,7 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
 
             static void assert_metric(const eigrp_metrics_t *metric)
             {
-                assert(metric->delay == 10);
+                assert(metric->delay == 10 * EIGRP_CLASSIC_SCALE);
                 assert(metric->bandwidth == 0x000a0000);
                 assert(metric->mtu[0] == 0xdc);
                 assert(metric->mtu[1] == 0x05);
@@ -292,6 +292,27 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
                                prefix_lengths[i]);
                 }
 
+                /* The classic 32-bit infinity marker survives a full codec
+                 * round trip, and a wider accumulated delay saturates.
+                 */
+                valid = eigrp_stream_create(128);
+                assert(valid != NULL);
+                route_set(&route, false, 32);
+                route.metric.delay = EIGRP_MAX_METRIC;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 29);
+                assert(memcmp(valid->data + 8, "\xff\xff\xff\xff", 4) == 0);
+                assert(codec.decoder(&eigrp, &neighbor, valid, (uint16_t)valid->endp));
+                assert(decoded_route.metric.delay == EIGRP_MAX_METRIC);
+                eigrp_stream_free(valid);
+
+                valid = eigrp_stream_create(128);
+                assert(valid != NULL);
+                route_set(&route, false, 32);
+                route.metric.delay = (uint64_t)UINT32_MAX + 200U;
+                assert(codec.encoder(&eigrp, &interface, &neighbor, valid, &route) == 29);
+                assert(memcmp(valid->data + 8, "\xff\xff\xff\xff", 4) == 0);
+                eigrp_stream_free(valid);
+
                 reject_bytes(&eigrp, &neighbor, &codec, short_header, sizeof(short_header));
                 reject_bytes(&eigrp, &neighbor, &codec, too_long, sizeof(too_long));
 
@@ -372,7 +393,7 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
         vectors=[row.split("|",3) for row in result.stdout.splitlines() if row.startswith("VECTOR|")]
         assert len(vectors)==20
         # Independent frozen wire vector: TLV 0x0102, IPv4 next hop
-        # 192.0.2.254, delay 10, bandwidth 0x000a0000, MTU 1500,
+        # 192.0.2.254, scaled delay 2560, bandwidth 0x000a0000, MTU 1500,
         # hops 3, reliability 255, load 7, tag 9, flags 1, and
         # destination 203.0.113.129/32. No decoder-generated expected bytes.
         golden = bytes.fromhex(
