@@ -7,7 +7,7 @@
 #ifndef EIGRP_UNIX_EIGRP_UNIX_SEGMENT_H_
 #define EIGRP_UNIX_EIGRP_UNIX_SEGMENT_H_
 
-#include "eigrp_unix_interface.h"
+#include "eigrp_uut_interface.h"
 
 typedef struct eigrp_unix_segment eigrp_unix_segment_t;
 

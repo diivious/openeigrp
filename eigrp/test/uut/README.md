@@ -246,7 +246,7 @@ and converge Passive, while R3's Hello packets are delivered but never
 accepted as an adjacency and no R3 prefixes enter R1/R2's RIBs.
 
 The Unix shim owns the in-memory keychain provider in
-`unix/code/eigrp_unix_keychain.c` and implements the existing
+`libunix/code/eigrp_unix_keychain.c` and implements the existing
 `eigrp_sys_auth_key_lookup()` southbound contract. The test node only registers
 its configured key with `eigrp_unix_keychain_add()`; neither the key nor an
 authentication override is built into the UUT executable. Unregistered

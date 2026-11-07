@@ -5,7 +5,7 @@ Copyright (C) 2026 Donnie V. Savage
 ## 1. Scope
 
 This document defines the concrete integration contract between the portable
-OpenEIGRP core and the standalone Unix host adapter under `unix/`.
+OpenEIGRP core and the standalone Unix host adapter under `libunix/`.
 
 The Unix adapter is the native macOS/Linux host used for portable development,
 UUT execution, and host-independent integration testing. It is not an FRR
@@ -16,7 +16,7 @@ This specification answers a different question than `specs/public-api.md`:
 
 - `specs/public-api.md` defines the complete host-neutral core/shim API;
 - this document defines how the Unix shim implements and consumes that API;
-- `unix/README.md` is an operator/developer orientation page, not the detailed
+- `libunix/README.md` is an operator/developer orientation page, not the detailed
   integration contract.
 
 The public API remains authoritative in the installed portable headers:
@@ -29,7 +29,7 @@ eigrp/code/eigrp_rib.h
 eigrp/code/eigrp_sys.h
 ```
 
-Unix-private declarations under `unix/code/` must not leak into portable
+Unix-private declarations under `libunix/code/` must not leak into portable
 OpenEIGRP headers or APIs.
 
 ## 2. Naming
@@ -76,36 +76,36 @@ It does not own:
 ## 4. Source ownership map
 
 ```text
-unix/code/eigrp_unix_sys.c
+libunix/code/eigrp_unix_sys.c
     pthread/poll runtime, timers, events, fd readiness, work queues,
     time services, default-VRF resolution
 
-unix/code/eigrp_unix_interface.c
+libunix/code/eigrp_uut_interface.c
     Unix host interface/address inventory and notifications into the core
 
-unix/code/eigrp_unix_rib.c
+libunix/code/eigrp_uut_rib.c
     in-memory host RIB, installed EIGRP routes, redistributed source routes
 
-unix/code/eigrp_unix_segment.c
+libunix/code/eigrp_uut_segment.c
     logical shared-medium membership used by the virtual wire
 
-unix/code/eigrp_unix_wire.c
+libunix/code/eigrp_uut_wire.c
     core packet-I/O implementation over the local broker connection
 
-unix/code/eigrp_unix_wire_broker.c
+libunix/code/eigrp_uut_wire_broker.c
     out-of-process Unix-domain packet forwarding broker
 
-unix/code/eigrp_unix_config.c
+libunix/code/eigrp_unix_config.c
     standalone text configuration parser -> semantic public API calls
 
-unix/code/eigrp_unix.h
+libunix/code/eigrp_unix.h
     Unix-private runtime/fd serialization helpers
 
-unix/code/eigrp_unix_interface.h
-unix/code/eigrp_unix_rib.h
-unix/code/eigrp_unix_segment.h
-unix/code/eigrp_unix_config.h
-unix/code/eigrp_unix_wire.h
+libunix/code/eigrp_uut_interface.h
+libunix/code/eigrp_uut_rib.h
+libunix/code/eigrp_uut_segment.h
+libunix/code/eigrp_unix_config.h
+libunix/code/eigrp_uut_wire.h
     Unix-private host-model and test/UUT interfaces
 ```
 
@@ -126,7 +126,7 @@ The Unix shim sits between host mechanics and the portable public API.
              |
              v
 +--------------------------+
-| unix/code/               |
+| libunix/code/               |
 |                          |
 | config     interface     |
 | RIB        runtime       |
@@ -319,7 +319,7 @@ The Unix parser must not read or write private portable configuration structs.
 
 ### 10.1 Host inventory
 
-`eigrp_unix_interface.c` owns an in-memory interface inventory containing host
+`eigrp_uut_interface.c` owns an in-memory interface inventory containing host
 properties such as:
 
 - name;
@@ -607,7 +607,7 @@ No POSIX socket structure or wire envelope is visible to portable packet code.
 
 ## 13. Logical segment model
 
-`eigrp_unix_segment.c` models only shared control-plane membership.
+`eigrp_uut_segment.c` models only shared control-plane membership.
 
 A segment contains N endpoints identified by:
 
@@ -666,8 +666,8 @@ VRF.
 ## 16. Policy and authentication host services
 
 The standalone Unix shim owns the policy callbacks in
-`unix/code/eigrp_unix_policy.c` and the keychain lookup in
-`unix/code/eigrp_unix_keychain.c`. The UUT executable does not define
+`libunix/code/eigrp_uut_policy.c` and the keychain lookup in
+`libunix/code/eigrp_unix_keychain.c`. The UUT executable does not define
 `eigrp_sys_*` policy or authentication-key callbacks.
 
 The Unix keychain provider is a small in-memory store. No key or test password

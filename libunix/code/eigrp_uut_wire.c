@@ -10,9 +10,9 @@
 #include <unistd.h>
 #include "eigrp_sys.h"
 #include "eigrp_unix.h"
-#include "eigrp_unix_interface.h"
-#include "eigrp_unix_segment.h"
-#include "eigrp_unix_wire.h"
+#include "eigrp_uut_interface.h"
+#include "eigrp_uut_segment.h"
+#include "eigrp_uut_wire.h"
 #include "eigrp_string.h"
 
 typedef struct wire_binding {

@@ -6,9 +6,9 @@ import os
 import re
 import subprocess
 
-ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrpd" / "code").is_dir())
-UNIX = ROOT / "unix" / "code"
-PUBLIC = ROOT / "eigrpd" / "code"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
+UNIX = ROOT / "libunix" / "code"
+PUBLIC = ROOT / "eigrp" / "code"
 
 
 def test_unix_adapter_uses_only_public_eigrp_headers():
@@ -17,7 +17,7 @@ def test_unix_adapter_uses_only_public_eigrp_headers():
 
     for path in UNIX.glob("*.[ch]"):
         for header in include_re.findall(path.read_text()):
-            if header.startswith("eigrp_unix"):
+            if header.startswith(("eigrp_unix", "eigrp_uut")):
                 continue
             assert header in allowed, f"{path.name} includes private portable header {header}"
 
@@ -49,7 +49,7 @@ def test_unix_sys_runtime_compiles_against_public_contract(tmp_path):
 
 def test_unix_runtime_keeps_packet_transport_separate_from_scheduler_and_rib():
     runtime = (UNIX / "eigrp_unix_sys.c").read_text()
-    wire = (UNIX / "eigrp_unix_wire.c").read_text()
+    wire = (UNIX / "eigrp_uut_wire.c").read_text()
     assert "eigrp_sys_packet_send(" not in runtime
     assert "eigrp_sys_packet_send(" in wire
     assert "eigrp_rib_route_add(" not in runtime

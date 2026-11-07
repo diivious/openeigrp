@@ -1,6 +1,6 @@
 # Standalone Unix host adapter
 
-`unix/` is the native macOS/Linux host for developing and qualifying the
+`libunix/` is the native macOS/Linux host for developing and qualifying the
 portable OpenEIGRP engine without embedding it in FRR or BIRD. It implements
 host services and test-oriented facilities, **not an alternative EIGRP
 protocol implementation**. Protocol decisions remain in `../eigrp/code/`.
@@ -22,11 +22,11 @@ make the resulting state observable to tests and host front ends.
 | Area | Implementation / entry point |
 |:--|:--|
 | Scheduling and host services | `code/eigrp_unix_sys.c`, `code/eigrp_unix.h` |
-| Interfaces and lifecycle | `code/eigrp_unix_interface.c`, `code/eigrp_unix_interface.h` |
-| In-memory routing table | `code/eigrp_unix_rib.c`, `code/eigrp_unix_rib.h` |
+| Interfaces and lifecycle | `code/eigrp_uut_interface.c`, `code/eigrp_uut_interface.h` |
+| In-memory routing table | `code/eigrp_uut_rib.c`, `code/eigrp_uut_rib.h` |
 | Standalone configuration | `code/eigrp_unix_config.c` |
-| Logical segments and packet transport | `code/eigrp_unix_segment.c`, `code/eigrp_unix_wire.c` |
-| Wire broker | `code/eigrp_unix_wire_broker.c`, `code/eigrp-wire` |
+| Logical segments and packet transport | `code/eigrp_uut_segment.c`, `code/eigrp_uut_wire.c` |
+| Wire broker | `code/eigrp_uut_wire_broker.c`, `code/eigrp-wire` |
 
 ## Logical segments and packet transport
 
@@ -57,7 +57,7 @@ make help        # Available commands and selectors
 To run the broker directly, use:
 
 ```sh
-unix/code/eigrp-wire [socket-path]
+libunix/code/eigrp-wire [socket-path]
 ```
 
 Set `EIGRP_UNIX_WIRE_SOCKET` for Unix EIGRP processes when using a non-default

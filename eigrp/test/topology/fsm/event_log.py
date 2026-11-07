@@ -12,7 +12,7 @@ ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code"
 FSM = ROOT / "eigrp" / "code" / "eigrp_fsm.c"
 EVENTLOG = ROOT / "eigrp" / "code" / "eigrp_eventlog.c"
 SYS_H = ROOT / "eigrp" / "code" / "eigrp_sys.h"
-UNIX_SYS = ROOT / "unix" / "code" / "eigrp_unix_sys.c"
+UNIX_SYS = ROOT / "libunix" / "code" / "eigrp_unix_sys.c"
 FRR_SB = ROOT / "frr" / "code" / "eigrp_southbound.c"
 UUT_NODE = ROOT / "eigrp" / "test" / "uut" / "node.c"
 

@@ -8,14 +8,14 @@ import tempfile
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
 CODE = ROOT / "eigrp" / "code"
-UNIX = ROOT / "unix" / "code"
+UNIX = ROOT / "libunix" / "code"
 SOURCE = Path(__file__).with_suffix(".c")
 
 
 def test_neighbor_admission_allocations_flood_and_recovery():
     core = sorted(p for p in CODE.glob("*.c") if p.name not in ("eigrp_dump.c", "eigrp.c"))
     unix = sorted(p for p in UNIX.glob("*.c")
-                  if p.name not in ("eigrp_unix_config.c", "eigrp_unix_wire_broker.c", "eigrp_unix_keychain.c", "eigrp_unix_policy.c"))
+                  if p.name not in ("eigrp_unix_config.c", "eigrp_uut_wire_broker.c", "eigrp_unix_keychain.c", "eigrp_uut_policy.c"))
     with tempfile.TemporaryDirectory() as tmp:
         executable = Path(tmp) / "resource-admission"
         test_object = Path(tmp) / "resource-test.o"

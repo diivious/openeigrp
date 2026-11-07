@@ -13,9 +13,9 @@
 #include <string.h>
 
 #include "eigrp_unix.h"
-#include "eigrp_unix_interface.h"
-#include "eigrp_unix_rib.h"
-#include "eigrp_unix_segment.h"
+#include "eigrp_uut_interface.h"
+#include "eigrp_uut_rib.h"
+#include "eigrp_uut_segment.h"
 #include "eigrp_metric.h"
 #include "eigrp_const.h"
 

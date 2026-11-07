@@ -5,10 +5,10 @@ from pathlib import Path
 import os
 import subprocess
 
-ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrpd" / "code").is_dir())
-UNIX = ROOT / "unix" / "code"
-PUBLIC = ROOT / "eigrpd" / "code"
-HARNESS = ROOT / "unix" / "test" / "rib_harness.c"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
+UNIX = ROOT / "libunix" / "code"
+PUBLIC = ROOT / "eigrp" / "code"
+HARNESS = ROOT / "libunix" / "test" / "rib_harness.c"
 
 
 def test_unix_internal_rib_route_and_source_lifecycle(tmp_path):
@@ -23,7 +23,7 @@ def test_unix_internal_rib_route_and_source_lifecycle(tmp_path):
             "-Werror",
             f"-I{PUBLIC}",
             f"-I{UNIX}",
-            str(UNIX / "eigrp_unix_rib.c"),
+            str(UNIX / "eigrp_uut_rib.c"),
             str(HARNESS),
             "-o",
             str(binary),
@@ -43,7 +43,7 @@ def test_unix_internal_rib_route_and_source_lifecycle(tmp_path):
 
 
 def test_unix_rib_is_internal_and_not_kernel_route_programming():
-    rib = (UNIX / "eigrp_unix_rib.c").read_text()
+    rib = (UNIX / "eigrp_uut_rib.c").read_text()
     assert "eigrp_rib_route_add" in rib
     assert "eigrp_rib_route_del" in rib
     assert "eigrp_rib_route_add" in rib

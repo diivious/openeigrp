@@ -171,8 +171,8 @@ make                # Build
 make all            # Required before opening a merge PR
 ```
 
-`make` builds `eigrp/code` plus `unix/code`. `make all` is the
-pre-merge gate, with `make uut` providing the portable/core tests: portable build validation, `eigrp/test`, `unix/test`, the
+`make` builds `eigrp/code` plus `libunix/code`. `make all` is the
+pre-merge gate, with `make uut` providing the portable/core tests: portable build validation, `eigrp/test`, `libunix/test`, the
 IPv4 and IPv6 Basic Core Gates, and the RTP Core Gate. It requires no FRR/BIRD
 checkout or VM, root privileges, or host VLAN configuration, and it never
 invokes platform tooling implicitly.

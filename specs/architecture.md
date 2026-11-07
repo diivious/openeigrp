@@ -77,7 +77,7 @@ eigrp/
   bird/
     README.md      BIRD/BSD integration boundary and current status
     test/           BIRD/BSD-native test area
-  unix/
+  libunix/
     code/          standalone Unix host shim
     test/          Unix-host tests
   specs/           repository-wide contracts and operator documentation
@@ -317,7 +317,7 @@ Tests follow the same ownership boundary as code.
 - `eigrp/test/` tests portable protocol behavior and portable boundaries.
 - `frr/test/` tests FRR integration and FRR-native behavior.
 - `bird/test/` tests BIRD/BSD integration.
-- `unix/test/` tests the standalone Unix host.
+- `libunix/test/` tests the standalone Unix host.
 
 A protocol defect should be reproducible without requiring an FRR-specific
 object unless the defect is specifically in the FRR adapter.

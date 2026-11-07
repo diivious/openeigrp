@@ -5,10 +5,10 @@ from pathlib import Path
 import os
 import subprocess
 
-ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrpd" / "code").is_dir())
-UNIX = ROOT / "unix" / "code"
-PUBLIC = ROOT / "eigrpd" / "code"
-HARNESS = ROOT / "unix" / "test" / "config_harness.c"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
+UNIX = ROOT / "libunix" / "code"
+PUBLIC = ROOT / "eigrp" / "code"
+HARNESS = ROOT / "libunix" / "test" / "config_harness.c"
 
 
 def test_named_ipv4_config_reaches_real_semantic_targets(tmp_path):
@@ -42,6 +42,6 @@ def test_named_ipv4_config_reaches_real_semantic_targets(tmp_path):
 
 
 def test_unix_parser_objects_do_not_leak_into_portable_code():
-    for path in (ROOT / "eigrpd" / "code").glob("*.[ch]"):
+    for path in (ROOT / "eigrp" / "code").glob("*.[ch]"):
         text = path.read_text()
         assert "eigrp_unix_config" not in text

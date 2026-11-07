@@ -28,7 +28,7 @@ class MakeTargetsTest(unittest.TestCase):
         docker = self.root / "tools/docker.sh"
         docker.write_text('#!/bin/sh\nprintf "DOCKER %s\\n" "$*" >> "$LOG_FILE"\n')
         docker.chmod(0o755)
-        for name in ("eigrp/code", "unix/code", "eigrp/test/uut", "eigrp/test/scale", "frr/test/build"):
+        for name in ("eigrp/code", "libunix/code", "eigrp/test/uut", "eigrp/test/scale", "frr/test/build"):
             path = self.root / name
             path.mkdir(parents=True)
             (path / "Makefile").write_text(

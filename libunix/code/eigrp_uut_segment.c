@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "eigrp_unix_segment.h"
+#include "eigrp_uut_segment.h"
 
 typedef struct eigrp_unix_segment_endpoint {
 	char *uut_name;

@@ -6,10 +6,10 @@ import os
 import subprocess
 
 ROOT = next(p for p in Path(__file__).resolve().parents
-            if (p / "eigrp" / "code").is_dir() and (p / "unix" / "code").is_dir())
-UNIX = ROOT / "unix" / "code"
+            if (p / "eigrp" / "code").is_dir() and (p / "libunix" / "code").is_dir())
+UNIX = ROOT / "libunix" / "code"
 PUBLIC = ROOT / "eigrp" / "code"
-HARNESS = ROOT / "unix" / "test" / "keychain_harness.c"
+HARNESS = ROOT / "libunix" / "test" / "keychain_harness.c"
 
 
 def test_unix_keychain_host_provider(tmp_path):

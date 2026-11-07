@@ -4,11 +4,12 @@
 from pathlib import Path
 import os
 import subprocess
+import sys
 
-ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrpd" / "code").is_dir())
-UNIX = ROOT / "unix" / "code"
-PUBLIC = ROOT / "eigrpd" / "code"
-HARNESS = ROOT / "unix" / "test" / "interface_segment_harness.c"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
+UNIX = ROOT / "libunix" / "code"
+PUBLIC = ROOT / "eigrp" / "code"
+HARNESS = ROOT / "libunix" / "test" / "interface_segment_harness.c"
 
 
 def test_unix_interface_and_shared_segment_model(tmp_path):
@@ -22,11 +23,17 @@ def test_unix_interface_and_shared_segment_model(tmp_path):
             "-Wall",
             "-Wextra",
             "-Werror",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections",
             f"-I{PUBLIC}",
             f"-I{UNIX}",
-            str(UNIX / "eigrp_unix_interface.c"),
-            str(UNIX / "eigrp_unix_rib.c"),
-            str(UNIX / "eigrp_unix_segment.c"),
+            str(UNIX / "eigrp_uut_interface.c"),
+            str(UNIX / "eigrp_uut_rib.c"),
+            str(UNIX / "eigrp_uut_segment.c"),
+            str(UNIX / "eigrp_unix_sys.c"),
+            str(PUBLIC / "eigrp_metric.c"),
+            str(PUBLIC / "eigrp_log.c"),
             str(HARNESS),
             "-o",
             str(binary),
@@ -46,7 +53,7 @@ def test_unix_interface_and_shared_segment_model(tmp_path):
 
 
 def test_segment_model_has_no_point_to_point_or_ethernet_assumptions():
-    text = (UNIX / "eigrp_unix_segment.c").read_text()
+    text = (UNIX / "eigrp_uut_segment.c").read_text()
     assert "endpoint_count" in text
     for forbidden in ('"R1"', '"R2"', "endpoint_a =", "endpoint_b =", "vlan_id", "mac_address"):
         assert forbidden not in text

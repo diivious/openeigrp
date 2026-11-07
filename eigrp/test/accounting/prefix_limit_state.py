@@ -9,13 +9,13 @@ import sys
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
 CODE = ROOT / "eigrp" / "code"
-UNIX = ROOT / "unix" / "code"
+UNIX = ROOT / "libunix" / "code"
 
 
 def test_prefix_limit_accounting_and_timer_state(tmp_path):
     core = sorted(p for p in CODE.glob("*.c") if p.name not in ("eigrp_dump.c", "eigrp.c"))
     unix = sorted(p for p in UNIX.glob("*.c") if p.name not in (
-        "eigrp_unix_config.c", "eigrp_unix_wire_broker.c", "eigrp_unix_keychain.c", "eigrp_unix_policy.c"))
+        "eigrp_unix_config.c", "eigrp_uut_wire_broker.c", "eigrp_unix_keychain.c", "eigrp_uut_policy.c"))
     binary = tmp_path / "prefix-accounting"
     cmd = [os.environ.get("CC", "cc"), "-std=c11", "-D_POSIX_C_SOURCE=200809L",
            "-DEIGRP_DISABLE_SNMP", "-pthread", "-ffunction-sections", "-fdata-sections",

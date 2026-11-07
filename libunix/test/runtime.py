@@ -5,10 +5,10 @@ from pathlib import Path
 import os
 import subprocess
 
-ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrpd" / "code").is_dir())
-UNIX = ROOT / "unix" / "code"
-PUBLIC = ROOT / "eigrpd" / "code"
-HARNESS = ROOT / "unix" / "test" / "runtime_harness.c"
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
+UNIX = ROOT / "libunix" / "code"
+PUBLIC = ROOT / "eigrp" / "code"
+HARNESS = ROOT / "libunix" / "test" / "runtime_harness.c"
 
 
 def test_unix_runtime_builds_and_executes(tmp_path):
@@ -26,6 +26,7 @@ def test_unix_runtime_builds_and_executes(tmp_path):
             f"-I{PUBLIC}",
             f"-I{UNIX}",
             str(UNIX / "eigrp_unix_sys.c"),
+            str(PUBLIC / "eigrp_log.c"),
             str(HARNESS),
             "-o",
             str(binary),
@@ -50,10 +51,10 @@ def test_unix_runtime_builds_and_executes(tmp_path):
 
 
 def test_standalone_runtime_archive_builds_without_frr_or_bird():
-    clean = subprocess.run(["make", "-C", "unix/code", "clean"], cwd=ROOT)
+    clean = subprocess.run(["make", "-C", "libunix/code", "clean"], cwd=ROOT)
     assert clean.returncode == 0
     build = subprocess.run(
-        ["make", "-C", "unix/code"],
+        ["make", "-C", "libunix/code"],
         cwd=ROOT,
         text=True,
         stdout=subprocess.PIPE,

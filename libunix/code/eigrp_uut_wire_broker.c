@@ -13,7 +13,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include "eigrp_unix_wire.h"
+#include "eigrp_uut_wire.h"
 #include "eigrp_string.h"
 typedef struct endpoint {
 	int fd;

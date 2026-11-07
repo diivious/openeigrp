@@ -71,7 +71,7 @@ def test_multicast_af_is_not_exposed_by_current_frr_cli():
 
 def test_no_eigrp_stub_runtime_symbols_added():
     production = []
-    for base in (ROOT / "eigrp/code", ROOT / "frr/code", ROOT / "unix/code"):
+    for base in (ROOT / "eigrp/code", ROOT / "frr/code", ROOT / "libunix/code"):
         production.extend(path for path in base.glob("*.c")
                           if path.is_file() and not path.name.startswith("."))
         production.extend(path for path in base.glob("*.h")
@@ -103,7 +103,7 @@ def test_completed_runtime_paths_do_not_tolerate_not_implemented():
 
 
 def test_production_targets_do_not_return_or_tolerate_not_implemented():
-    for base in (ROOT / "eigrp/code", ROOT / "frr/code", ROOT / "unix/code"):
+    for base in (ROOT / "eigrp/code", ROOT / "frr/code", ROOT / "libunix/code"):
         for source in base.glob("*.c"):
             if source.name.startswith(".") or not source.is_file():
                 continue

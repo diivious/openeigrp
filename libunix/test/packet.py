@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Donnie V. Savage
 import socket, struct, subprocess, time
 from pathlib import Path
-ROOT=next(p for p in Path(__file__).resolve().parents if (p/'unix'/'code').is_dir())
-BROKER=ROOT/'unix'/'code'/'eigrp-wire'
+ROOT=next(p for p in Path(__file__).resolve().parents if (p/'libunix'/'code').is_dir())
+BROKER=ROOT/'libunix'/'code'/'eigrp-wire'
 HDR='!BBBBIHHHH16s16s'
 HDR_SIZE=struct.calcsize(HDR)
 def send_frame(sock,data): sock.sendall(data)

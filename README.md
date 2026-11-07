@@ -37,7 +37,7 @@ Portable APIs use EIGRP-owned types and structured results. FRR, BIRD, and Unix-
 | Platform integrator | `specs/platform-integration.md`, `specs/public-api.md` | public headers under `eigrp/code/` and the platform README |
 | Portable protocol developer | `specs/architecture.md` | `eigrp/specs/dual.md`, `eigrp/specs/route-selection-spec.md`, `eigrp/specs/rtp.md`, `specs/rfc7868.md` |
 | FRR adapter developer | `frr/README.md`, `frr/patch/README.md` | `specs/platform-integration.md`, `specs/EIGRP-Config-Guide.md` |
-| Unix host developer | `unix/README.md`, `unix/specs/integration.md` | `specs/public-api.md` |
+| Unix host developer | `libunix/README.md`, `libunix/specs/integration.md` | `specs/public-api.md` |
 | BIRD/BSD adapter developer | `bird/README.md` | `specs/platform-integration.md`, `specs/public-api.md` |
 
 ## Quick Start
@@ -344,7 +344,7 @@ eigrp/
     code/          BIRD/BSD adapter area
     specs/         BIRD/BSD integration specifications
     test/          BIRD/BSD-native test area
-  unix/
+  libunix/
     code/          Standalone Unix host implementation
     specs/         Unix-host integration specification
     test/          Unix-host tests
@@ -361,7 +361,7 @@ eigrp/
 | [`eigrp/code/`](eigrp/code/) | Portable protocol implementation and public EIGRP APIs |
 | [`eigrp/specs/`](eigrp/specs/) | DUAL, route selection, RTP, and other protocol-module designs |
 | [`frr/`](frr/README.md) | FRR routing-stack adapter and integration |
-| [`unix/`](unix/README.md) | Standalone Unix host and portable qualification |
+| [`libunix/`](libunix/README.md) | Standalone Unix host and portable qualification |
 | [`bird/`](bird/README.md) | BIRD/BSD integration area |
 | [`specs/`](specs/) | Cross-platform architecture, integration, and configuration contracts |
 | [`tools/`](tools/README.md) | Build, staging, and test orchestration |

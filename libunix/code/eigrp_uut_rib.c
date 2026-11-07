@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "eigrp_unix_rib.h"
+#include "eigrp_uut_rib.h"
 
 typedef struct eigrp_unix_rib_route_entry {
 	eigrp_instance_t *eigrp;

@@ -458,7 +458,7 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
 
     # Decode wire TLVs emitted by the real C codec, not fabricated Python layouts.
     import ipaddress
-    sys.path.insert(0,str(ROOT / "unix" / "test"))
+    sys.path.insert(0,str(ROOT / "libunix" / "test"))
     try:
         from eigrp_wire import _route_prefixes
         vectors=[row.split("|",3) for row in result.stdout.splitlines() if row.startswith("VECTOR|")]
@@ -468,7 +468,7 @@ def test_ipv4_wide_tlv2_codec_round_trip_and_rejection(tmp_path):
                 f"203.0.113.129/{int(length)}",strict=False))
             assert _route_prefixes(bytes(20)+bytes.fromhex(hex_bytes),4)==[expected],(kind,length)
     finally:
-        sys.path.remove(str(ROOT / "unix" / "test"))
+        sys.path.remove(str(ROOT / "libunix" / "test"))
 
 
 

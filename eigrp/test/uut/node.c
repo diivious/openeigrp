@@ -28,10 +28,10 @@ extern void eigrp_unix_policy_uut_deny_set(const eigrp_prefix_t *prefix);
 #include "eigrp_sys.h"
 #include "eigrp_timer.h"
 #include "eigrp_unix.h"
-#include "eigrp_unix_interface.h"
+#include "eigrp_uut_interface.h"
 #include "eigrp_unix_keychain.h"
-#include "eigrp_unix_rib.h"
-#include "eigrp_unix_segment.h"
+#include "eigrp_uut_rib.h"
+#include "eigrp_uut_segment.h"
 
 #define LINE 1024
 

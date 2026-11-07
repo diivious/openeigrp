@@ -11,7 +11,7 @@ TOPOLOGY_SCHEMA="eigrp-uut-topology/v1"; TEST_SCHEMA="eigrp-uut-test/v1"
 HDR=struct.Struct("!BBBBIHHHH16s16s"); REGISTER=1; PACKET=2; MULTICAST=1
 OPCODES={1:"update",2:"request",3:"query",4:"reply",5:"hello",6:"ipxsap",7:"probe",8:"ack",10:"sia-query",11:"sia-reply"}
 ROOT=Path(__file__).resolve().parents[3]; NODE=Path(__file__).with_name("eigrp-uut-node")
-sys.path.insert(0,str(ROOT/"unix"/"test"))
+sys.path.insert(0,str(ROOT/"libunix"/"test"))
 from eigrp_wire import Broker
 sys.path.insert(0, str(Path(__file__).parent))
 from timing import Poller, MonotonicClock, ManualClock

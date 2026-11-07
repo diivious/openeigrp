@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "eigrp_unix_rib.h"
+#include "eigrp_uut_rib.h"
 
 static unsigned source_adds;
 static unsigned source_removes;

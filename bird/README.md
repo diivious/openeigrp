@@ -42,5 +42,5 @@ interoperability in the intended BIRD environment.
 - [Platform integration](../specs/platform-integration.md) — host/core boundary.
 - [Public API](../specs/public-api.md) — EIGRP-owned callable contracts.
 - [Architecture](../specs/architecture.md) — portable engine and adapters.
-- [FRR adapter](../frr/README.md) and [Unix adapter](../unix/README.md) —
+- [FRR adapter](../frr/README.md) and [Unix adapter](../libunix/README.md) —
   host-specific examples, not implementation dependencies.

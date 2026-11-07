@@ -24,7 +24,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 NODE = ROOT / "eigrp/test/uut/eigrp-uut-node"
-sys.path.insert(0, str(ROOT / "unix/test"))
+sys.path.insert(0, str(ROOT / "libunix/test"))
 from eigrp_wire import Broker, HDR, REGISTER, PACKET, MULTICAST, recv_frame
 
 ASN = 4453

@@ -46,7 +46,7 @@ portable-build:
 	$(MAKE) -C eigrp/code
 
 build: portable-build ## Build portable EIGRP and Unix support.
-	$(MAKE) -C unix/code
+	$(MAKE) -C libunix/code
 
 check: ## Run style validation and its executable unit tests (SOURCE=changed|all).
 	@case '$(SOURCE)' in ''|changed|all) ;; *) echo 'error: check SOURCE must be changed or all' >&2; exit 2 ;; esac
@@ -122,7 +122,7 @@ frr-smoke:
 
 clean: ## Remove generated build, UUT and local Netlabs artifacts.
 	$(MAKE) -C eigrp/code clean
-	$(MAKE) -C unix/code clean
+	$(MAKE) -C libunix/code clean
 	$(MAKE) -C eigrp/test/uut clean
 	$(MAKE) -C frr/test/build clean
 	@# Preserve the results directory and its checked-in .gitignore, while
