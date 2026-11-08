@@ -111,7 +111,7 @@ void eigrp_frr_version_read(eigrp_integration_version_t *version)
 	version->integration = "FRRouting EIGRP";
 	version->integration_version = EIGRP_FRR_INTEGRATION_RELEASE;
 	version->framework = "FRRouting";
-	version->framework_version = VERSION;
+	version->framework_version = FRR_VERSION;
 
 	if (uname(&host) == 0) {
 		eigrp_frr_version_copy(version->operating_system,

@@ -941,7 +941,6 @@ extern struct running_config_stub {
 
 
 /* Standalone FRR surface needed by the syntax-only eigrpd build. */
-#define VERSION "standalone-build"
 #define NB_OK 0
 #define NB_ERR_INCONSISTENCY 1
 #define NB_ERR_RESOURCE 2

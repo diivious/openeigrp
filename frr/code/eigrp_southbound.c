@@ -818,7 +818,7 @@ void eigrp_sys_software_version(uint8_t *major, uint8_t *minor)
 		*major = 0;
 	if (minor)
 		*minor = 0;
-	if (sscanf(VERSION, "%u.%u", &maj, &min) == 2) {
+	if (sscanf(FRR_VERSION, "%u.%u", &maj, &min) == 2) {
 		if (major)
 			*major = (uint8_t)maj;
 		if (minor)

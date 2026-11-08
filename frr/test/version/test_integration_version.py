@@ -51,7 +51,7 @@ class IntegrationVersionTests(unittest.TestCase):
             tmp = Path(tmp)
             (tmp / "lib").mkdir()
             (tmp / "lib" / "version.h").write_text(
-                '#define VERSION "99.7-framework-test"\n'
+                '#define FRR_VERSION "99.7-framework-test"\n'
             )
             (tmp / "eigrp_features.h").write_text('#define EIGRP_RELEASE "core-release-test"\n')
             if os_release is not None:
