@@ -1,4 +1,4 @@
-# Native Linux interface discovery and IPv4 packet transport.
+# Native Linux interface discovery and dual-stack packet transport.
 # Copyright (C) 2026 Donnie V. Savage
 CC ?= cc
 AR ?= ar

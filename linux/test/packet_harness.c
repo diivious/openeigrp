@@ -298,7 +298,9 @@ static bool receive_frame(size_t capacity, eigrp_packet_rx_meta_t *metadata)
 static void test_socket_lifecycle(void)
 {
 	assert(eigrp_sys_socket_open(NULL) == EIGRP_RESULT_INVALID_ARGUMENT);
+	other.vrf = 23;
 	assert(eigrp_sys_socket_open(&other) == EIGRP_RESULT_UNSUPPORTED);
+	other.vrf = 0;
 	runtime.vrf = 23;
 	assert(eigrp_sys_socket_open(&runtime) == EIGRP_RESULT_UNSUPPORTED);
 	runtime.vrf = 0;

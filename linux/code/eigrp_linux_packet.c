@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Native IPv4 EIGRP packet transport.  Only IP framing, socket operations,
+ * Native IPv4/IPv6 EIGRP packet transport. Only IP framing, socket operations,
  * and host envelope metadata live here; the portable core owns EIGRP/RTP.
  * Copyright (C) 2026 Donnie V. Savage
  */
@@ -28,6 +28,10 @@
 #define EIGRP_LINUX_TTL 1
 #define EIGRP_LINUX_TOS 0xc0
 
+static const struct in6_addr eigrp_linux_group6 = {
+	.s6_addr = {0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0a},
+};
+
 struct eigrp_linux_packet_socket {
 	const eigrp_instance_t *eigrp;
 	int fd;
@@ -51,10 +55,21 @@ eigrp_linux_packet_find(const eigrp_instance_t *eigrp)
 	return NULL;
 }
 
+static bool eigrp_linux_packet_afi(const eigrp_instance_t *eigrp,
+				   eigrp_afi_t afi)
+{
+	return eigrp && eigrp_instance_afi(eigrp) == afi
+	       && eigrp_instance_vrf_id(eigrp) == EIGRP_VRF_DEFAULT;
+}
+
 static bool eigrp_linux_packet_ipv4(const eigrp_instance_t *eigrp)
 {
-	return eigrp && eigrp_instance_afi(eigrp) == EIGRP_AFI_IPV4
-	       && eigrp_instance_vrf_id(eigrp) == EIGRP_VRF_DEFAULT;
+	return eigrp_linux_packet_afi(eigrp, EIGRP_AFI_IPV4);
+}
+
+static bool eigrp_linux_packet_ipv6(const eigrp_instance_t *eigrp)
+{
+	return eigrp_linux_packet_afi(eigrp, EIGRP_AFI_IPV6);
 }
 
 int eigrp_linux_packet_fd(const eigrp_instance_t *eigrp)
@@ -70,48 +85,92 @@ int eigrp_linux_packet_fd(const eigrp_instance_t *eigrp)
 	return fd;
 }
 
-eigrp_result_t eigrp_sys_socket_open(eigrp_instance_t *eigrp)
+/* Control messages are mandatory for ingress identity. IPv4 explicitly
+ * disables other sockets' multicast group memberships from feeding us. */
+static int eigrp_linux_packet_options4(int fd)
 {
-	struct eigrp_linux_packet_socket *entry;
-	int fd;
 	int enabled = 1;
 	int disabled = 0;
 	int ttl = EIGRP_LINUX_TTL;
 	int tos = EIGRP_LINUX_TOS;
 
+	return setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &enabled, sizeof(enabled))
+			       || setsockopt(fd, IPPROTO_IP, IP_MULTICAST_ALL,
+					     &disabled, sizeof(disabled))
+			       || setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL,
+					     &ttl, sizeof(ttl))
+			       || setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP,
+					     &disabled, sizeof(disabled))
+			       || setsockopt(fd, IPPROTO_IP, IP_TTL, &ttl,
+					     sizeof(ttl))
+			       || setsockopt(fd, IPPROTO_IP, IP_TOS, &tos,
+					     sizeof(tos))
+		       ? -1
+		       : 0;
+}
+
+static int eigrp_linux_packet_options6(int fd)
+{
+	int enabled = 1;
+	int disabled = 0;
+	int ttl = EIGRP_LINUX_TTL;
+	int tos = EIGRP_LINUX_TOS;
+	int checksum = -1;
+
+	/* The portable EIGRP checksum does not include an IPv6 pseudoheader.
+	 * Never let IPV6_CHECKSUM overwrite the portable wire checksum. */
+	return setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &enabled,
+			  sizeof(enabled))
+			       || setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO,
+					     &enabled, sizeof(enabled))
+			       || setsockopt(fd, IPPROTO_IPV6,
+					     IPV6_RECVHOPLIMIT, &enabled,
+					     sizeof(enabled))
+			       || setsockopt(fd, IPPROTO_IPV6,
+					     IPV6_MULTICAST_HOPS, &ttl,
+					     sizeof(ttl))
+			       || setsockopt(fd, IPPROTO_IPV6,
+					     IPV6_UNICAST_HOPS, &ttl,
+					     sizeof(ttl))
+			       || setsockopt(fd, IPPROTO_IPV6,
+					     IPV6_MULTICAST_LOOP, &disabled,
+					     sizeof(disabled))
+			       || setsockopt(fd, IPPROTO_IPV6, IPV6_TCLASS,
+					     &tos, sizeof(tos))
+			       || setsockopt(fd, IPPROTO_IPV6, IPV6_CHECKSUM,
+					     &checksum, sizeof(checksum))
+		       ? -1
+		       : 0;
+}
+
+eigrp_result_t eigrp_sys_socket_open(eigrp_instance_t *eigrp)
+{
+	struct eigrp_linux_packet_socket *entry;
+	int fd;
+	bool ipv6;
+
 	if (!eigrp)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	/* Task 4 publishes only default-VRF interfaces.  Do not report a
 	 * misleading ingress VRF for another Linux routing table. */
-	if (!eigrp_linux_packet_ipv4(eigrp))
+	if (!eigrp_linux_packet_ipv4(eigrp) && !eigrp_linux_packet_ipv6(eigrp))
 		return EIGRP_RESULT_UNSUPPORTED;
+	ipv6 = eigrp_linux_packet_ipv6(eigrp);
 
 	pthread_mutex_lock(&packet_lock);
 	if (eigrp_linux_packet_find(eigrp)) {
 		pthread_mutex_unlock(&packet_lock);
 		return EIGRP_RESULT_SUCCESS;
 	}
-	fd = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK | SOCK_CLOEXEC,
-		    EIGRP_LINUX_PROTO);
+	fd = socket(ipv6 ? AF_INET6 : AF_INET,
+		    SOCK_RAW | SOCK_NONBLOCK | SOCK_CLOEXEC, EIGRP_LINUX_PROTO);
 	if (fd < 0) {
 		pthread_mutex_unlock(&packet_lock);
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 	}
-	/* Control messages are mandatory for ingress interface and destination
-	 * identity. IP_MULTICAST_ALL prevents unrelated joins on the host from
-	 * enabling delivery to our raw socket. */
-	if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &enabled, sizeof(enabled))
-		    < 0
-	    || setsockopt(fd, IPPROTO_IP, IP_MULTICAST_ALL, &disabled,
-			  sizeof(disabled))
-		       < 0
-	    || setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl))
-		       < 0
-	    || setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &disabled,
-			  sizeof(disabled))
-		       < 0
-	    || setsockopt(fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0
-	    || setsockopt(fd, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0) {
+	if ((ipv6 ? eigrp_linux_packet_options6(fd)
+		  : eigrp_linux_packet_options4(fd))
+	    < 0) {
 		int saved = errno;
 		close(fd);
 		errno = saved;
@@ -195,15 +254,57 @@ static bool eigrp_linux_packet_interface(eigrp_intf_t *ei,
 	return true;
 }
 
+static bool eigrp_linux_packet_interface6(eigrp_intf_t *ei,
+					  unsigned int *ifindex,
+					  struct in6_addr *source)
+{
+	eigrp_prefix_t address;
+	struct in6_addr local;
+
+	if (!ei || !ifindex || !source || !eigrp_intf_ifindex(ei)
+	    || eigrp_intf_ifindex(ei) > INT_MAX
+	    || eigrp_intf_address_read(ei, &address) != EIGRP_RESULT_SUCCESS
+	    || address.address.afi != EIGRP_AFI_IPV6)
+		return false;
+	memcpy(&local, address.address.bytes, sizeof(local));
+	if (!IN6_IS_ADDR_LINKLOCAL(&local))
+		return false;
+	*ifindex = (unsigned int)eigrp_intf_ifindex(ei);
+	*source = local;
+	return true;
+}
+
 int eigrp_sys_multicast_interface_update(eigrp_operation_t operation,
 					 eigrp_instance_t *eigrp,
 					 eigrp_intf_t *ei)
 {
 	struct eigrp_linux_packet_socket *entry;
 	struct ip_mreqn request;
+	struct in6_addr source;
+	unsigned int index;
 	int result = -1;
 
-	if (operation != EIGRP_SET
+	if (operation != EIGRP_SET) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (eigrp_linux_packet_ipv6(eigrp)) {
+		if (!eigrp_linux_packet_interface6(ei, &index, &source)) {
+			errno = EINVAL;
+			return -1;
+		}
+		pthread_mutex_lock(&packet_lock);
+		entry = eigrp_linux_packet_find(eigrp);
+		if (entry)
+			result = setsockopt(entry->fd, IPPROTO_IPV6,
+					    IPV6_MULTICAST_IF, &index,
+					    sizeof(index));
+		else
+			errno = EBADF;
+		pthread_mutex_unlock(&packet_lock);
+		return result;
+	}
+	if (!eigrp_linux_packet_ipv4(eigrp)
 	    || !eigrp_linux_packet_interface(ei, &request)) {
 		errno = EINVAL;
 		return -1;
@@ -224,9 +325,43 @@ static int eigrp_linux_packet_membership(eigrp_instance_t *eigrp,
 {
 	struct eigrp_linux_packet_socket *entry;
 	struct ip_mreqn request;
+	struct ipv6_mreq request6 = {0};
+	struct in6_addr source;
+	unsigned int index;
 	int result = -1;
 
-	if (!eigrp_linux_packet_interface(ei, &request)) {
+	if (eigrp_linux_packet_ipv6(eigrp)) {
+		/* Leaving a multicast group needs only its interface index. The
+		 * address may already have disappeared on an interface-down. */
+		if (option == IP_DROP_MEMBERSHIP) {
+			if (!ei || !eigrp_intf_ifindex(ei)
+			    || eigrp_intf_ifindex(ei) > INT_MAX) {
+				errno = EINVAL;
+				return -1;
+			}
+			index = (unsigned int)eigrp_intf_ifindex(ei);
+		} else if (!eigrp_linux_packet_interface6(ei, &index,
+							  &source)) {
+			errno = EINVAL;
+			return -1;
+		}
+		request6.ipv6mr_multiaddr = eigrp_linux_group6;
+		request6.ipv6mr_interface = index;
+		pthread_mutex_lock(&packet_lock);
+		entry = eigrp_linux_packet_find(eigrp);
+		if (entry)
+			result = setsockopt(entry->fd, IPPROTO_IPV6,
+					    option == IP_ADD_MEMBERSHIP
+						    ? IPV6_JOIN_GROUP
+						    : IPV6_LEAVE_GROUP,
+					    &request6, sizeof(request6));
+		else
+			errno = EBADF;
+		pthread_mutex_unlock(&packet_lock);
+		return result;
+	}
+	if (!eigrp_linux_packet_ipv4(eigrp)
+	    || !eigrp_linux_packet_interface(ei, &request)) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -313,6 +448,71 @@ int eigrp_sys_ipv4_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	return result;
 }
 
+int eigrp_sys_ipv6_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
+			       const eigrp_address_t *destination,
+			       const uint8_t *payload, size_t length)
+{
+	struct eigrp_linux_packet_socket *entry;
+	struct sockaddr_in6 peer = {.sin6_family = AF_INET6};
+	struct in6_pktinfo *pktinfo;
+	struct cmsghdr *cmsg;
+	struct iovec iov;
+	struct msghdr msg = {0};
+	struct in6_addr source;
+	unsigned int index;
+	union {
+		struct cmsghdr align;
+		char bytes[CMSG_SPACE(sizeof(struct in6_pktinfo))];
+	} ancillary = {0};
+	int result = -1;
+
+	if (!eigrp_linux_packet_ipv6(eigrp) || !destination || !payload
+	    || destination->afi != EIGRP_AFI_IPV6
+	    || !eigrp_linux_packet_interface6(ei, &index, &source)) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (length < EIGRP_LINUX_HEADER_MIN
+	    || length > EIGRP_LINUX_PACKET_MAX) {
+		errno = EMSGSIZE;
+		return -1;
+	}
+	memcpy(&peer.sin6_addr, destination->bytes, sizeof(peer.sin6_addr));
+	if (IN6_IS_ADDR_UNSPECIFIED(&peer.sin6_addr)
+	    || (IN6_IS_ADDR_MULTICAST(&peer.sin6_addr)
+		&& memcmp(destination->bytes, &eigrp_linux_group6, 16) != 0)
+	    || (!IN6_IS_ADDR_MULTICAST(&peer.sin6_addr)
+		&& !IN6_IS_ADDR_LINKLOCAL(&peer.sin6_addr))) {
+		errno = EINVAL;
+		return -1;
+	}
+	peer.sin6_scope_id = index;
+	iov.iov_base = (void *)payload;
+	iov.iov_len = length;
+	msg.msg_name = &peer;
+	msg.msg_namelen = sizeof(peer);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = ancillary.bytes;
+	msg.msg_controllen = sizeof(ancillary.bytes);
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = IPPROTO_IPV6;
+	cmsg->cmsg_type = IPV6_PKTINFO;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(*pktinfo));
+	pktinfo = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+	pktinfo->ipi6_ifindex = index;
+	pktinfo->ipi6_addr = source;
+
+	pthread_mutex_lock(&packet_lock);
+	entry = eigrp_linux_packet_find(eigrp);
+	if (entry)
+		result = sendmsg(entry->fd, &msg, MSG_DONTWAIT);
+	else
+		errno = EBADF;
+	pthread_mutex_unlock(&packet_lock);
+	return result;
+}
+
 /* Verify only the IPv4 envelope.  Packet opcodes, checksum, authentication,
  * and TLVs are exclusively validated by the portable core. */
 static bool eigrp_linux_packet_ipv4_decode(const uint8_t *data, size_t length,
@@ -361,6 +561,7 @@ static bool eigrp_linux_packet_ipv4_decode(const uint8_t *data, size_t length,
 
 struct eigrp_linux_packet_probe {
 	eigrp_ifindex_t wanted;
+	eigrp_afi_t afi;
 	bool found;
 };
 
@@ -369,10 +570,17 @@ eigrp_linux_packet_probe_intf(const eigrp_intf_runtime_state_t *state,
 			      void *arg)
 {
 	struct eigrp_linux_packet_probe *probe = arg;
+	struct in6_addr address;
 
-	if (state->ifindex == probe->wanted
-	    && state->address.address.afi == EIGRP_AFI_IPV4)
-		probe->found = true;
+	if (state->ifindex != probe->wanted
+	    || state->address.address.afi != probe->afi)
+		return;
+	if (probe->afi == EIGRP_AFI_IPV6) {
+		memcpy(&address, state->address.address.bytes, sizeof(address));
+		if (!IN6_IS_ADDR_LINKLOCAL(&address))
+			return;
+	}
+	probe->found = true;
 }
 
 bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
@@ -445,6 +653,7 @@ bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
 	 * frame with the default VRF.  Never infer VRF from an address alone.
 	 */
 	probe.wanted = (eigrp_ifindex_t)info.ipi_ifindex;
+	probe.afi = EIGRP_AFI_IPV4;
 	probe.found = false;
 	if (eigrp_sys_interface_walk(eigrp, eigrp_linux_packet_probe_intf,
 				     &probe)
@@ -461,10 +670,121 @@ bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
 	return true;
 }
 
+/* Linux IPv6 raw sockets deliver only the protocol-88 payload. The kernel
+ * handles the IPv6 header and extension headers; IPV6_PKTINFO and
+ * IPV6_HOPLIMIT supply the envelope necessary for portable EIGRP. */
+bool eigrp_sys_ipv6_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
+				   size_t capacity, size_t *received_length,
+				   eigrp_ifindex_t *ifindex,
+				   eigrp_address_t *source,
+				   eigrp_address_t *destination,
+				   eigrp_packet_rx_meta_t *meta)
+{
+	struct eigrp_linux_packet_socket *entry;
+	struct sockaddr_in6 peer = {0};
+	struct iovec iov;
+	struct msghdr msg = {0};
+	struct cmsghdr *cmsg;
+	struct in6_pktinfo info = {0};
+	struct eigrp_linux_packet_probe probe;
+	union {
+		struct cmsghdr align;
+		char bytes[CMSG_SPACE(sizeof(struct in6_pktinfo))
+			   + CMSG_SPACE(sizeof(int))];
+	} ancillary = {0};
+	ssize_t length = -1;
+	int hoplimit = -1;
+	bool have_pktinfo = false;
+	bool have_hoplimit = false;
+
+	if (!eigrp_linux_packet_ipv6(eigrp) || !buffer || !received_length
+	    || !ifindex || !source || !destination || !meta || !capacity)
+		return false;
+	if (capacity > EIGRP_LINUX_PACKET_MAX)
+		capacity = EIGRP_LINUX_PACKET_MAX;
+	iov.iov_base = buffer;
+	iov.iov_len = capacity;
+	msg.msg_name = &peer;
+	msg.msg_namelen = sizeof(peer);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = ancillary.bytes;
+	msg.msg_controllen = sizeof(ancillary.bytes);
+
+	pthread_mutex_lock(&packet_lock);
+	entry = eigrp_linux_packet_find(eigrp);
+	if (entry)
+		length = recvmsg(entry->fd, &msg, MSG_DONTWAIT);
+	pthread_mutex_unlock(&packet_lock);
+	if (length < EIGRP_LINUX_HEADER_MIN || (size_t)length > capacity
+	    || (msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC))
+	    || msg.msg_namelen < sizeof(peer) || peer.sin6_family != AF_INET6
+	    || !IN6_IS_ADDR_LINKLOCAL(&peer.sin6_addr))
+		return false;
+
+	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+		if (cmsg->cmsg_level != IPPROTO_IPV6)
+			continue;
+		if (cmsg->cmsg_type == IPV6_PKTINFO) {
+			if (have_pktinfo
+			    || cmsg->cmsg_len < CMSG_LEN(sizeof(info)))
+				return false;
+			memcpy(&info, CMSG_DATA(cmsg), sizeof(info));
+			have_pktinfo = true;
+		} else if (cmsg->cmsg_type == IPV6_HOPLIMIT) {
+			if (have_hoplimit
+			    || cmsg->cmsg_len < CMSG_LEN(sizeof(hoplimit)))
+				return false;
+			memcpy(&hoplimit, CMSG_DATA(cmsg), sizeof(hoplimit));
+			have_hoplimit = true;
+		}
+	}
+	if (!have_pktinfo || !have_hoplimit || info.ipi6_ifindex == 0
+	    || info.ipi6_ifindex > INT_MAX || hoplimit != EIGRP_LINUX_TTL
+	    || (peer.sin6_scope_id && peer.sin6_scope_id != info.ipi6_ifindex))
+		return false;
+	if (IN6_IS_ADDR_MULTICAST(&info.ipi6_addr)) {
+		if (memcmp(&info.ipi6_addr, &eigrp_linux_group6,
+			   sizeof(eigrp_linux_group6))
+		    != 0)
+			return false;
+	} else if (!IN6_IS_ADDR_LINKLOCAL(&info.ipi6_addr)) {
+		return false;
+	}
+
+	probe.wanted = (eigrp_ifindex_t)info.ipi6_ifindex;
+	probe.afi = EIGRP_AFI_IPV6;
+	probe.found = false;
+	if (eigrp_sys_interface_walk(eigrp, eigrp_linux_packet_probe_intf,
+				     &probe)
+		    != EIGRP_RESULT_SUCCESS
+	    || !probe.found)
+		return false;
+
+	memset(source, 0, sizeof(*source));
+	memset(destination, 0, sizeof(*destination));
+	source->afi = EIGRP_AFI_IPV6;
+	destination->afi = EIGRP_AFI_IPV6;
+	memcpy(source->bytes, &peer.sin6_addr, sizeof(peer.sin6_addr));
+	memcpy(destination->bytes, &info.ipi6_addr, sizeof(info.ipi6_addr));
+	*received_length = (size_t)length;
+	*ifindex = probe.wanted;
+	*meta = (eigrp_packet_rx_meta_t){
+		.ingress_vrf_id = EIGRP_VRF_DEFAULT,
+		.network_header_length = 0,
+		.eigrp_length = (uint16_t)length,
+		.destination_multicast = IN6_IS_ADDR_MULTICAST(&info.ipi6_addr),
+	};
+	return true;
+}
+
 int eigrp_sys_packet_send(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 			  const eigrp_address_t *destination,
 			  const uint8_t *payload, size_t length)
 {
+	if (eigrp_linux_packet_ipv6(eigrp))
+		return eigrp_sys_ipv6_packet_send(eigrp, ei, destination,
+						  payload, length);
 	return eigrp_sys_ipv4_packet_send(eigrp, ei, destination, payload,
 					  length);
 }
@@ -475,6 +795,10 @@ bool eigrp_sys_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
 			      eigrp_address_t *destination,
 			      eigrp_packet_rx_meta_t *meta)
 {
+	if (eigrp_linux_packet_ipv6(eigrp))
+		return eigrp_sys_ipv6_packet_receive(eigrp, buffer, capacity,
+						     received_length, ifindex,
+						     source, destination, meta);
 	return eigrp_sys_ipv4_packet_receive(eigrp, buffer, capacity,
 					     received_length, ifindex, source,
 					     destination, meta);

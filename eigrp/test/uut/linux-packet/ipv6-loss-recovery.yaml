@@ -1,0 +1,46 @@
+# Portable EIGRP IPv6 receive/RTP exercise. Linux kernel raw IPv6 framing and
+# ancillary data are separately executed by linux/test/test_ipv6_packet.py.
+schema: eigrp-uut-test/v1
+name: linux-ipv6-packet-portable-rtp-loss-recovery
+# Deliberately IPv6-only: the current UUT schema requires one AF per topology.
+topology: ipv6-packet.yaml
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 'fe80::2', state: up}
+        - neighbor: {uut: r2, neighbor: 'fe80::1', state: up}
+        - route: {uut: r1, prefix: '2001:db8:2::/64', table: rib, next_hop: 'fe80::2'}
+        - route: {uut: r2, prefix: '2001:db8:1::/64', table: rib, next_hop: 'fe80::1'}
+  - checkpoint: initially-converged
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 'fe80::2', state: down}
+        - neighbor: {uut: r2, neighbor: 'fe80::1', state: down}
+        - route: {uut: r1, prefix: '2001:db8:2::/64', table: rib, present: false}
+        - route: {uut: r2, prefix: '2001:db8:1::/64', table: rib, present: false}
+  - fault-add: {name: drop-first-ipv6-update, action: drop, source_uut: r1, destination_uut: r2, opcode: update, count: 1}
+  - packet-mark: ipv6-recovery
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-fault: {name: drop-first-ipv6-update, hits: 1, timeout: 12}
+  - validate-convergence:
+      timeout: 25
+      stable_for: 0.4
+      expect:
+        - neighbor: {uut: r1, neighbor: 'fe80::2', state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 'fe80::1', state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: '2001:db8:2::/64', table: rib, next_hop: 'fe80::2'}
+        - route: {uut: r2, prefix: '2001:db8:1::/64', table: rib, next_hop: 'fe80::1'}
+  - validate-packet: {uut: r1, opcode: update, event: dropped, since: ipv6-recovery, min: 1, timeout: 4}
+  - validate-packet: {uut: r1, opcode: update, event: delivered, since: ipv6-recovery, min: 1, timeout: 4}
+  - checkpoint: ipv6-retransmitted
+  - stop: all

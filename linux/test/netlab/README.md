@@ -58,3 +58,51 @@ Capture precise IOS version, Netlab and kernel versions, topology, packet
 hex or pcap, per-step exit statuses and timestamps. Do not describe this gate
 as PASS until an actual licensed Cisco instance and integrated Linux daemon
 have completed it.
+
+## Task 6: IPv6-only and dual-stack manual qualification
+
+Additional fixtures:
+
+* `topology-ipv6.yml` — IPv6-only EIGRP on the data link; Linux management
+  IPv4 may still be present. IOSv must have a valid 32-bit EIGRP router ID.
+* `topology-dual-stack.yml` — independent IPv4 and IPv6 EIGRP adjacencies on
+  the same data link.
+
+Netlab's EIGRP module supports the Cisco IOSv IPv6 AF; `ipv4: false` on a
+link interface disables data-link IPv4 without disabling IPv6. Confirm that
+IOSv has `ipv6 router eigrp 4453` and `ipv6 eigrp 4453` enabled on the data
+interface after provisioning, and correct the lab configuration if the
+licensed IOS image uses named-mode syntax.
+
+```
+netlab create -t topology-ipv6.yml
+netlab up -t topology-ipv6.yml
+netlab connect ios
+```
+
+Once the host daemon exists, run both `openeigrpd` AF runtimes for the same
+Linux interface (dual-stack fixture only) and capture the full packets:
+
+```
+sudo tcpdump -ni <linux-data-interface> -s 0 -w /tmp/ipv6-proto88.pcap \
+  'ip6 protochain 88'
+sudo tcpdump -ni <linux-data-interface> -s 0 -w /tmp/dual-proto88.pcap \
+  'ip proto 88 or ip6 protochain 88'
+```
+
+The IPv6 capture must show protocol 88, source `fe80::/10`, destination
+`ff02::a` for multicast, scope-correct link-local unicast replies/ACKs, hop
+limit 1, traffic class 0xc0, and the unchanged EIGRP checksum (validated over
+only the EIGRP payload, without an IPv6 pseudoheader). Verify both address
+families independently on IOS using `show ipv6 eigrp neighbors`,
+`show ip eigrp neighbors`, `show ipv6 route eigrp`, and `show ip route eigrp`.
+Capture actual IOSv version, routing tables, stable neighbor states, route
+withdrawal, rejoin, retransmission after one dropped packet, recovery after
+malformed-packet injection, and `ip -6 maddr show dev <interface>` before and
+after interface removal and daemon shutdown. In dual-stack mode, withdrawing
+IPv6 on one link must not disrupt the IPv4 adjacency, and vice versa.
+
+**Not an automated pass:** Neither fixture can run a completed adjacency on
+this branch because `openeigrpd` still lacks a native event loop, startup
+configuration, and RIB integration. The Netlab YAML files describe the first
+manual verification gate once that executable exists.

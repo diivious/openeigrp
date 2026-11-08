@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Native Linux IPv4 EIGRP packet transport (IP protocol 88).
+ * Native Linux IPv4/IPv6 EIGRP packet transport (IP protocol 88).
  * Copyright (C) 2026 Donnie V. Savage
  */
 #ifndef EIGRP_LINUX_PACKET_H_

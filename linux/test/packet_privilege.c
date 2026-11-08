@@ -44,6 +44,7 @@ eigrp_result_t eigrp_sys_interface_walk(eigrp_instance_t *e,
 int main(void)
 {
 	struct eigrp_instance e = {.afi = EIGRP_AFI_IPV4, .vrf = 0};
+	struct eigrp_instance v6 = {.afi = EIGRP_AFI_IPV6, .vrf = 0};
 	eigrp_result_t result = eigrp_sys_socket_open(&e);
 	if (result == EIGRP_RESULT_SUCCESS) {
 		assert(eigrp_linux_packet_fd(&e) >= 0);
@@ -56,6 +57,26 @@ int main(void)
 		       || errno == EAFNOSUPPORT);
 		assert(eigrp_linux_packet_fd(&e) == -1);
 		puts("real raw socket CAP_NET_RAW denial and cleanup: PASS");
+	}
+	result = eigrp_sys_socket_open(&v6);
+	if (result == EIGRP_RESULT_SUCCESS) {
+		int option = 0;
+		socklen_t size = sizeof(option);
+
+		assert(eigrp_linux_packet_fd(&v6) >= 0);
+		assert(getsockopt(eigrp_linux_packet_fd(&v6), IPPROTO_IPV6,
+				  IPV6_CHECKSUM, &option, &size)
+		       == 0);
+		assert(size == sizeof(option) && option == -1);
+		eigrp_sys_socket_close(&v6);
+		assert(eigrp_linux_packet_fd(&v6) == -1);
+		puts("real IPv6 raw socket and disabled kernel checksum: PASS");
+	} else {
+		assert(result == EIGRP_RESULT_INTERNAL_FAILURE);
+		assert(errno == EPERM || errno == EACCES
+		       || errno == EAFNOSUPPORT || errno == EPROTONOSUPPORT);
+		assert(eigrp_linux_packet_fd(&v6) == -1);
+		puts("real IPv6 raw socket CAP_NET_RAW denial and cleanup: PASS");
 	}
 	return 0;
 }
