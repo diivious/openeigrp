@@ -1,0 +1,21 @@
+# Manual interoperability fixture. The Linux node runs a native binary,
+# not a distributed OpenEIGRP Docker image.
+# Requires a licensed Cisco IOSv image and a future openeigrpd executable.
+name: eigrp88
+provider: libvirt
+addressing:
+  p2p:
+    ipv4: 10.88.0.0/24
+nodes:
+  ios:
+    device: iosv
+    module: [eigrp]
+    eigrp.as: 4453
+  uut:
+    device: linux
+    module: []
+links:
+  - ios:
+      ipv4: 10.88.0.1/24
+    uut:
+      ipv4: 10.88.0.2/24
