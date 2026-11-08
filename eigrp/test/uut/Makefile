@@ -4,17 +4,43 @@ CFLAGS ?= -O2 -g
 CPPFLAGS += -DEIGRP_UUT_TEST -DEIGRP_DISABLE_SNMP  -I../../../eigrp/code -I../../../libunix/code
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -pthread
 
-CORE := $(filter-out ../../../eigrp/code/eigrp_log.c ../../../eigrp/code/eigrp_dump.c,$(wildcard ../../../eigrp/code/*.c))
-UNIX := ../../../libunix/code/eigrp_unix_format.c ../../../libunix/code/eigrp_unix_sys.c ../../../libunix/code/eigrp_uut_rib.c \
-        ../../../libunix/code/eigrp_uut_interface.c ../../../libunix/code/eigrp_uut_segment.c \
-        ../../../libunix/code/eigrp_uut_wire.c ../../../libunix/code/eigrp_uut_policy.c \
-        ../../../libunix/code/eigrp_unix_keychain.c ../../../eigrp/code/eigrp_log.c
+# Link the same portable core archive used by the standalone build. The UUT
+# host callbacks and shared Unix services are compiled independently, with
+# EIGRP_UUT_TEST confined to the UUT archive and this frontend.
+CORE_LIB := ../../../eigrp/code/libeigrp-core.a
+UNIX_LIB := ../../../libunix/code/libeigrp_unix.a
+UUT_LIB := ../../../libunix/code/libeigrp_uut.a
+
+# Cyclic core/host callback references require a linker group on ELF. Darwin
+# does not support --start-group; repeating the archives supports its linker.
+ifeq ($(shell uname -s),Darwin)
+LIBS := $(CORE_LIB) $(UUT_LIB) $(UNIX_LIB) $(CORE_LIB) $(UUT_LIB) $(UNIX_LIB)
+else
+LIBS := -Wl,--start-group $(CORE_LIB) $(UUT_LIB) $(UNIX_LIB) -Wl,--end-group
+endif
 
 .PHONY: all clean
 all: eigrp-uut-node
 
-eigrp-uut-node: node.c $(CORE) $(UNIX)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ node.c $(CORE) $(UNIX)
+# Track the source members here as well as in the archive Makefiles: the
+# scenario runner invokes this Makefile directly, without a prior root build.
+$(CORE_LIB): $(wildcard ../../../eigrp/code/*.c)
+	$(MAKE) -C ../../../eigrp/code
+
+$(UNIX_LIB): ../../../libunix/code/eigrp_unix_sys.c \
+             ../../../libunix/code/eigrp_unix_format.c \
+             ../../../libunix/code/eigrp_unix_keychain.c
+	$(MAKE) -C ../../../libunix/code libeigrp_unix.a
+
+$(UUT_LIB): ../../../libunix/code/eigrp_uut_interface.c \
+            ../../../libunix/code/eigrp_uut_rib.c \
+            ../../../libunix/code/eigrp_uut_segment.c \
+            ../../../libunix/code/eigrp_uut_wire.c \
+            ../../../libunix/code/eigrp_uut_policy.c
+	$(MAKE) -C ../../../libunix/code libeigrp_uut.a
+
+eigrp-uut-node: node.c $(CORE_LIB) $(UNIX_LIB) $(UUT_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ node.c $(LIBS)
 
 clean:
 	rm -f eigrp-uut-node

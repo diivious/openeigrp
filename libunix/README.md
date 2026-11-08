@@ -7,20 +7,22 @@ protocol implementation**. Protocol decisions remain in `../eigrp/code/`.
 
 ## Runtime and host services
 
-The Unix adapter provides process initialization and teardown, monotonic time,
+The shared Unix library provides process initialization and teardown, monotonic time,
 immediate events and timers, cancellation, file-descriptor readiness, basic
 work queues, default-VRF resolution, and standalone logging. Its scheduler
 uses POSIX threads, `poll(2)`, and a private wake pipe; Unix descriptors stay
 inside the adapter.
 
-It also maintains a host-side interface inventory with IPv4/IPv6 addresses
-and lifecycle notifications. An **unprivileged in-memory RIB** holds
+The UUT library maintains a synthetic interface inventory with IPv4/IPv6 addresses
+and lifecycle notifications. A UUT-only **unprivileged in-memory RIB** holds
 connected/source routes and learned EIGRP routes; it does not change the
 macOS or Linux kernel routing table. Interface, route, and management walkers
 make the resulting state observable to tests and host front ends.
 
 | Area | Implementation / entry point |
 |:--|:--|
+| Shared Unix library (`libeigrp_unix.a`) | `eigrp_unix_sys.c`, `eigrp_unix_format.c`, `eigrp_unix_keychain.c` |
+| UUT-only library (`libeigrp_uut.a`) | `eigrp_uut_interface.c`, `eigrp_uut_rib.c`, `eigrp_uut_segment.c`, `eigrp_uut_wire.c`, `eigrp_uut_policy.c` |
 | Scheduling and host services | `code/eigrp_unix_sys.c`, `code/eigrp_unix.h` |
 | Interfaces and lifecycle | `code/eigrp_uut_interface.c`, `code/eigrp_uut_interface.h` |
 | In-memory routing table | `code/eigrp_uut_rib.c`, `code/eigrp_uut_rib.h` |
@@ -48,11 +50,24 @@ From the repository root:
 
 ```sh
 make build       # Portable engine and Unix host support
-make uut         # Portable pytest and YAML UUT tests
-make uut         # UUT pytest and scenario suites
+make uut         # Archive-boundary tests, portable pytest and YAML UUT scenarios
 make all         # Required full pre-merge gate
 make help        # Available commands and selectors
 ```
+
+`make build` creates two **separate** static archives under `libunix/code/`.
+The first holds only functionality shared with native Linux; it has no virtual
+packet transport, synthetic interfaces, simulated RIB, or UUT policy symbols.
+The second holds all those UUT-only host callbacks. The portable fallback
+logger remains in `eigrp/code/libeigrp-core.a`; it is not duplicated here.
+The standalone config parser (`eigrp_unix_config.o`) remains independently
+buildable for future native-daemon integration, but is not in either archive
+because the current UUT frontend uses its own scenario-driven configuration.
+
+The UUT executable links the portable core archive and both host archives,
+while the `eigrp-wire` broker remains an independent executable with the same
+wire format. `make uut` executes symbol/archive boundary tests and actual
+runtime/RIB harnesses before running YAML scenarios.
 
 To run the broker directly, use:
 

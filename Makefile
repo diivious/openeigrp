@@ -56,6 +56,7 @@ check: ## Run style validation and its executable unit tests (SOURCE=changed|all
 	  tools.test.test_frr_release_selection tools.test.test_docker_source_selection
 
 uut: build ## Run pytest + YAML scenarios; SUITE or SCENARIO selects a subset.
+	$(PYTHON) -m pytest -q libunix/test/test_archive_boundaries.py
 	@$(if $(and $(SUITE),$(SCENARIO)),echo 'error: select either SUITE or SCENARIO' >&2; exit 2;,true)
 ifeq ($(strip $(SCENARIO)),)
 ifeq ($(strip $(SUITE)),)

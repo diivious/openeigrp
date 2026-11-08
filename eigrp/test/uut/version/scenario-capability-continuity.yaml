@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+# Portable regression for TASK 1: tech-support CAPABILITY records remain
+# available during convergence, withdrawal, and recovery.  The FRR adapter's
+# environment-specific fields are covered by frr/test/version/.
+schema: eigrp-uut-test/v1
+topology: ../examples/two-router.yaml
+name: Version reporting preserves portable capabilities and convergence
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: down}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: down}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - stop: all

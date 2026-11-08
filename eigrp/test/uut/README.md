@@ -2,8 +2,9 @@
 
 This directory owns orchestration tests for portable `eigrpd` behavior.  Unix is
 only the execution host: each router is an independent process linked with the
-portable EIGRP implementation and the Unix implementation of the public host
-contract.
+portable EIGRP core (`libeigrp-core.a`), common Unix host services
+(`libeigrp_unix.a`), and UUT-only virtual host services (`libeigrp_uut.a`).
+The native Linux daemon must never link the UUT archive.
 
 Two versioned declarative schemas are accepted:
 

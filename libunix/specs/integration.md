@@ -41,6 +41,32 @@ The Unix implementation therefore retains existing `eigrp_*` C symbols,
 syntax where applicable. The project rebrand does not rename protocol-visible
 or source-level EIGRP identifiers.
 
+## 2.1. Static-library separation
+
+`libunix/code/Makefile` builds two independently consumable archives:
+
+- `libeigrp_unix.a` contains only the shared Unix scheduler, host formatting,
+  and explicitly registered keychain provider (`eigrp_unix_sys.o`,
+  `eigrp_unix_format.o`, `eigrp_unix_keychain.o`). None is compiled with
+  `EIGRP_UUT_TEST`.
+- `libeigrp_uut.a` owns synthetic interface inventory, in-memory RIB,
+  virtual segment and packet transport, and deterministic UUT policy callbacks
+  (`eigrp_uut_interface.o`, `eigrp_uut_rib.o`, `eigrp_uut_segment.o`,
+  `eigrp_uut_wire.o`, `eigrp_uut_policy.o`). This archive is compiled with
+  `EIGRP_UUT_TEST` and must never be linked into the Linux daemon.
+
+`eigrp-wire` remains a separately built virtual-wire broker. The native-facing
+configuration parser is currently built as a standalone `eigrp_unix_config.o`
+because the scenario-driven UUT does not share that parser. The fallback
+logger is provided by the portable core archive, not copied into either host
+archive. The UUT executable links `libeigrp-core.a`, `libeigrp_uut.a`, and
+`libeigrp_unix.a`. The Linux daemon must provide real interface, packet, RIB,
+and policy callbacks rather than resolving these from the UUT archive.
+
+The archive regression checks actual member lists, exported symbols, and
+executable runtime/RIB behavior. The YAML UUT gates verify virtual packet
+forwarding and route withdrawal/recovery through the resulting static link.
+
 ## 3. Unix adapter responsibilities
 
 The Unix adapter owns host mechanics only:
