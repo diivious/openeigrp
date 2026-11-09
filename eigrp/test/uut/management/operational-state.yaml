@@ -45,5 +45,9 @@ steps:
         - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
         - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, active: false, successors: 1}
         - route: {uut: r2, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: path, next_hop: 10.0.0.2, successor: true}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: path, next_hop: 10.0.0.1, successor: true}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
   - checkpoint: operational-state-recovered
   - stop: all

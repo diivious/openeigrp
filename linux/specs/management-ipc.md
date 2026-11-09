@@ -4,7 +4,8 @@ The native Linux integration exports a versioned, binary-framed Unix-domain
 `SOCK_STREAM` service (`eigrp_linux_mgnt_start` / `eigrp_linux_mgnt_stop`).
 The daemon supplies an absolute pathname, peer-visible socket group, and a
 **synchronous protocol-context executor**. The library does not create or run a
-daemon and no command-line client is included. No virtual-wire UUT transport
+daemon. The standalone `linux/code/oectl.c` client consumes this protocol
+without linking the portable EIGRP core. No virtual-wire UUT transport
 or `eigrp/code/` source changes are required.
 
 ## Frame format (version 1)
@@ -100,3 +101,26 @@ privileges, public-state rendering, pagination, concurrent clients,
 backpressure, disconnects and cleanup. The YAML UUT scenario under
 `eigrp/test/uut/management/` separately verifies the underlying portable
 neighbor/topology/route state lifecycle; it is not an IPC integration test.
+
+## Command-line client
+
+`oectl` provides a one-shot client for all ten IPC operations. It validates
+response magic/version/operation, flags, lengths, and JSON-line framing;
+fetches pages until complete; and fails rather than silently truncating when
+the server's offset limit is reached. It cannot make a changing topology into
+a snapshot. A temporary stalled or disconnected socket produces an error.
+Only `clear events` can modify daemon state, and the daemon is responsible
+for authorization. `oectl` never elevates privileges or changes socket modes.
+
+`show tech-support` collects capabilities, protocols and the read-only scoped
+views for running default-VRF instances. JSON output includes a local
+`integration` record and `scope` separators for the selected instances. A nondefault VRF cannot be identified
+by numeric ID through the v1 protocol listing, so `--asn`, `--afi` and
+`--vrf-id` are mandatory to collect it. Integration version output uses the
+host-neutral `eigrp_integration_version_t` fields and distinguishes local
+integration build information from the daemon's portable core release.
+
+CLI regression (`python3 linux/test/test_oectl.py`) executes the actual client
+against the real Task 11 server with public management-state fixtures and
+crafted broken-peer replies. Portable UUT management scenarios continue to
+exercise routing state independently; they do not execute the Linux CLI.
