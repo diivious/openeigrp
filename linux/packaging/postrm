@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+set -e
+case "$1" in
+    remove|purge|disappear)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
+        # /run is owned by systemd RuntimeDirectory and is transient.
+        # Do not delete system UIDs/groups: another process may still own UID.
+        # dpkg handles removal/preservation of the managed conffile.
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade)
+        ;;
+esac
+exit 0

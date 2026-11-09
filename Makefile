@@ -14,12 +14,13 @@ UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topolo
   basic-core md5-mixed-lan md5-security dual-diamond kite-topology \
   active-topology summary-topology
 
-.PHONY: all build linux check uut scale docker clean help portable-build frr-smoke
+.PHONY: all build linux packages check uut scale docker clean help portable-build frr-smoke
 
 help: ## Show developer commands and selectors.
 	@printf '%s\n' 'Usage: make [target] [options]' '' 'Targets:' \
 	  '  build          Build portable EIGRP and Unix support (default: make)' \
 	  '  linux          Build portable/Unix support and native Linux libraries' \
+	  '  packages       Build Debian amd64 and arm64 packages in Docker (VERSION=X.Y.Z)' \
 	  '  all            Build (including Linux on Linux), full check, UUT and quick scale' \
 	  '  check          Style validation and style-checker unit tests' \
 	  '  uut            Portable unit tests and YAML scenarios' \
@@ -57,6 +58,10 @@ build: portable-build ## Build portable EIGRP and Unix support.
 linux: build ## Build the native Linux libraries (Linux hosts only).
 	@test "$(HOST_OS)" = Linux || { echo "error: make linux requires a Linux host" >&2; exit 1; }
 	$(MAKE) -C linux/code
+
+packages: ## Build both Linux Debian architectures in isolated containers.
+	@test -n "$(VERSION)" || { echo "error: make packages requires VERSION=X.Y.Z" >&2; exit 2; }
+	linux/packaging/build-packages.sh --version "$(VERSION)"
 
 check: ## Run style validation and its executable unit tests (SOURCE=changed|all).
 	@case '$(SOURCE)' in ''|changed|all) ;; *) echo 'error: check SOURCE must be changed or all' >&2; exit 2 ;; esac

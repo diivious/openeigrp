@@ -132,3 +132,20 @@ based solely on existing IPC views and never changes daemon state.
 include a production native daemon. IPC tests use the Task 11 fixture;
 real daemon startup and Netlab interoperability remain pending the daemon
 integration. See `man/oectl.8` for command and exit-status details.
+
+## Native Debian/Ubuntu packaging
+
+The local package builder, systemd unit, security policy, lifecycle tests
+and installation instructions are in [`packaging/README.md`](packaging/README.md).
+The builder refuses to create a production package until a real native
+`openeigrpd` executable is supplied. `linux-support` currently has no daemon
+entry point; test fixture packages are for package-manager validation only.
+
+## Debian release packages
+
+Docker Desktop on ARM64 macOS can build both Linux package architectures
+using `make packages VERSION=0.1.0`; GitHub Actions builds both on native
+AMD64/ARM64 runners and publishes release assets only on version tags.
+See [`packaging/README.md`](packaging/README.md) for prerequisites, tests,
+installation and release security boundaries. No daemon package can be
+created until `linux/code/openeigrpd` is implemented and built.

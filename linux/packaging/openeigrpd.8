@@ -1,0 +1,37 @@
+.TH OPENEIGRPD 8 "November 2026" "OpenEIGRP" "System Administration"
+.SH NAME
+openeigrpd \- native Linux EIGRP daemon
+.SH SYNOPSIS
+.B openeigrpd
+.BI -f " path"
+.SH DESCRIPTION
+The native OpenEIGRP daemon is packaged together with
+.BR oectl (8)
+and the configuration validator
+.BR openeigrpd-config (8).
+The systemd unit is installed disabled and is never started by a fresh
+package installation. An administrator must configure routing and explicitly
+run
+.B systemctl enable --now openeigrpd
+before it can exchange EIGRP packets or modify kernel routes.
+.PP
+The service passes a per-service protected copy of
+.B /etc/openeigrpd.conf
+using the
+.B -f
+option. The native daemon must support this option as an integration
+contract before packaging can be used in production.
+.SH FILES
+.TP
+.B /etc/openeigrpd.conf
+Root-owned, mode 0600 dpkg conffile.
+.TP
+.B /run/openeigrpd/control.sock
+Read-only management control socket. Grant membership in the
+.B openeigrpctl
+group to authorized observers; the daemon must create this socket
+with group access (0660).
+.SH SEE ALSO
+.BR oectl (8),
+.BR openeigrpd.conf (5),
+.BR systemctl (1)

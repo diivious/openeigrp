@@ -1,0 +1,172 @@
+# Copyright (C) 2026 Donnie V. Savage
+# Native-architecture Debian packages, built with the same container tooling
+# used on development hosts. No packages are published on PR/manual runs.
+name: OpenEIGRP Debian Packages
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/debian.yml'
+      - 'Makefile'
+      - 'eigrp/code/**'
+      - 'libunix/code/**'
+      - 'linux/code/**'
+      - 'linux/man/**'
+      - 'linux/packaging/**'
+      - 'linux/test/test_packaging.py'
+      - 'linux/test/test_package_builds.py'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional Debian test version (manual runs never publish)'
+        type: string
+        required: false
+  push:
+    tags: ['rel-*']
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: Debian 12 / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select package version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == push && "$GIT_REF" == refs/tags/* ]]; then
+            tag="${GIT_REF#refs/tags/}"
+            [[ "$tag" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo 'invalid Debian release tag' >&2; exit 1;
+            }
+            version="${tag#rel-}"
+          elif [[ -n "$REQUESTED_VERSION" ]]; then
+            version="$REQUESTED_VERSION"
+          else
+            version="0.0.0~ci.${GITHUB_RUN_NUMBER}+${GITHUB_SHA:0:12}"
+          fi
+          [[ "$version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]] || {
+            echo 'invalid Debian test version' >&2; exit 1;
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Verify package builder invocation
+        run: python3 linux/test/test_package_builds.py
+      - name: Build and test native architecture in Debian 12
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          linux/packaging/build-packages.sh --version "$VERSION" --arch "$ARCH"
+          package="dist/openeigrpd_${VERSION}_${ARCH}.deb"
+          test "$(dpkg-deb -f "$package" Architecture)" = "$ARCH"
+          dpkg-deb --info "$package"
+          dpkg-deb --contents "$package"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  regression:
+    name: Release portable UUT gate
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/rel-')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install UUT dependencies
+        run: python3 -m pip install pytest PyYAML
+      - name: Run portable and YAML UUT regressions
+        run: make uut
+      - name: Preserve failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-release-uut-failures
+          path: eigrp/test/uut/logs/
+          if-no-files-found: warn
+
+  release:
+    name: Publish both Debian architectures
+    needs: [packages, regression]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/rel-')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: deb-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          path: dist
+          merge-multiple: true
+      - name: Verify both packages and calculate checksums
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          version="${RELEASE_TAG#rel-}"
+          for arch in amd64 arm64; do
+            package="dist/openeigrpd_${version}_${arch}.deb"
+            test -s "$package"
+            test "$(dpkg-deb -f "$package" Architecture)" = "$arch"
+            test "$(dpkg-deb -f "$package" Version)" = "$version"
+            mkdir -p "inspect/$arch"
+            dpkg-deb -x "$package" "inspect/$arch"
+            for executable in usr/sbin/openeigrpd usr/bin/oectl usr/bin/openeigrpd-config; do
+              machine="$(readelf -h "inspect/$arch/$executable" | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')"
+              case "$arch:$machine" in
+                'amd64:Advanced Micro Devices X86-64'|'arm64:AArch64') ;;
+                *) echo "wrong ELF architecture: $arch/$executable ($machine)" >&2; exit 1 ;;
+              esac
+            done
+          done
+          (cd dist && sha256sum "openeigrpd_${version}_amd64.deb" \
+            "openeigrpd_${version}_arm64.deb" > SHA256SUMS)
+          cat dist/SHA256SUMS
+      - name: Attach packages to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#rel-}"
+          assets=(
+            "dist/openeigrpd_${version}_amd64.deb"
+            "dist/openeigrpd_${version}_arm64.deb"
+            dist/SHA256SUMS
+          )
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Do not overwrite previously published assets.
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --verify-tag --generate-notes --repo "$GITHUB_REPOSITORY"
+          fi

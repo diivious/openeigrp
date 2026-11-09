@@ -387,7 +387,7 @@ static eigrp_result_t uut_source_route_change(const char *prefix_name,
 		   : eigrp_unix_rib_source_route_remove(&source);
 }
 
-static eigrp_result_t uut_redist_change(bool add)
+static eigrp_result_t uut_redist_change(bool add, bool seeded)
 {
 	eigrp_instance_context_t context = {0};
 	eigrp_redist_source_t source = {
@@ -405,7 +405,8 @@ static eigrp_result_t uut_redist_change(bool add)
 
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
-	return add ? eigrp_redist_add(&context, &source, &seed, NULL)
+	return add ? eigrp_redist_add(&context, &source, seeded ? &seed : NULL,
+				      NULL)
 		   : eigrp_redist_remove(&context, &source);
 }
 
@@ -855,7 +856,7 @@ static void load(const char *path)
 				if (strcmp(a, "static"))
 					die("unsupported UUT redistribution source",
 					    EIGRP_RESULT_INVALID_ARGUMENT);
-				r = uut_redist_change(true);
+				r = uut_redist_change(true, true);
 				if (r != EIGRP_RESULT_SUCCESS)
 					die("redistribute static", r);
 			} else if (!strcmp(op, "metric-bandwidth")) {
@@ -1161,13 +1162,30 @@ int main(int argc, char **argv)
 			fflush(stdout);
 		} else if (!strcmp(verb, "REDIST-ON")
 			   || !strcmp(verb, "REDIST-OFF")) {
+			char option[32] = {0};
+			char extra;
+			bool enable = !strcmp(verb, "REDIST-ON");
+			bool invalid;
+			eigrp_result_t result;
+			int n;
+
+			n = sscanf(line, "%*s %*s %31s %c", option, &extra);
+
 			if (strcmp(ifname, "static")) {
 				puts("RESULT|unsupported-source");
 				fflush(stdout);
 				continue;
 			}
-			printf("RESULT|%d\n", (int)uut_redist_change(!strcmp(
-						      verb, "REDIST-ON")));
+			invalid = n > 1;
+			if (n == 1)
+				invalid = !enable || strcmp(option, "unseeded");
+			if (invalid) {
+				puts("RESULT|invalid-option");
+				fflush(stdout);
+				continue;
+			}
+			result = uut_redist_change(enable, n != 1);
+			printf("RESULT|%d\n", (int)result);
 			fflush(stdout);
 		} else if (!strcmp(verb, "STOP"))
 			break;

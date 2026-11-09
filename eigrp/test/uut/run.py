@@ -184,7 +184,7 @@ STEP_FIELDS = {
     "process-limit-clear": {"uut"}, "process-limit-expire": {"uut"}, "process-limit-reset-expire": {"uut"}, "process-limit-stale": {"uut"}, "process-limit-age": {"uut"}, "validate-process-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "penalty_min", "penalty_max", "penalty_after_age", "timeout"},
     "redist-limit-clear": {"uut"}, "redist-limit-expire": {"uut"}, "validate-redist-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "timeout"},
     "source-route-add": {"uut", "prefix", "metric"}, "source-route-remove": {"uut", "prefix"},
-    "redistribute-add": {"uut", "source"}, "redistribute-remove": {"uut", "source"},
+    "redistribute-add": {"uut", "source", "seed"}, "redistribute-remove": {"uut", "source"},
     "redistribute-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "default-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "wait": {"seconds"}, "fault-add": {"name", "action", "source_uut", "destination_uut",
@@ -361,6 +361,8 @@ def validate_scenario(s):
                     "validate-event":("uut","contains"),
                     "validate-log":("uut","contains")}.get(op,())
             if any(k not in arg for k in needed): raise SpecError(f"{where}: missing required fields {needed}")
+            if op == "redistribute-add" and "seed" in arg and type(arg["seed"]) is not bool:
+                raise SpecError(f"{where}: seed must be boolean")
             if op in ("redistribute-metric", "default-metric"):
                 if "reset" in arg and type(arg["reset"]) is not bool:
                     raise SpecError(f"{where}: reset must be boolean")
@@ -585,8 +587,11 @@ class Node:
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: source route change failed: {result}")
 
-    def redistribute_change(self, source, add):
-        result = self.cmd(f"REDIST-{'ON' if add else 'OFF'} {source}", timeout=10)
+    def redistribute_change(self, source, add, seed=True):
+        command = f"REDIST-{'ON' if add else 'OFF'} {source}"
+        if add and not seed:
+            command += " unseeded"
+        result = self.cmd(command, timeout=10)
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: redistribution change failed: {result}")
 
@@ -927,7 +932,7 @@ class Runner:
                 prefix, op=="source-route-add", int(arg.get("metric", 1)))
         elif op in ("redistribute-add", "redistribute-remove"):
             self.nodes[arg["uut"]].redistribute_change(
-                arg["source"], op=="redistribute-add")
+                arg["source"], op=="redistribute-add", arg.get("seed", True))
         elif op in ("redistribute-metric", "default-metric"):
             self.nodes[arg["uut"]].metric_config_change(
                 op, arg)
