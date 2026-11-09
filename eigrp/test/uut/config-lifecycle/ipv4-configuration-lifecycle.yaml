@@ -1,7 +1,7 @@
 # Portable semantic configuration lifecycle, not a daemon file/SIGHUP test.
 # Copyright (C) 2026 Donnie V. Savage
 schema: eigrp-uut-test/v1
-name: linux-configuration-semantic-set-withdraw-recover
+name: ipv4-redistribution-metric-configuration-lifecycle
 topology: ../examples/two-router.yaml
 steps:
   - start: all

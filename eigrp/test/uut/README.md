@@ -6,6 +6,19 @@ portable EIGRP core (`libeigrp-core.a`), common Unix host services
 (`libeigrp_unix.a`), and UUT-only virtual host services (`libeigrp_uut.a`).
 The native Linux daemon must never link the UUT archive.
 
+Scenario directory and `name` values describe **portable protocol behavior**, not
+the host integration that introduced a test.  Interface, packet/RTP, RIB,
+redistribution, filtering and authentication scenarios exercise the portable
+core with synthetic host services.  The `lib-boundary/` scenario additionally
+verifies the portable core/Unix/UUT archive linkage through real neighbor and
+route lifecycle operations.  Native Linux socket, Netlink, configuration and
+policy-provider tests belong in `linux/test/`; a virtual-wire YAML test does
+not establish native Linux interoperability.
+
+Illustrative named-router examples use `eigrprulez` or `eigrprocks`, with
+IPv4 AS 4453 and IPv6 AS 6473. Tests deliberately exercising AS mismatches
+or multiple-AS behavior keep their specific test values.
+
 Two versioned declarative schemas are accepted:
 
 * `eigrp-uut-topology/v1` describes routers, interfaces, IPv4/IPv6 addresses,

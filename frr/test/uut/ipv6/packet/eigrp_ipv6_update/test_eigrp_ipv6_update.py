@@ -35,7 +35,7 @@ def test_ipv6_update_reaches_common_host_rib_path():
     topology = read("eigrp/code/eigrp_topology.c")
     rib = topology[topology.index("void eigrp_update_routing_table"):
                    topology.index("void eigrp_topology_neighbor_down")]
-    assert "Task 11 stops at IPv6 DUAL/topology selection" not in rib
+    assert "Stops at IPv6 DUAL/topology selection" not in rib
     assert "eigrp_rib_route_add(eigrp, &rib_route)" in rib
     assert "eigrp_rib_route_del(eigrp, &prefix->destination)" in rib
 

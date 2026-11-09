@@ -1,6 +1,6 @@
 # Portable IPv6 host-source contract; kernel notifications are tested in C.
 schema: eigrp-uut-test/v1
-name: linux-redistribution-ipv6-subscription-withdraw-recover
+name: ipv6-source-redistribution-withdrawal-recovery
 topology: ../examples/ipv6-basic-core.yaml
 steps:
   - start: all

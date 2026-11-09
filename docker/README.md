@@ -57,7 +57,7 @@ In `vtysh`, for example:
 
 ```text
 configure terminal
-router eigrp savage
+router eigrp eigrprocks
  address-family ipv4 unicast autonomous-system 4453
   eigrp router-id 10.44.53.1
   network 10.44.0.0 0.0.255.255
@@ -408,7 +408,7 @@ docker exec eigrp-r2 ip -o -4 addr show
 ```sh
 docker exec eigrp-r1 vtysh -d eigrpd \
   -c 'configure terminal' \
-  -c 'router eigrp savage' \
+  -c 'router eigrp eigrprocks' \
   -c 'address-family ipv4 unicast autonomous-system 4453' \
   -c 'eigrp router-id 10.56.41.11' \
   -c 'network 10.56.0.0 0.0.255.255' \
@@ -417,7 +417,7 @@ docker exec eigrp-r1 vtysh -d eigrpd \
 
 docker exec eigrp-r2 vtysh -d eigrpd \
   -c 'configure terminal' \
-  -c 'router eigrp savage' \
+  -c 'router eigrp eigrprocks' \
   -c 'address-family ipv4 unicast autonomous-system 4453' \
   -c 'eigrp router-id 10.56.41.12' \
   -c 'network 10.56.0.0 0.0.255.255' \

@@ -2113,7 +2113,7 @@ eigrp_result_t eigrp_nbr_max_prefix_update(eigrp_operation_t operation,
 		entry->maximum_prefix = *limit;
 		entry->maximum_prefix_configured = true;
 	}
-	/* The Task 2 neighbor timer engine supports these policy options. */
+	/* The neighbor timer engine supports these policy options. */
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -2179,7 +2179,7 @@ eigrp_nbr_max_prefix_all_update(eigrp_operation_t operation,
 		state->maximum_prefix_all = *limit;
 		state->maximum_prefix_all_configured = true;
 	}
-	/* The Task 2 neighbor timer engine supports these policy options. */
+	/* The neighbor timer engine supports these policy options. */
 	return EIGRP_RESULT_SUCCESS;
 }
 

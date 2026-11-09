@@ -66,7 +66,7 @@ EIGRP packet sockets, or fabricate UUT interfaces.
 `linux/test/test_interface.py` runs production parser fixtures, a live kernel
 snapshot, socket-error resynchronization, archive symbol checks, and a real
 network namespace test when user namespaces and iproute2 are available.
-`eigrp/test/uut/linux-interface-lifecycle/` exercises the *portable* EIGRP
+`eigrp/test/uut/interface-lifecycle/` exercises the *portable* EIGRP
 link-down/up withdrawal/recovery contract via the established YAML UUT
 framework. It does **not** drive Linux Netlink. Integration with a future
 native daemon, FRR/BIRD interop, and full Netlab suites require their

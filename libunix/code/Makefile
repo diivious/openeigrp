@@ -29,7 +29,7 @@ libeigrp_uut.a: $(UUT_OBJS)
 eigrp_unix_config.o: eigrp_unix_config.c eigrp_unix_config.h eigrp_unix_config_private.h eigrp_unix.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-eigrp_unix_config_apply.o: eigrp_unix_config_apply.c eigrp_unix_config_private.h ../../eigrp/code/eigrp_cli.h
+eigrp_unix_config_apply.o: eigrp_unix_config_apply.c eigrp_unix_config_private.h eigrp_unix_keychain.h ../../eigrp/code/eigrp_cli.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 eigrp_unix_sys.o: eigrp_unix_sys.c eigrp_unix.h ../../eigrp/code/eigrp_sys.h

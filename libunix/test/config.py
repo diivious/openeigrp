@@ -7,6 +7,7 @@ import subprocess
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrp" / "code").is_dir())
 UNIX = ROOT / "libunix" / "code"
+LINUX = ROOT / "linux" / "code"
 PUBLIC = ROOT / "eigrp" / "code"
 HARNESS = ROOT / "libunix" / "test" / "config_harness.c"
 
@@ -24,9 +25,14 @@ def test_named_ipv4_config_reaches_real_semantic_targets(tmp_path):
             "-Werror",
             f"-I{PUBLIC}",
             f"-I{UNIX}",
+            f"-I{LINUX}",
             str(UNIX / "eigrp_unix_config.c"),
             str(UNIX / "eigrp_unix_config_apply.c"),
             str(HARNESS),
+            str(LINUX / "eigrp_linux_policy.c"),
+            str(LINUX / "eigrp_linux_config.c"),
+            str(UNIX / "eigrp_unix_keychain.c"),
+            "-pthread",
             "-o",
             str(binary),
         ],

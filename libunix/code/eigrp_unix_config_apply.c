@@ -8,6 +8,17 @@
 #include "eigrp_cli.h"
 #include "eigrp_unix.h"
 #include "eigrp_unix_config_private.h"
+#include "eigrp_unix_keychain.h"
+
+/* Native policy definitions require an explicit host provider. The UUT and
+ * portable harnesses must never inherit permissive policy behavior. */
+static eigrp_unix_config_policy_provider_t policy_provider;
+
+void eigrp_unix_config_policy_register(
+	eigrp_unix_config_policy_provider_t provider)
+{
+	policy_provider = provider;
+}
 
 static eigrp_metric_values_t
 eigrp_unix_config_metric_value(const eigrp_unix_config_command_t *cmd)
@@ -35,6 +46,20 @@ eigrp_unix_config_command_commit(const eigrp_unix_config_command_t *cmd)
 	uint32_t router_id;
 	eigrp_result_t result;
 
+	/* Host-owned objects are installed through the Linux policy/keychain
+	 * services, not through the virtual-wire UUT placeholder. */
+	switch (cmd->action) {
+	case EIGRP_UNIX_CONFIG_RULE:
+	case EIGRP_UNIX_CONFIG_MAP:
+		return policy_provider ? policy_provider(cmd)
+				       : EIGRP_RESULT_NOT_IMPLEMENTED;
+	case EIGRP_UNIX_CONFIG_KEYCHAIN:
+		return eigrp_unix_keychain_add(cmd->policy_name,
+					       (uint32_t)cmd->numbers[0],
+					       cmd->secret);
+	default:
+		break;
+	}
 	if (cmd->action == EIGRP_UNIX_CONFIG_PARENT)
 		return eigrp_named_config_create(cmd->name);
 	if (cmd->mode == EIGRP_UNIX_MODE_ROUTER) {
@@ -67,6 +92,13 @@ eigrp_unix_config_command_commit(const eigrp_unix_config_command_t *cmd)
 			eigrp_intf_runtime_lookup(context.runtime, cmd->ifname);
 		if (!intf.config)
 			return EIGRP_RESULT_NOT_FOUND;
+		if (cmd->action == EIGRP_UNIX_CONFIG_AUTH_MODE)
+			return eigrp_auth_mode_update(EIGRP_SET, &intf,
+						      EIGRP_AUTHENTICATION_MD5,
+						      NULL);
+		if (cmd->action == EIGRP_UNIX_CONFIG_AUTH_KEYCHAIN)
+			return eigrp_auth_keychain_update(EIGRP_SET, &intf,
+							  cmd->policy_name);
 		switch (cmd->key) {
 		case EIGRP_UNIX_INTF_BANDWIDTH_PERCENT:
 			return eigrp_intf_bandwidth_percent_update(
@@ -139,13 +171,18 @@ eigrp_unix_config_command_commit(const eigrp_unix_config_command_t *cmd)
 	case EIGRP_UNIX_CONFIG_MAXIMUM_PATHS:
 		return eigrp_topology_maximum_paths_update(
 			EIGRP_SET, &context, (uint8_t)cmd->numbers[0]);
+	case EIGRP_UNIX_CONFIG_DISTRIBUTE:
+		return eigrp_distribute_add(
+			&context, cmd->filter_type, cmd->policy_name,
+			cmd->direction, cmd->ifname[0] ? cmd->ifname : NULL);
 	case EIGRP_UNIX_CONFIG_REDISTRIBUTE:
 		metric = eigrp_unix_config_metric_value(cmd);
 		source = (eigrp_redist_source_t){
 			.protocol = (eigrp_redist_protocol_t)cmd->numbers[5],
 		};
-		return eigrp_redist_add(&context, &source,
-					cmd->numbers[0] ? &metric : NULL, NULL);
+		return eigrp_redist_add(
+			&context, &source, cmd->numbers[0] ? &metric : NULL,
+			cmd->policy_name[0] ? cmd->policy_name : NULL);
 	default:
 		return EIGRP_RESULT_INVALID_ARGUMENT;
 	}
@@ -166,12 +203,28 @@ eigrp_result_t eigrp_unix_config_commit(eigrp_unix_config_t *config,
 	 * unsafe.
 	 */
 	config->committed = true;
-	for (cmd = config->head; cmd; cmd = cmd->next) {
-		result = eigrp_unix_config_command_commit(cmd);
-		if (result != EIGRP_RESULT_SUCCESS) {
-			if (error_line)
-				*error_line = cmd->line;
-			return result;
+	/* Install host definitions before any portable consumer, regardless of
+	 * file order. Otherwise references to later policy/keychain objects can
+	 * fail partway through startup and leave a partial protocol runtime. */
+	/* Defer enabling MD5 until after key-chain attachment, even when the
+	 * file lists mode before key-chain. The remaining portable commands
+	 * retain their original relative order. */
+	for (unsigned phase = 0; phase < 3; ++phase) {
+		for (cmd = config->head; cmd; cmd = cmd->next) {
+			bool definition =
+				cmd->action == EIGRP_UNIX_CONFIG_RULE
+				|| cmd->action == EIGRP_UNIX_CONFIG_MAP
+				|| cmd->action == EIGRP_UNIX_CONFIG_KEYCHAIN;
+			bool auth_mode =
+				cmd->action == EIGRP_UNIX_CONFIG_AUTH_MODE;
+			if (phase != (definition ? 0U : auth_mode ? 2U : 1U))
+				continue;
+			result = eigrp_unix_config_command_commit(cmd);
+			if (result != EIGRP_RESULT_SUCCESS) {
+				if (error_line)
+					*error_line = cmd->line;
+				return result;
+			}
 		}
 	}
 	return EIGRP_RESULT_SUCCESS;

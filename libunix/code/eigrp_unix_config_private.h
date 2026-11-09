@@ -37,7 +37,22 @@ typedef enum eigrp_unix_config_action {
 	EIGRP_UNIX_CONFIG_MAXIMUM_HOPS,
 	EIGRP_UNIX_CONFIG_MAXIMUM_PATHS,
 	EIGRP_UNIX_CONFIG_REDISTRIBUTE,
+	EIGRP_UNIX_CONFIG_RULE,
+	EIGRP_UNIX_CONFIG_MAP,
+	EIGRP_UNIX_CONFIG_KEYCHAIN,
+	EIGRP_UNIX_CONFIG_DISTRIBUTE,
+	EIGRP_UNIX_CONFIG_AUTH_MODE,
+	EIGRP_UNIX_CONFIG_AUTH_KEYCHAIN,
 } eigrp_unix_config_action_t;
+
+/* Stage names, never host policy objects, in the parser. These values map
+ * one-to-one to the Linux provider's supported route-map match subset. */
+typedef enum eigrp_unix_config_match {
+	EIGRP_UNIX_MATCH_ANY,
+	EIGRP_UNIX_MATCH_PREFIX_LIST,
+	EIGRP_UNIX_MATCH_ACCESS_LIST,
+	EIGRP_UNIX_MATCH_TAG,
+} eigrp_unix_config_match_t;
 
 typedef enum eigrp_unix_config_interface_key {
 	EIGRP_UNIX_INTF_BANDWIDTH_PERCENT,
@@ -63,9 +78,24 @@ typedef struct eigrp_unix_config_command {
 	eigrp_afi_t afi;
 	uint16_t asn;
 	uint32_t numbers[7];
+	eigrp_distribute_list_type_t filter_type;
+	eigrp_filter_decision_t decision;
+	eigrp_offset_direction_t direction;
+	eigrp_unix_config_match_t match;
+	char policy_name[EIGRP_UNIX_CONFIG_NAME_MAX + 1U];
+	char reference[EIGRP_UNIX_CONFIG_NAME_MAX + 1U];
+	char secret[82];
 	eigrp_prefix_t prefix;
 	eigrp_address_t address;
 } eigrp_unix_config_command_t;
+
+/* A native host installs its policy service before committing a config.
+ * No provider means an explicit NOT_IMPLEMENTED result, not UUT policy.
+ */
+typedef eigrp_result_t (*eigrp_unix_config_policy_provider_t)(
+	const eigrp_unix_config_command_t *cmd);
+void eigrp_unix_config_policy_register(
+	eigrp_unix_config_policy_provider_t provider);
 
 struct eigrp_unix_config {
 	eigrp_unix_config_command_t *head;

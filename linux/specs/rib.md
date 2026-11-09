@@ -1,4 +1,4 @@
-# Native Linux kernel RIB — Task 7
+# Native Linux kernel RIB
 
 Copyright (C) 2026 Donnie V. Savage
 
@@ -81,7 +81,7 @@ periodic reconciliation or service ownership.
 
 `linux/test/test_rib.py` runs the production Netlink implementation and
 crafted RTM_NEWROUTE tests, including real IPv4/IPv6 changes in a fresh user
-and network namespace when supported. `eigrp/test/uut/linux-rib/` includes two
+and network namespace when supported. `eigrp/test/uut/rib-lifecycle/` includes two
 YAML route lifecycle scenarios using the existing virtual-wire backend.
 Those YAML scenarios verify the portable selection/withdrawal contract, not
 Linux kernel programming. Native Netlab daemon/Cisco interoperability cannot
@@ -96,7 +96,7 @@ lookup and execute large-table reconcile tests. Do not claim 100K-route
 qualification from the small namespace tests.
 
 
-## Linux redistribution observation — Task 8
+## Linux redistribution observation
 
 `linux/code/eigrp_linux_redist.c` observes `RT_TABLE_MAIN` unicast IPv4 and
 IPv6 routes through a separate `NETLINK_ROUTE` socket subscribed to
@@ -148,7 +148,7 @@ core event enqueue fails, a future process call attempts a full refresh.
 
 `linux/test/test_redist.py` compiles and exercises the production observer,
 with crafted malformed/duplicate/replace cases and real namespace route
-add/delete/replacement/Netlink reconnect tests. `eigrp/test/uut/linux-redist/`
+add/delete/replacement/Netlink reconnect tests. `eigrp/test/uut/redist-lifecycle/`
 has separate portable IPv4/IPv6 YAML scenarios for snapshot/replay,
 subscriptions and withdrawal. These YAML scenarios use the existing virtual
 wire RIB, not the native Linux observer; the Linux daemon cannot yet be

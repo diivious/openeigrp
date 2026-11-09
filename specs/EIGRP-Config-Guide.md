@@ -34,6 +34,9 @@ system configured under the address family is the EIGRP protocol AS.
 Configuration syntax shown here follows the current FRR-facing command surface,
 but the semantics are project-wide.
 
+Example named processes use `eigrprulez` or `eigrprocks`; IPv4 examples
+use AS 4453 and IPv6 examples use AS 6473.
+
 ![Classic and named configuration converge on the same portable targets](images/configuration-scope.svg)
 
 ## 3. Classic IPv4 router configuration
@@ -41,8 +44,8 @@ but the semantics are project-wide.
 ### 3.1 Process lifecycle
 
 ```text
-router eigrp 100
-router eigrp 100 vrf BLUE
+router eigrp 4453
+router eigrp 4453 vrf BLUE
 ```
 
 Delete with the matching `no router eigrp ...` form.
@@ -50,7 +53,7 @@ Delete with the matching `no router eigrp ...` form.
 ### 3.2 Router ID
 
 ```text
-router eigrp 100
+router eigrp 4453
  eigrp router-id 192.0.2.1
 ```
 
@@ -63,7 +66,7 @@ no eigrp router-id
 ### 3.3 Network participation
 
 ```text
-router eigrp 100
+router eigrp 4453
  network 10.0.0.0/8
  network 192.0.2.0/24
 ```
@@ -73,7 +76,7 @@ Remove with the matching `no network ...` form.
 ### 3.4 Static neighbors
 
 ```text
-router eigrp 100
+router eigrp 4453
  neighbor 192.0.2.2
 ```
 
@@ -86,7 +89,7 @@ no neighbor 192.0.2.2
 ### 3.5 Passive interfaces
 
 ```text
-router eigrp 100
+router eigrp 4453
  passive-interface eth1
  no passive-interface eth0
 ```
@@ -94,7 +97,7 @@ router eigrp 100
 ### 3.6 DUAL and metric controls
 
 ```text
-router eigrp 100
+router eigrp 4453
  timers active-time 180
  variance 2
  maximum-paths 4
@@ -189,8 +192,8 @@ Use the matching `no` form to restore defaults.
 
 ```text
 interface eth0
- ip authentication mode eigrp 100 md5
- ip authentication key-chain eigrp 100 EIGRP-KEYS
+ ip authentication mode eigrp 4453 md5
+ ip authentication key-chain eigrp 4453 EIGRP-KEYS
 ```
 
 The authentication mode surface supports `md5` and `hmac-sha-256` where the
@@ -200,7 +203,7 @@ selected host/configuration form exposes them.
 
 ```text
 interface eth0
- ip summary-address eigrp 100 10.10.0.0/16
+ ip summary-address eigrp 4453 10.10.0.0/16
 ```
 
 Remove with the matching `no ip summary-address eigrp ...` form.
@@ -210,11 +213,11 @@ Remove with the matching `no ip summary-address eigrp ...` form.
 Create a named parent and address-family context:
 
 ```text
-router eigrp CORE
- address-family ipv4 unicast autonomous-system 100
+router eigrp eigrprulez
+ address-family ipv4 unicast autonomous-system 4453
   ...
  exit-address-family
- address-family ipv6 unicast autonomous-system 100
+ address-family ipv6 unicast autonomous-system 6473
   ...
  exit-address-family
 ```
@@ -224,7 +227,7 @@ router eigrp CORE
 A VRF may be selected before the AS:
 
 ```text
-address-family ipv4 unicast vrf BLUE autonomous-system 100
+address-family ipv4 unicast vrf BLUE autonomous-system 4453
 ```
 
 A named parent may retain multiple address families and, eventually, multiple
@@ -391,8 +394,8 @@ Each has a matching `no` form.
 A common pattern is passive by default with explicit transit interfaces:
 
 ```text
-router eigrp CORE
- address-family ipv4 unicast autonomous-system 100
+router eigrp eigrprulez
+ address-family ipv4 unicast autonomous-system 4453
   af-interface default
    passive-interface
   exit-af-interface
@@ -556,8 +559,8 @@ summary-metric 2001:db8:10::/48 distance 90
 ## 9. Named configuration example
 
 ```text
-router eigrp CORE
- address-family ipv4 unicast autonomous-system 100
+router eigrp eigrprulez
+ address-family ipv4 unicast autonomous-system 4453
   eigrp router-id 192.0.2.1
   network 10.0.0.0 0.255.255.255
   no shutdown
@@ -604,7 +607,7 @@ retry state where maintained by the runtime.
 ```text
 show ip eigrp topology
 show ip eigrp topology all-links
-show ip eigrp topology 100
+show ip eigrp topology 4453
 show ip eigrp topology 10.10.1.0/24
 show ip eigrp vrf BLUE topology
 ```
@@ -655,7 +658,7 @@ operation is AF-specific.
 
 ```text
 show eigrp address-family ipv4 interfaces
-show eigrp address-family ipv4 100 interfaces detail
+show eigrp address-family ipv4 4453 interfaces detail
 show eigrp address-family ipv4 vrf BLUE interfaces eth0 detail
 ```
 
@@ -663,7 +666,7 @@ show eigrp address-family ipv4 vrf BLUE interfaces eth0 detail
 
 ```text
 show eigrp address-family ipv4 neighbors
-show eigrp address-family ipv4 100 neighbors detail
+show eigrp address-family ipv4 4453 neighbors detail
 show eigrp address-family ipv4 vrf BLUE neighbors eth0 detail
 ```
 
@@ -672,7 +675,7 @@ show eigrp address-family ipv4 vrf BLUE neighbors eth0 detail
 ```text
 show eigrp address-family ipv4 topology
 show eigrp address-family ipv4 topology all-links
-show eigrp address-family ipv4 topology 100 10.10.1.0/24
+show eigrp address-family ipv4 topology 4453 10.10.1.0/24
 ```
 
 ### 11.4 Accounting, events, timers, and traffic
@@ -697,9 +700,9 @@ show eigrp tech-support
 
 ```text
 clear eigrp ipv4 topology
-clear eigrp 100 ipv4 topology
+clear eigrp 4453 ipv4 topology
 clear eigrp ipv4 topology 10.10.1.0/24
-clear eigrp 100 vrf BLUE ipv4 topology 10.10.1.0/24
+clear eigrp 4453 vrf BLUE ipv4 topology 10.10.1.0/24
 ```
 
 The IPv4 network/mask form may also be accepted:
@@ -712,7 +715,7 @@ clear eigrp ipv4 topology 10.10.1.0 255.255.255.0
 
 ```text
 clear eigrp address-family ipv4 neighbors
-clear eigrp address-family ipv4 100 neighbors
+clear eigrp address-family ipv4 4453 neighbors
 clear eigrp address-family ipv4 neighbors eth0
 clear eigrp address-family ipv4 neighbors 192.0.2.2
 clear eigrp address-family ipv4 neighbors soft
@@ -742,8 +745,8 @@ debug eigrp timers
 debug eigrp fsm
 debug eigrp neighbor siatimer
 debug eigrp notifications rib
-debug eigrp address-family ipv4 100
-debug eigrp address-family ipv4 100 neighbor 192.0.2.2
+debug eigrp address-family ipv4 4453
+debug eigrp address-family ipv4 4453 neighbor 192.0.2.2
 ```
 
 Disable with the matching `no debug eigrp ...` command.

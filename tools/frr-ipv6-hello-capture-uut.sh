@@ -4,7 +4,7 @@
 #
 # Live IPv6 EIGRP Hello capture gate.  Run on an FRR UUT with a dedicated
 # IPv6-capable test interface.  This does not form an adjacency or exchange
-# route TLVs; it verifies the Task-6 Hello wire image emitted by eigrpd.
+# route TLVs; it verifies the Hello wire image emitted by eigrpd.
 
 set -euo pipefail
 

@@ -9,7 +9,7 @@ nodes:
   ios:
     device: iosv
     module: [eigrp]
-    eigrp.as: 4453
+    eigrp.as: 6473
   uut:
     device: linux
     module: []

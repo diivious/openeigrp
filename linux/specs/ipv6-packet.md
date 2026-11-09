@@ -1,4 +1,4 @@
-# Native Linux IPv6 transport: Task 6
+# Native Linux IPv6 transport
 
 Copyright (C) 2026 Donnie V. Savage
 
@@ -55,7 +55,7 @@ truncated/oversize payloads are dropped without closing the socket. Nothing in
 
 ## Integration constraints
 
-Task 4's RTNETLINK provider still publishes only default-VRF interfaces;
+RTNETLINK provider still publishes only default-VRF interfaces;
 nondefault VRFs remain unsupported. `CAP_NET_RAW` is required for socket open.
 The future native daemon must register the borrowed descriptor returned by
 `eigrp_linux_packet_fd()` for readiness after `eigrp_sys_socket_open()`, invoke
@@ -73,7 +73,7 @@ CLI, configuration startup, kernel RIB, or per-VRF raw socket isolation.
   sends and receive recovery. Actual raw-socket privilege denial is checked
   against the running kernel; packet I/O is syscall-mocked when no
   `CAP_NET_RAW` is granted.
-* `eigrp/test/uut/linux-packet/ipv6-loss-recovery.yaml` exercises portable
+* `eigrp/test/uut/rtp-recovery/ipv6-loss-recovery.yaml` exercises portable
   IPv6 RTP and convergence during interface loss, dropped UPDATE and recovery.
   It does not exercise the Linux raw socket. The existing IPv4 and IPv6 core
   UUT gates remain relevant regressions. The current UUT topology schema

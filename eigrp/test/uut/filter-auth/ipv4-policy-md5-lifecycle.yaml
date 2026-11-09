@@ -1,0 +1,30 @@
+# Portable integration contract. Virtual-wire policy is a deterministic UUT
+# fixture, NOT the Linux provider: linux/test/test_policy.py tests that provider.
+# Copyright (C) 2026 Donnie V. Savage
+schema: eigrp-uut-test/v1
+name: ipv4-md5-inbound-filter-redistribution-lifecycle
+# This deliberately reuses the tested 2-authenticated + 1-unauthenticated LAN.
+topology: ../auth-topology/ipv4-md5-mixed-lan.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.41.0.2, interface: lan0, state: up, timeout: 15}
+  - validate-neighbor: {uut: r2, neighbor: 10.41.0.1, interface: lan0, state: up, timeout: 15}
+  - validate-neighbor: {uut: r1, neighbor: 10.41.0.3, state: down, observe: 2}
+  - validate-neighbor: {uut: r3, neighbor: 10.41.0.1, state: down, observe: 2}
+  - redistribute-add: {uut: r2, source: static}
+  - source-route-add: {uut: r2, prefix: '198.51.100.241/32', metric: 20}
+  - validate-route: {uut: r1, prefix: '198.51.100.241/32', table: rib, present: true, timeout: 15}
+  - inbound-filter-config: {uut: r1, prefix: '198.51.100.241/32'}
+  - source-route-remove: {uut: r2, prefix: '198.51.100.241/32'}
+  - validate-route: {uut: r1, prefix: '198.51.100.241/32', table: rib, present: false, timeout: 15}
+  - source-route-add: {uut: r2, prefix: '198.51.100.241/32', metric: 20}
+  - validate-route: {uut: r1, prefix: '198.51.100.241/32', table: topology, present: false, timeout: 15}
+  - inbound-filter-config: {uut: r1, prefix: '198.51.100.241/32', enabled: false}
+  - source-route-remove: {uut: r2, prefix: '198.51.100.241/32'}
+  - source-route-add: {uut: r2, prefix: '198.51.100.241/32', metric: 20}
+  - validate-route: {uut: r1, prefix: '198.51.100.241/32', table: rib, present: true, timeout: 15}
+  - validate-neighbor: {uut: r1, neighbor: 10.41.0.3, state: down, observe: 2}
+  - source-route-remove: {uut: r2, prefix: '198.51.100.241/32'}
+  - validate-route: {uut: r1, prefix: '198.51.100.241/32', table: rib, present: false, timeout: 15}
+  - redistribute-remove: {uut: r2, source: static}
+  - stop: all

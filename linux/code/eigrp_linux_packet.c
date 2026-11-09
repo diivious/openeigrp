@@ -151,7 +151,7 @@ eigrp_result_t eigrp_sys_socket_open(eigrp_instance_t *eigrp)
 
 	if (!eigrp)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	/* Task 4 publishes only default-VRF interfaces.  Do not report a
+	/* Publishes only default-VRF interfaces.  Do not report a
 	 * misleading ingress VRF for another Linux routing table. */
 	if (!eigrp_linux_packet_ipv4(eigrp) && !eigrp_linux_packet_ipv6(eigrp))
 		return EIGRP_RESULT_UNSUPPORTED;
@@ -648,7 +648,7 @@ bool eigrp_sys_ipv4_packet_receive(eigrp_instance_t *eigrp, uint8_t *buffer,
 	    || memcmp(&info.ipi_addr, dst.bytes, sizeof(info.ipi_addr)) != 0)
 		return false;
 
-	/* Task 4's interface provider advertises default-VRF interfaces only.
+	/* Interface provider advertises default-VRF interfaces only.
 	 * Confirm the ingress index against that inventory before labeling the
 	 * frame with the default VRF.  Never infer VRF from an address alone.
 	 */

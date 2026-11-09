@@ -1,9 +1,15 @@
 ! Native OpenEIGRP named-mode configuration example.
 ! Syntax can be checked with: openeigrpd-config -t -f PATH
-router eigrp example
- address-family ipv4 unicast autonomous-system 100
+! Policy example: allow only 192.0.2.0/24 routes on the IPv4 interface.
+ip prefix-list campus-in seq 10 permit 192.0.2.0/24
+route-map connected-policy permit 10 match prefix-list campus-in
+! For MD5, use a mode-0600 private file containing a key-chain definition;
+! never include actual authentication secrets in distributed example files.
+router eigrp eigrprulez
+ address-family ipv4 unicast autonomous-system 4453
   eigrp router-id 192.0.2.1
   network 192.0.2.0 0.0.0.255
+  distribute-list prefix campus-in in eth0
   af-interface eth0
    hello-interval 5
    hold-time 15
@@ -12,10 +18,10 @@ router eigrp example
   exit-af-interface
   topology base
    default-metric 100000 10 255 1 1500
-   redistribute connected
+   redistribute connected route-map connected-policy
   exit-af-topology
  exit-address-family
- address-family ipv6 unicast autonomous-system 100
+ address-family ipv6 unicast autonomous-system 6473
   eigrp router-id 192.0.2.1
   af-interface eth0
    hello-interval 5

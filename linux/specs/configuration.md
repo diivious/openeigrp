@@ -18,6 +18,9 @@ The Unix parser now has two deliberately separate operations:
    real public `eigrp_cli.h` targets. It aborts on any semantic result other
    than `SUCCESS`, including `NOT_IMPLEMENTED` and `UNSUPPORTED`.
 
+The commit installs host policy/keychain definitions first, then dispatches
+portable consumers in file order. Thus definitions may appear after their
+references without a transient unresolved-object failure during initial load.
 The compatibility `apply_file()` and `apply_text()` entry points stage the
 entire file before any semantic calls. **Commit is not transactional.** Do not
 call it on an active daemon to reload configuration. The caller must discard
@@ -43,15 +46,33 @@ that every host capability or runtime operation will succeed.
   `next-hop-self`, and `shutdown` (including supported `no` flag forms).
 - `topology base` / `exit-af-topology`: `default-metric`, `variance`,
   `metric maximum-hops`, `maximum-paths`, and `redistribute connected|static`
-  optionally followed by `metric BW DELAY RELIABILITY LOAD MTU`.
+  optionally followed by `metric BW DELAY RELIABILITY LOAD MTU` and/or
+  `route-map NAME`.
+- Global `ip|ipv6 prefix-list NAME seq N permit|deny ADDRESS/LENGTH
+  [ge LENGTH] [le LENGTH]`, with first-match ordering, exact-length matching
+  by default and implicit deny.
+- Global `ip|ipv6 access-list NAME seq N permit|deny ADDRESS/LENGTH`,
+  matching destination network addresses, first-match and implicit deny.
+- Global `route-map NAME permit|deny N [match prefix-list|access-list NAME|
+  match tag N]`, with first-match ordering and implicit deny. A clause without
+  `match` matches any route. It does not support `set` actions.
+- AF `distribute-list prefix|access NAME in|out [INTERFACE]`, applied by the
+  portable EIGRP filter configuration API.
+- Global `key-chain NAME key N secret PLAINTEXT` (one key per chain), with
+  mode `0600` required for any file containing key definitions. Interface
+  `authentication key-chain NAME` and `authentication mode md5` **must both
+  be present**. The portable core implements MD5 packet integrity; the host
+  supplies only owned secret bytes through the existing keychain provider.
 
 Only default-VRF unicast is exposed in the native syntax. Redistribution is
-restricted to the source families implemented by the Linux Netlink observer;
-external route instances and route maps are rejected. Authentication,
-filtering, leak maps, summarization, maximum-prefix, and other unfinished
-policy surface are rejected by the parser until they have a verified native
-provider. The parser does **not** provide a substitute for portable policy or
-protocol semantics.
+restricted to connected/static source families implemented by the Linux
+Netlink observer and default VRF. Configured route-map references are passed
+unchanged to the portable redistribution API. Undefined references, unsupported
+policy operations, incomplete MD5 configuration and HMAC-SHA-256 are rejected,
+not downgraded to permissive policy. Named HMAC type-7 is explicitly unsupported.
+See `linux/specs/policy-authentication.md` for exact semantics, security
+boundaries and test limitations. The parser does **not** provide a substitute
+for portable policy or protocol semantics.
 
 A successful offline check says the *syntax* is accepted, not that every
 semantic target is supported in every runtime. Actual semantic errors remain
@@ -89,7 +110,7 @@ initial-load parser would violate the invalid-reload requirement.
 
 `linux/test/test_config.py` runs crafted configuration, malformed input,
 repeated staging, semantic dispatch, failure propagation and CLI tests.
-`eigrp/test/uut/linux-config/ipv4-configuration-lifecycle.yaml` exercises
+`eigrp/test/uut/config-lifecycle/ipv4-configuration-lifecycle.yaml` exercises
 actual *portable* configuration change effects in UUT, not a Linux daemon
 reload. Native restart, SIGHUP, parser-to-kernel full-path and Netlab Cisco
 interoperability cannot be tested until the native daemon is integrated.

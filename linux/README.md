@@ -25,7 +25,8 @@ make linux
 ```
 
 This builds the portable EIGRP core, shared Unix support, and the native
-interface, packet, Netlink RIB and read-only route-observation libraries. On Linux, `make all` also runs
+interface, packet, Netlink RIB, read-only route-observation and native
+policy-evaluation libraries. On Linux, `make all` also runs
 this build before the existing style, UUT, and scale checks. On non-Linux
 hosts, `make all` retains the portable build and test flow; `make linux`
 explicitly reports that a Linux host is required. `make clean` removes the
@@ -49,12 +50,12 @@ are never redistributed by this observer.
 
 Run `python3 linux/test/test_redist.py` for crafted Netlink route tests and,
 where user/network namespaces are available, real route mutation tests.
-Run the portable YAML scenarios under `eigrp/test/uut/linux-redist/` to verify
+Run the portable YAML scenarios under `eigrp/test/uut/redist-lifecycle/` to verify
 the unaffected core redistribution/DUAL contract. Netlab daemon
 interoperability remains blocked until the native daemon task connects the
 scheduler, configuration and startup paths.
 
-## Native configuration staging (Task 9 partial)
+## Native configuration staging and policy/authentication services
 
 `make linux` also builds `linux/code/openeigrpd-config`, a syntax-only
 validator of the future `/etc/openeigrpd.conf` configuration:
@@ -65,10 +66,17 @@ python3 linux/test/test_config.py
 ```
 
 The staged Unix parser preserves its previous parsed plan after invalid input
-and dispatches initial-load configuration through the portable public semantic
-APIs. It rejects unsupported directives, including unfinished policy features.
+and dispatches initial-load configuration through portable semantic APIs. Native
+policy supports named destination-prefix ACLs, IPv4/IPv6 prefix lists, and a
+restricted first-match route-map evaluator. The keychain provider owns MD5
+secrets; both `authentication mode md5` and `authentication key-chain` are
+required. Key-bearing files must have no group/other permission bits. Unsupported
+constructs are rejected rather than treated as permit-all.
+
+Run `python3 linux/test/test_policy.py`, `python3 linux/test/test_config.py`
+and the portable YAML scenario in `eigrp/test/uut/filter-auth/`.
 **There is no runnable `openeigrpd` here, so neither startup configuration nor
 SIGHUP reload is yet wired to an operational daemon.** Do not use the initial
 semantic commit API as a substitute for a failure-atomic live reload. The
 transaction design and remaining integration requirements are documented in
-`linux/specs/configuration.md`.
+`linux/specs/configuration.md` and `linux/specs/policy-authentication.md`.

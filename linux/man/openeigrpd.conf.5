@@ -11,8 +11,8 @@ closed with exit-af-interface, exit-af-topology, exit-address-family and exit.
 Only the default Linux VRF is currently accepted.
 .SH EXAMPLE
 .nf
-router eigrp example
- address-family ipv4 unicast autonomous-system 100
+router eigrp eigrprulez
+ address-family ipv4 unicast autonomous-system 4453
   eigrp router-id 192.0.2.1
   network 192.0.2.0 0.0.0.255
   af-interface eth0
@@ -21,6 +21,27 @@ router eigrp example
  exit-address-family
 exit
 .fi
+.SH POLICY AND AUTHENTICATION
+Global policy definitions accept
+.B ip prefix-list,
+.B ipv6 prefix-list,
+.B ip access-list,
+.B ipv6 access-list,
+.B route-map,
+and
+.B key-chain.
+Address-family policy uses
+.B distribute-list
+and base-topology redistribution may reference a route map.
+Only explicitly supported matching operations are accepted; missing policy
+objects deny rather than permit. Interface MD5 authentication requires both
+.B authentication mode md5
+and
+.B authentication key-chain NAME.
+A file containing key-chain secrets must be a regular file with no group or
+other permission bits (typically mode 0600). Never place secrets in command-line
+arguments or permissively readable files. HMAC-SHA-256, encoded type-7 keys,
+route-map set operations, and complex ACL syntax are not supported.
 .SH VALIDATION
 Run
 .B openeigrpd-config -t -f /etc/openeigrpd.conf

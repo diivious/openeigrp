@@ -1,4 +1,4 @@
-# Native Linux IPv4 transport: Task 5
+# Native Linux IPv4 transport:
 
 Copyright (C) 2026 Donnie V. Savage
 
@@ -30,7 +30,7 @@ authentication, TLVs, RTP or DUAL state. IPv4 options are accepted when
 well framed and checksummed. `recvmsg` is nonblocking; a malformed packet is
 dropped without closing the socket and the next datagram can be received.
 
-Task 4's Netlink interface inventory currently publishes only default-VRF
+Netlink interface inventory currently publishes only default-VRF
 interfaces. This provider therefore rejects nondefault VRF runtimes and uses
 `eigrp_sys_interface_walk()` to confirm ingress ownership before emitting
 `EIGRP_VRF_DEFAULT` in the receive metadata. This is **not** nondefault Linux
@@ -41,7 +41,7 @@ Linux VRF and resolve ingress VRF identity from host interface state.
 loop. The event loop must register for readability after successful
 `eigrp_sys_socket_open()`, unregister before `eigrp_sys_socket_close()`, and
 call portable `eigrp_packet_read()` on readiness. No daemon event loop is
-supplied by Task 5. Native daemon startup, CLI, config, netlink RIB and Cisco
+supplied. Native daemon startup, CLI, config, netlink RIB and Cisco
 adjacency verification remain dependent on later integration tasks.
 
 The daemon needs `CAP_NET_RAW` to open the socket. No arbitrary privilege
@@ -57,7 +57,7 @@ crafted-packet harness and checks real-kernel privilege gating. The tests
 exercise source/destination/index/VRF metadata, multicast/unicast sends,
 raw socket options, send errors, packet loss, bad frames, receive recovery,
 repeated opens, and teardown. The existing `eigrp/test/uut/` virtual-wire
-transport stays unchanged; `eigrp/test/uut/linux-packet/` scenarios exercise
+transport stays unchanged; `eigrp/test/uut/rtp-recovery/` scenarios exercise
 portable RTP and convergence on loss/recovery, **not Linux raw sockets**.
 
 `linux/test/netlab/` contains a manual Cisco interop topology and a required

@@ -289,7 +289,7 @@ OTP should appear to the operator as an EIGRP routing feature, not as a tunnel-m
 For a CE, the operator describes the remote EIGRP relationship:
 
 ```text
-router eigrp savage
+router eigrp eigrprocks
  address-family ipv4 autonomous-system 4453
   neighbor 192.0.2.1 <interface> remote 10 lisp-encap 4453
 ```
@@ -297,7 +297,7 @@ router eigrp savage
 For an E-RR, the operator describes where remote peers are accepted and enables the EIGRP forwarding behavior required for reflection:
 
 ```text
-router eigrp savage
+router eigrp eigrprocks
  address-family ipv4 autonomous-system 4453
 
   af-interface <interface>

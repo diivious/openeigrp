@@ -1,7 +1,7 @@
 # Portable host->RIB redistribution contract. The real Linux Netlink source
 # observer is exercised separately by linux/test/test_redist.py.
 schema: eigrp-uut-test/v1
-name: linux-redistribution-ipv4-subscription-snapshot-change-withdraw-recover
+name: ipv4-source-redistribution-subscription-replay-withdrawal
 topology: ../examples/two-router.yaml
 steps:
   - start: all
