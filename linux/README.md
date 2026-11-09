@@ -15,3 +15,21 @@ Linux-specific networking, interfaces, RIB operations, and
 process management must not be implemented in the portable core.
 
 The UUT simulation backend is not a production dependency.
+
+## Building the native Linux libraries
+
+From the repository root on Linux:
+
+```sh
+make linux
+```
+
+This builds the portable EIGRP core, shared Unix support, and the native
+interface, packet, and Netlink RIB libraries. On Linux, `make all` also runs
+this build before the existing style, UUT, and scale checks. On non-Linux
+hosts, `make all` retains the portable build and test flow; `make linux`
+explicitly reports that a Linux host is required. `make clean` removes the
+Linux build outputs as well.
+
+These targets currently produce libraries, **not** a runnable `openeigrpd`
+daemon. The native daemon integration is separate work.

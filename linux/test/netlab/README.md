@@ -5,8 +5,9 @@ Copyright (C) 2026 Donnie V. Savage
 **Status: not yet executable as an adjacency test.** Task 4 implements host
 interface discovery and Task 5 adds native raw IPv4 packet services, but
 `linux-support` does not yet have a complete `openeigrpd` executable,
-config/startup lifecycle, timers, or native RIB integration. A Cisco neighbor
-cannot be established by linking the transport library alone. This test is a
+config/startup lifecycle, timers, or wiring from the portable core into the
+native Linux services. Task 7 supplies a standalone native Netlink RIB module,
+but a Cisco neighbor cannot be established by linking the libraries alone. This test is a
 Netlab topology and acceptance checklist for the first integrated daemon.
 No result, capture, or Cisco adjacency is claimed here.
 
@@ -104,5 +105,35 @@ IPv6 on one link must not disrupt the IPv4 adjacency, and vice versa.
 
 **Not an automated pass:** Neither fixture can run a completed adjacency on
 this branch because `openeigrpd` still lacks a native event loop, startup
-configuration, and RIB integration. The Netlab YAML files describe the first
+configuration, and wiring from DUAL into the native RIB service. The Netlab
+YAML files describe the first
 manual verification gate once that executable exists.
+
+## Task 7: kernel RIB route-lifecycle qualification (pending integrated daemon)
+
+With a real Linux daemon connected to the portable core, repeat both address
+family labs and save `ip -4 route show proto eigrp` and
+`ip -6 route show proto eigrp` after each transition. Validate that:
+
+1. IOS-connected networks appear as `proto eigrp` with correct installed
+   output interface/gateway and Linux route priority; route selection remains
+   controlled by DUAL.
+2. Changing selected successors replaces the kernel next hop; repeated UPDATEs
+   do not create duplicate routes; losing the neighbor removes the selected
+   route, and restoring it reinstalls the route for both families.
+3. For multiple feasible successors, `ip route` reports all selected next
+   hops with the intended weights. Verify on a kernel built with ECMP support.
+4. A conflicting route created by another process survives an EIGRP withdraw.
+   Deliberately test a byte-identical `proto eigrp` conflict and verify it is
+   never adopted or removed by the restarting daemon.
+5. Inject an invalid next hop, deny `CAP_NET_ADMIN`, and interrupt the Netlink
+   socket; confirm failures are reported and recovery retains selected state.
+6. Graceful daemon shutdown removes only verified routes it installed. A
+   crash leaves routes in the kernel; on restart the new daemon refuses
+   unverified stale routes. Once an operator removes verified stale routes,
+   reconciliation should install the currently selected state.
+
+These are **manual acceptance criteria, not completed tests**. The current
+`linux/test/test_rib.py` exercises the real kernel in isolated network
+namespaces, while `eigrp/test/uut/linux-rib/` covers portable RIB semantics.
+Neither test substitutes for Cisco/Netlab interoperability qualification.

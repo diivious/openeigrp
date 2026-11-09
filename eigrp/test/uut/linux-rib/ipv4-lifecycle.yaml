@@ -1,0 +1,54 @@
+# Portable selected-route/RIB lifecycle. Linux Netlink is tested separately
+# in linux/test/test_rib.py; the UUT virtual-wire backend remains unchanged.
+schema: eigrp-uut-test/v1
+name: linux-rib-ipv4-selection-withdrawal-recovery
+topology: ipv4-rib.yaml
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 18
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 18
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - stop: all

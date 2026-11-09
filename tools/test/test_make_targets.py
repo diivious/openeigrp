@@ -18,7 +18,7 @@ class MakeTargetsTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="make-targets-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         (self.root / "Makefile").write_bytes((ROOT / "Makefile").read_bytes())
         (self.root / "tools").mkdir()
         self.log = self.root / "events"
@@ -28,7 +28,7 @@ class MakeTargetsTest(unittest.TestCase):
         docker = self.root / "tools/docker.sh"
         docker.write_text('#!/bin/sh\nprintf "DOCKER %s\\n" "$*" >> "$LOG_FILE"\n')
         docker.chmod(0o755)
-        for name in ("eigrp/code", "libunix/code", "eigrp/test/uut", "eigrp/test/scale", "frr/test/build"):
+        for name in ("eigrp/code", "libunix/code", "linux/code", "eigrp/test/uut", "eigrp/test/scale", "frr/test/build"):
             path = self.root / name
             path.mkdir(parents=True)
             (path / "Makefile").write_text(
@@ -42,6 +42,13 @@ class MakeTargetsTest(unittest.TestCase):
                 'auth-md5 clean:\n'
                 '\t@printf "CHILD %s %s\\n" "$(CURDIR)" "$@" >> "$(LOG_FILE)"\n'
             )
+        (self.root / "linux/code/Makefile").write_text(
+            '.PHONY: all clean\n'
+            'all clean:\n'
+            '\t@printf "CHILD %s %s\\n" "$(CURDIR)" "$@" >> "$(LOG_FILE)"\n'
+            '\t@if [ "$(FAIL_LINUX)" = "1" ] && [ "$@" = "all" ]; then '
+            'echo "simulated Linux build failure" >&2; exit 1; fi\n'
+        )
         (self.root / "eigrp/test/packet").mkdir(parents=True)
         (self.root / "eigrp/test/rtp").mkdir(parents=True)
         (self.root / "eigrp/test/scale").mkdir(parents=True, exist_ok=True)
@@ -91,12 +98,47 @@ class MakeTargetsTest(unittest.TestCase):
         result, events = self.make()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(sum("CHILD" in e for e in events), 2)
+        self.assertFalse(any("linux/code" in e for e in events))
         self.assertFalse(any(e.startswith("PY") for e in events))
+
+    def test_linux_build_includes_portable_unix_and_native_libraries(self):
+        result, events = self.make("linux", "HOST_OS=Linux")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([e.split()[-2:] for e in events], [
+            [str(self.root / "eigrp/code"), "all"],
+            [str(self.root / "libunix/code"), "all"],
+            [str(self.root / "linux/code"), "all"],
+        ])
+        self.assertFalse(any(e.startswith("PY") for e in events))
+
+    def test_linux_target_rejects_non_linux_host(self):
+        result, events = self.make("linux", "HOST_OS=Darwin")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires a Linux host", result.stderr)
+        self.assertFalse(any("linux/code" in e for e in events))
+
+    def test_all_stops_on_linux_build_failure(self):
+        result, events = self.make("all", "HOST_OS=Linux", "FAIL_LINUX=1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("simulated Linux build failure", result.stderr)
+        self.assertTrue(any("linux/code all" in e for e in events))
+        self.assertFalse(any(e.startswith("PY") for e in events))
+
+    def test_all_preserves_portable_build_on_non_linux_hosts(self):
+        result, events = self.make("all", "HOST_OS=Darwin")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any("linux/code" in e for e in events))
+        self.assertIn(f"CHILD {self.root / 'eigrp/code'} all", events)
+        self.assertIn(f"CHILD {self.root / 'libunix/code'} all", events)
 
     def test_all_sequentially_runs_full_check_uut_and_quick_scale(self):
         result, events = self.make("all")
         self.assertEqual(result.returncode, 0, result.stderr)
+        if os.uname().sysname == "Linux":
+            native = next(i for i, e in enumerate(events) if "linux/code all" in e)
         style = next(i for i, e in enumerate(events) if e == "PY tools/style-check.py --all")
+        if os.uname().sysname == "Linux":
+            self.assertLess(native, style)
         uut = next(i for i, e in enumerate(events) if e == "PY -m pytest eigrp/test")
         scale = next(i for i, e in enumerate(events) if "pacing.py" in e)
         self.assertLess(style, uut)
@@ -135,7 +177,7 @@ class MakeTargetsTest(unittest.TestCase):
 
         result, events = self.make("clean")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(sum("CHILD" in e for e in events), 4)
+        self.assertEqual(sum("CHILD" in e for e in events), 5)
         self.assertEqual(sorted(p.name for p in results.iterdir()), [".gitignore"])
         self.assertTrue((scenario / "scenario.yaml").exists())
         self.assertFalse(cache.exists())

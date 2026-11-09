@@ -4,6 +4,7 @@
 .DEFAULT_GOAL := build
 PYTHON ?= $(CURDIR)/tools/python
 export PYTHON
+HOST_OS := $(shell uname -s)
 
 SCALE_VOLUME := peers internal external line kite peer-routes
 SCALE_STRESS := withdraw mcast linkdown mixed-tlv churn
@@ -13,12 +14,13 @@ UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topolo
   basic-core md5-mixed-lan md5-security dual-diamond kite-topology \
   active-topology summary-topology
 
-.PHONY: all build check uut scale docker clean help portable-build frr-smoke
+.PHONY: all build linux check uut scale docker clean help portable-build frr-smoke
 
 help: ## Show developer commands and selectors.
 	@printf '%s\n' 'Usage: make [target] [options]' '' 'Targets:' \
 	  '  build          Build portable EIGRP and Unix support (default: make)' \
-	  '  all            Build, full check, UUT and quick scale in sequence' \
+	  '  linux          Build portable/Unix support and native Linux libraries' \
+	  '  all            Build (including Linux on Linux), full check, UUT and quick scale' \
 	  '  check          Style validation and style-checker unit tests' \
 	  '  uut            Portable unit tests and YAML scenarios' \
 	  '  scale          Quick pacing and backpressure qualification' \
@@ -36,8 +38,12 @@ help: ## Show developer commands and selectors.
 	  'Before opening a pull request to merge, run: make all'
 
 # Separate recursive invocations enforce ordering even under make -j.
-all: ## Complete pre-merge gate (build, full style, UUT, quick scale).
+all: ## Complete pre-merge gate (platform build, full style, UUT, quick scale).
+ifeq ($(HOST_OS),Linux)
+	$(MAKE) linux
+else
 	$(MAKE) build
+endif
 	$(MAKE) check SOURCE=all
 	$(MAKE) uut
 	$(MAKE) scale
@@ -47,6 +53,10 @@ portable-build:
 
 build: portable-build ## Build portable EIGRP and Unix support.
 	$(MAKE) -C libunix/code
+
+linux: build ## Build the native Linux libraries (Linux hosts only).
+	@test "$(HOST_OS)" = Linux || { echo "error: make linux requires a Linux host" >&2; exit 1; }
+	$(MAKE) -C linux/code
 
 check: ## Run style validation and its executable unit tests (SOURCE=changed|all).
 	@case '$(SOURCE)' in ''|changed|all) ;; *) echo 'error: check SOURCE must be changed or all' >&2; exit 2 ;; esac
@@ -124,6 +134,7 @@ frr-smoke:
 clean: ## Remove generated build, UUT and local Netlabs artifacts.
 	$(MAKE) -C eigrp/code clean
 	$(MAKE) -C libunix/code clean
+	$(MAKE) -C linux/code clean
 	$(MAKE) -C eigrp/test/uut clean
 	$(MAKE) -C frr/test/build clean
 	@# Preserve the results directory and its checked-in .gitignore, while

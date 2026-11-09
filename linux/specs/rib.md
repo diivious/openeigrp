@@ -1,0 +1,95 @@
+# Native Linux kernel RIB — Task 7
+
+Copyright (C) 2026 Donnie V. Savage
+
+## Scope and ownership
+
+`linux/code/eigrp_linux_rib.c` provides the existing `eigrp_rib.h` route
+installation, withdrawal, instance teardown, and initialization/finish
+contract. The portable engine determines the successors, weighted sharing,
+route type and administrative distance. The Linux backend never invokes DUAL,
+processes EIGRP packets, redistributes routes, or links to the virtual-wire
+RIB. The `eigrp_rib_redistribute_add/remove` entry points intentionally return
+`EIGRP_RESULT_NOT_IMPLEMENTED` until redistribution is implemented.
+
+Default-VRF IPv4/IPv6 unicast routes are installed in `RT_TABLE_MAIN` with
+`RTPROT_EIGRP` (192). `RTA_PRIORITY` is the portable `install.admin_dist`
+(0–255): **Linux route priority, not the 64-bit EIGRP composite metric**.
+The EIGRP scalar metric remains in the host's desired-route snapshot; Linux
+has no directly equivalent 64-bit route metric. Route tags are similarly not
+assigned to an unrelated kernel forwarding field. The kernel sets route scope
+according to the constructed `RTM_NEWROUTE` request. Routes are limited to
+32 next hops, the portable `EIGRP_MAX_PATHS_MAX` selection ceiling. For ECMP,
+`RTA_MULTIPATH` contains copied interface indices, optional same-family
+next-hop gateways and weight hints; Linux supports weights 1–256. An absent
+or zero hint means weight 1. Single-path weight hints do not affect the
+kernel and are normalized to 1. IPv6 link-local gateways require an ifindex.
+
+Calls are serialized by a private mutex because the portable AF can call
+from multiple runtime threads. Netlink transactions have bounded receives,
+sequence checks, sender validation, ACK/error processing, timeout and socket
+reopening. New routes use exclusive create. Replacements validate that the
+previously installed route still matches the kernel (prefix, protocol,
+priority, interface/next-hop set), delete it, then install the new route;
+failed replacements attempt to restore the old route. Withdrawal likewise
+verifies the old snapshot and never intentionally deletes a route with a
+foreign protocol, unexpected priority or modified next-hop set.
+
+## Reconciliation and failure behavior
+
+The host calls `eigrp_linux_rib_reconcile()` after a Netlink socket fault,
+on interface recovery and periodically after route-selection changes. It
+retries failed installation/withdrawal and re-installs entries removed from
+the kernel. Per-call error returns are not silently converted to success.
+Failed requests are retained as desired state for a future reconciliation.
+The synchronous backend does not create threads or timers of its own.
+
+Graceful `eigrp_rib_instance_delete` and `eigrp_rib_finish` attempt to remove
+only installed and reverified routes. A failed withdrawal is retained until
+the next reconciliation while the process is alive; shutdown cannot retry
+beyond process lifetime. A daemon crash leaves kernel routes. On restart, a
+route already present with exactly the selected prefix, protocol, priority and
+next hops is **not** adopted: the new process cannot prove who created it.
+It reports a conflict, retains selected desired state, and leaves that route
+untouched. An existing protocol-192 route for the same destination but a
+different Linux route priority is likewise treated as an ownership conflict. An operator must inspect and clear verified stale protocol-192
+routes before reconciliation can install them using exclusive create. These restrictions avoid blanket deletions of the kernel's routing
+table when the portable core has no ownership record.
+
+**Process-identity limitation:** Linux `RTPROT_EIGRP` does not encode a daemon
+identity. If multiple processes deliberately write byte-identical
+protocol-192 routes in the same table, neither Netlink nor this RIB API can
+distinguish the original writer. For this reason the backend never adopts an
+untracked route, not even on restart. A different process can still change
+an already-owned route to an *identical* one between readback and deletion;
+Linux lacks kernel compare-and-delete and that race cannot be excluded by
+this API. The later daemon/service task must enforce single-writer ownership
+(e.g. service lock) or another kernel-verifiable scheme before claiming
+strict cross-process isolation. Do not represent protocol 192 alone as
+process identity.
+
+## Integration and verification
+
+The Linux host must link `libeigrp_linux_rib.a` instead of the UUT's
+`libeigrp_uut.a` route module and call the usual `eigrp_rib_init/finish` hooks.
+`CAP_NET_ADMIN` in the target network namespace is needed for kernel route
+mutations. Only the default VRF is supported in the current Linux interface
+and transport tasks; this backend rejects other VRFs rather than silently
+using the wrong table. No standalone daemon entry point exists yet to wire
+periodic reconciliation or service ownership.
+
+`linux/test/test_rib.py` runs the production Netlink implementation and
+crafted RTM_NEWROUTE tests, including real IPv4/IPv6 changes in a fresh user
+and network namespace when supported. `eigrp/test/uut/linux-rib/` includes two
+YAML route lifecycle scenarios using the existing virtual-wire backend.
+Those YAML scenarios verify the portable selection/withdrawal contract, not
+Linux kernel programming. Native Netlab daemon/Cisco interoperability cannot
+run until the Linux daemon's lifecycle and CLI are connected.
+
+The current implementation validates a full kernel family dump on each
+previously installed route update/withdrawal. That is safe against stale
+in-memory ownership but is not a scalable batch strategy: rapid bulk
+withdrawals could take superlinear time. Before high-prefix-count production
+use, add a bounded route-notification cache or a kernel-supported filtered
+lookup and execute large-table reconcile tests. Do not claim 100K-route
+qualification from the small namespace tests.
