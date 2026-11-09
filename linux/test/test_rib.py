@@ -30,7 +30,8 @@ class LinuxRibTests(unittest.TestCase):
             os.environ.get("CC", "cc"), "-std=c11", "-D_GNU_SOURCE",
             "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
             "-I", str(ROOT / "eigrp" / "code"),
-            str(TEST / "rib_harness.c"), "-o", str(cls.binary),
+            str(TEST / "rib_harness.c"), str(CODE / "eigrp_linux_redist.c"),
+            "-o", str(cls.binary),
         )
         if build.returncode:
             raise AssertionError(build.stdout + build.stderr)

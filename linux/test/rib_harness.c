@@ -10,6 +10,43 @@
 #include <sys/wait.h>
 
 #include "../code/eigrp_linux_rib.c"
+#include "eigrp_sys.h"
+
+/* The selected-route tests do not subscribe to redistribution. Link its
+ * production observer, with only the portable AF callbacks stubbed here. */
+void eigrp_metric_values_convert(const eigrp_metric_values_t *values,
+				 eigrp_metrics_t *metric)
+{
+	(void)values;
+	memset(metric, 0, sizeof(*metric));
+}
+
+eigrp_result_t eigrp_sys_interface_walk(eigrp_instance_t *instance,
+					eigrp_sys_interface_walk_cb callback,
+					void *arg)
+{
+	(void)instance;
+	(void)callback;
+	(void)arg;
+	return EIGRP_RESULT_NOT_FOUND;
+}
+
+eigrp_result_t eigrp_rib_redist_add(eigrp_instance_t *instance,
+				    const eigrp_rib_route_t *route)
+{
+	(void)instance;
+	(void)route;
+	abort();
+}
+
+eigrp_result_t eigrp_rib_redist_del(eigrp_instance_t *instance,
+				    const eigrp_rib_route_t *route)
+{
+	(void)instance;
+	(void)route;
+	abort();
+}
+
 
 static eigrp_afi_t test_afi = EIGRP_AFI_IPV4;
 static eigrp_vrf_id_t test_vrf = EIGRP_VRF_DEFAULT;

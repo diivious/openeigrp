@@ -1,0 +1,16 @@
+# Portable IPv6 host-source contract; kernel notifications are tested in C.
+schema: eigrp-uut-test/v1
+name: linux-redistribution-ipv6-subscription-withdraw-recover
+topology: ../examples/ipv6-basic-core.yaml
+steps:
+  - start: all
+  - redistribute-add: {uut: r1, source: static}
+  - source-route-add: {uut: r1, prefix: '2001:db8:100::73/128', metric: 20}
+  - validate-route: {uut: r2, prefix: '2001:db8:100::73/128', table: rib, present: true, timeout: 18}
+  - source-route-remove: {uut: r1, prefix: '2001:db8:100::73/128'}
+  - validate-route: {uut: r2, prefix: '2001:db8:100::73/128', table: rib, present: false, timeout: 18}
+  - source-route-add: {uut: r1, prefix: '2001:db8:100::73/128', metric: 30}
+  - validate-route: {uut: r2, prefix: '2001:db8:100::73/128', table: rib, present: true, timeout: 18}
+  - redistribute-remove: {uut: r1, source: static}
+  - validate-route: {uut: r2, prefix: '2001:db8:100::73/128', table: rib, present: false, timeout: 18}
+  - stop: all

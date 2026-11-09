@@ -9,8 +9,9 @@ installation, withdrawal, instance teardown, and initialization/finish
 contract. The portable engine determines the successors, weighted sharing,
 route type and administrative distance. The Linux backend never invokes DUAL,
 processes EIGRP packets, redistributes routes, or links to the virtual-wire
-RIB. The `eigrp_rib_redistribute_add/remove` entry points intentionally return
-`EIGRP_RESULT_NOT_IMPLEMENTED` until redistribution is implemented.
+RIB. The `eigrp_rib_redistribute_add/remove` entry points are implemented by
+`eigrp_linux_redist.c`, a separate read-only Netlink observer. It does not
+share or adopt the selected-route ownership records in this file.
 
 Default-VRF IPv4/IPv6 unicast routes are installed in `RT_TABLE_MAIN` with
 `RTPROT_EIGRP` (192). `RTA_PRIORITY` is the portable `install.admin_dist`
@@ -93,3 +94,73 @@ withdrawals could take superlinear time. Before high-prefix-count production
 use, add a bounded route-notification cache or a kernel-supported filtered
 lookup and execute large-table reconcile tests. Do not claim 100K-route
 qualification from the small namespace tests.
+
+
+## Linux redistribution observation — Task 8
+
+`linux/code/eigrp_linux_redist.c` observes `RT_TABLE_MAIN` unicast IPv4 and
+IPv6 routes through a separate `NETLINK_ROUTE` socket subscribed to
+`RTMGRP_IPV4_ROUTE` and `RTMGRP_IPV6_ROUTE`. The monitor binds before requesting
+its initial IPv4 and IPv6 route dumps. Notifications that arrive during either
+dump are queued (4 MiB bound) and applied after both dump streams complete.
+Only kernel-sourced routes (`RTPROT_KERNEL`, connected) and explicit static
+routes (`RTPROT_STATIC` or iproute2's `RTPROT_BOOT`, static) are candidates.
+All other protocols, including `RTPROT_EIGRP` (192), are excluded. As a
+result, neither this process's installed EIGRP routes nor another daemon's
+protocol-192 entries are fed back to the core.
+
+Subscriptions are scoped to the exact EIGRP runtime, address family and
+`{source protocol, route instance}`. Only connected and static, with a zero
+route-instance, and the default VRF are supported. Other sources or VRFs return
+`EIGRP_RESULT_UNSUPPORTED`. A duplicate subscription is idempotent. A new
+subscription replays all eligible current kernel routes; removal stops further
+host notifications. The portable configuration target owns the actual DUAL
+withdrawal before unsubscribing. Instance deletion and RIB finish retire all
+monitor-owned references and descriptors.
+
+Each normalized event contains the canonical prefix, source, copied next hops,
+Linux priority as a **host scalar** (not an EIGRP seed vector), and interface
+index. Linux realms are not EIGRP route tags: the tag is zero. For connected
+and interface-only static routes, the host reads the current interface
+bandwidth/MTU from `eigrp_sys_interface_walk()` and supplies the ordinary EIGRP
+interface vector defaults for delay, reliability and load. Gateway static
+routes supply no implicit seed; the portable core applies the configured
+`redistribute ... metric` or `default-metric`, or declines advertisement.
+Policy, prefix limits, metric selection, topology ownership, DUAL, RTP and
+packetization remain unchanged. Unsupported indirect kernel next-hop objects
+(`RTA_NH_ID`) and cross-family next hops (`RTA_VIA`) are not imported.
+
+Kernel routing can retain multiple routes for the same prefix at different
+priorities or with different route protocols. The observer does **not** choose a
+preferred route. If more than one candidate maps to the same portable
+`{source, prefix}`, the prefix is withdrawn until the ambiguity clears. This
+is a fail-closed ingestion rule, not a competing route-selection algorithm.
+
+The host must register `eigrp_linux_redist_fd()` in its scheduler and call
+`eigrp_linux_redist_process()` when readable; a fault can replace that fd.
+The host must then register the new fd. Loss, truncated/malformed Netlink
+frames, failed dumps, or `NLM_F_DUMP_INTR` trigger a new snapshot and a
+snapshot-versus-cache diff. `eigrp_linux_redist_resync()` is also callable
+after interface-metric changes, or periodically, and refreshes existing route
+vectors. This is a host-pumped service; it owns **no** threads or scheduler.
+The host must serialize pumping with AF-instance destruction. When temporary
+core event enqueue fails, a future process call attempts a full refresh.
+
+`linux/test/test_redist.py` compiles and exercises the production observer,
+with crafted malformed/duplicate/replace cases and real namespace route
+add/delete/replacement/Netlink reconnect tests. `eigrp/test/uut/linux-redist/`
+has separate portable IPv4/IPv6 YAML scenarios for snapshot/replay,
+subscriptions and withdrawal. These YAML scenarios use the existing virtual
+wire RIB, not the native Linux observer; the Linux daemon cannot yet be
+run under Netlab because no standalone `openeigrpd` executable or host event
+loop is implemented.
+
+### Operational limits
+
+The monitor currently copies its normalized cache for a changed batch and
+compares subscribed snapshots. Notifications for unsupported protocols avoid
+this copy. Kernel dumps, mass updates and high-prefix-scale performance have
+not been qualified for 100K routes; bulk stress and a daemon host-loop gate
+remain required. No mutable Linux table entry is treated as proof of process
+ownership. Netlink source snapshots report observed routes, not a
+process-identity proof.

@@ -21,13 +21,16 @@ eigrp_linux_packet.o: eigrp_linux_packet.c eigrp_linux_packet.h ../../eigrp/code
 libeigrp_linux_packet.a: eigrp_linux_packet.o
 	$(AR) rcs $@ $^
 
-eigrp_linux_rib.o: eigrp_linux_rib.c eigrp_linux_rib.h ../../eigrp/code/eigrp_rib.h
+eigrp_linux_rib.o: eigrp_linux_rib.c eigrp_linux_rib.h eigrp_linux_redist.h ../../eigrp/code/eigrp_rib.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-libeigrp_linux_rib.a: eigrp_linux_rib.o
+eigrp_linux_redist.o: eigrp_linux_redist.c eigrp_linux_redist.h ../../eigrp/code/eigrp_rib.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+libeigrp_linux_rib.a: eigrp_linux_rib.o eigrp_linux_redist.o
 	$(AR) rcs $@ $^
 
 clean:
 	rm -f eigrp_linux_interface.o libeigrp_linux_interface.a \
 		eigrp_linux_packet.o libeigrp_linux_packet.a \
-		eigrp_linux_rib.o libeigrp_linux_rib.a
+		eigrp_linux_rib.o eigrp_linux_redist.o libeigrp_linux_rib.a

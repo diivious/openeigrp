@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include "eigrp_linux_rib.h"
+#include "eigrp_linux_redist.h"
 #include "eigrp_rib.h"
 
 #ifndef RTPROT_EIGRP
@@ -711,6 +712,8 @@ void eigrp_rib_finish(void)
 {
 	struct eigrp_linux_rib_entry *entry;
 
+	eigrp_linux_redist_stop();
+
 	pthread_mutex_lock(&rib_lock);
 	for (entry = rib.entries; entry; entry = entry->next) {
 		entry->want = false;
@@ -725,6 +728,8 @@ void eigrp_rib_finish(void)
 void eigrp_rib_instance_delete(eigrp_instance_t *eigrp)
 {
 	struct eigrp_linux_rib_entry *entry, *next;
+
+	eigrp_linux_redist_instance_delete(eigrp);
 
 	pthread_mutex_lock(&rib_lock);
 	for (entry = rib.entries; entry; entry = next) {
@@ -825,23 +830,4 @@ eigrp_result_t eigrp_linux_rib_reconcile(void)
 	}
 	pthread_mutex_unlock(&rib_lock);
 	return result;
-}
-
-/* Redistribution is a separate task. Never pretend that a subscription was
- * successfully installed or leak host route events into the portable core. */
-eigrp_result_t eigrp_rib_redistribute_add(eigrp_instance_t *eigrp,
-					  const eigrp_redist_source_t *source)
-{
-	(void)eigrp;
-	(void)source;
-	return EIGRP_RESULT_NOT_IMPLEMENTED;
-}
-
-eigrp_result_t
-eigrp_rib_redistribute_remove(eigrp_instance_t *eigrp,
-			      const eigrp_redist_source_t *source)
-{
-	(void)eigrp;
-	(void)source;
-	return EIGRP_RESULT_NOT_IMPLEMENTED;
 }
