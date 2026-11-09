@@ -25,8 +25,8 @@ make linux
 ```
 
 This builds the portable EIGRP core, shared Unix support, and the native
-interface, packet, Netlink RIB, read-only route-observation and native
-policy-evaluation libraries. On Linux, `make all` also runs
+interface, packet, Netlink RIB, read-only route-observation, native
+policy-evaluation, and local management IPC libraries. On Linux, `make all` also runs
 this build before the existing style, UUT, and scale checks. On non-Linux
 hosts, `make all` retains the portable build and test flow; `make linux`
 explicitly reports that a Linux host is required. `make clean` removes the
@@ -80,3 +80,21 @@ SIGHUP reload is yet wired to an operational daemon.** Do not use the initial
 semantic commit API as a substitute for a failure-atomic live reload. The
 transaction design and remaining integration requirements are documented in
 `linux/specs/configuration.md` and `linux/specs/policy-authentication.md`.
+
+## Local management IPC
+
+`make linux` builds `libeigrp_linux_mgnt.a`, a local Unix-domain control
+socket with versioned framing, bounded JSON-line state pages, SO_PEERCRED
+read-only/privileged authorization and nonblocking multi-client operation.
+It reads portable protocol state through `eigrp_mgnt.h`; clearing the event
+log is the only exposed privileged command. No `oectl` client is supplied.
+
+The host must call `eigrp_linux_mgnt_start()` with a synchronous safe
+protocol-context executor and stop the server before destroying core state.
+There is still no runnable native `openeigrpd` in this branch, so daemon
+startup wiring and real live-AF concurrency remain untested. The public
+management topology walker lacks cursor support; IPC offsets are therefore
+bounded and large-topology pagination is incomplete. See
+[`specs/management-ipc.md`](specs/management-ipc.md) for the protocol,
+security and scale contract. Run `python3 linux/test/test_mgnt.py` for the
+real AF_UNIX server tests.

@@ -62,6 +62,7 @@ check: ## Run style validation and its executable unit tests (SOURCE=changed|all
 	@case '$(SOURCE)' in ''|changed|all) ;; *) echo 'error: check SOURCE must be changed or all' >&2; exit 2 ;; esac
 	$(PYTHON) tools/style-check.py $(if $(filter all,$(SOURCE)),--all,$(if $(STYLE_CHECK_BASE),--base $(STYLE_CHECK_BASE)))
 	$(PYTHON) tools/test/test_style_check.py
+	$(PYTHON) tools/test/test_style_fix.py
 	$(PYTHON) -m unittest -q tools.test.test_make_targets \
 	  tools.test.test_frr_release_selection tools.test.test_docker_source_selection
 
