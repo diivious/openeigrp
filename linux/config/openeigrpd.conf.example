@@ -1,0 +1,24 @@
+! Native OpenEIGRP named-mode configuration example.
+! Syntax can be checked with: openeigrpd-config -t -f PATH
+router eigrp example
+ address-family ipv4 unicast autonomous-system 100
+  eigrp router-id 192.0.2.1
+  network 192.0.2.0 0.0.0.255
+  af-interface eth0
+   hello-interval 5
+   hold-time 15
+   bandwidth 100000
+   delay 10
+  exit-af-interface
+  topology base
+   default-metric 100000 10 255 1 1500
+   redistribute connected
+  exit-af-topology
+ exit-address-family
+ address-family ipv6 unicast autonomous-system 100
+  eigrp router-id 192.0.2.1
+  af-interface eth0
+   hello-interval 5
+  exit-af-interface
+ exit-address-family
+exit

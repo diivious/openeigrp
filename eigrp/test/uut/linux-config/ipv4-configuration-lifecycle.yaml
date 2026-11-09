@@ -1,0 +1,28 @@
+# Portable semantic configuration lifecycle, not a daemon file/SIGHUP test.
+# Copyright (C) 2026 Donnie V. Savage
+schema: eigrp-uut-test/v1
+name: linux-configuration-semantic-set-withdraw-recover
+topology: ../examples/two-router.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 15}
+  - source-route-add: {uut: r1, prefix: '198.51.100.199/32', metric: 25}
+  - redistribute-add: {uut: r1, source: static}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: false}
+  - default-metric: {uut: r1, bandwidth: 100000, delay: 90, reliability: 255, load: 1, mtu: 1500}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: true, timeout: 15}
+  - default-metric: {uut: r1, bandwidth: 100000, delay: 180, reliability: 255, load: 1, mtu: 1500}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: true, timeout: 15}
+  - redistribute-remove: {uut: r1, source: static}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: false, timeout: 15}
+  - redistribute-add: {uut: r1, source: static}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: true, timeout: 15}
+  # Source withdrawal and recovery while redistribution is configured.
+  - source-route-remove: {uut: r1, prefix: '198.51.100.199/32'}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: false, timeout: 15}
+  - source-route-add: {uut: r1, prefix: '198.51.100.199/32', metric: 25}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: true, timeout: 15}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.199/32'}
+  - validate-route: {uut: r2, prefix: '198.51.100.199/32', table: rib, present: false, timeout: 15}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

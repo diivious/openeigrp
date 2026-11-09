@@ -1,0 +1,34 @@
+.TH OPENEIGRPD.CONF 5 "November 2026" "OpenEIGRP" "File Formats"
+.SH NAME
+openeigrpd.conf \- native OpenEIGRP named-mode configuration
+.SH SYNOPSIS
+.B /etc/openeigrpd.conf
+.SH DESCRIPTION
+A declarative OpenEIGRP configuration file containing named router instances,
+IPv4/IPv6 unicast address families, interface configuration and base-topology
+settings. Lines beginning with ! or # are comments. Nested scopes must be
+closed with exit-af-interface, exit-af-topology, exit-address-family and exit.
+Only the default Linux VRF is currently accepted.
+.SH EXAMPLE
+.nf
+router eigrp example
+ address-family ipv4 unicast autonomous-system 100
+  eigrp router-id 192.0.2.1
+  network 192.0.2.0 0.0.0.255
+  af-interface eth0
+   hello-interval 5
+  exit-af-interface
+ exit-address-family
+exit
+.fi
+.SH VALIDATION
+Run
+.B openeigrpd-config -t -f /etc/openeigrpd.conf
+to check the full file for syntax errors and unsupported directives before
+attempting startup. A successful check does not establish that network
+privileges, host providers or runtime semantic operations will succeed.
+.SH LIMITATIONS
+The native daemon and atomic SIGHUP configuration reload are not yet connected.
+The standalone checker does not install routes or modify EIGRP runtime state.
+See linux/specs/configuration.md for the supported directives and required
+transaction semantics.

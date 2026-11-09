@@ -316,9 +316,10 @@ The flow is:
 
 ```text
 text configuration
-    -> eigrp_unix_config_apply_file()/apply_text()
-    -> parse Unix standalone syntax
-    -> normalize strings/numbers/addresses
+    -> eigrp_unix_config_parse_file()/parse_text()
+    -> strictly validate a complete named-mode document
+    -> normalize and own command values (no portable pointers)
+    -> eigrp_unix_config_commit() at initial daemon startup only
     -> call owning eigrp_cli.h semantic target
     -> return eigrp_result_t + optional error line
 ```
@@ -340,6 +341,12 @@ shutdown / no shutdown
 ```
 
 The Unix parser must not read or write private portable configuration structs.
+The compatibility `apply_file()` and `apply_text()` wrappers stage the entire
+file before invoking any semantic target. Commit is one-shot but not
+transactional: a failed semantic operation may leave a partially initialized
+runtime. Recreate/discard that runtime on startup failure. Do not replay this
+API for live reload; see `linux/specs/configuration.md` for the missing
+failure-atomic transaction requirement.
 
 ## 10. Interface model and notifications
 

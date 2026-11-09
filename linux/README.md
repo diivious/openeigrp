@@ -53,3 +53,22 @@ Run the portable YAML scenarios under `eigrp/test/uut/linux-redist/` to verify
 the unaffected core redistribution/DUAL contract. Netlab daemon
 interoperability remains blocked until the native daemon task connects the
 scheduler, configuration and startup paths.
+
+## Native configuration staging (Task 9 partial)
+
+`make linux` also builds `linux/code/openeigrpd-config`, a syntax-only
+validator of the future `/etc/openeigrpd.conf` configuration:
+
+```sh
+linux/code/openeigrpd-config -t -f linux/config/openeigrpd.conf.example
+python3 linux/test/test_config.py
+```
+
+The staged Unix parser preserves its previous parsed plan after invalid input
+and dispatches initial-load configuration through the portable public semantic
+APIs. It rejects unsupported directives, including unfinished policy features.
+**There is no runnable `openeigrpd` here, so neither startup configuration nor
+SIGHUP reload is yet wired to an operational daemon.** Do not use the initial
+semantic commit API as a substitute for a failure-atomic live reload. The
+transaction design and remaining integration requirements are documented in
+`linux/specs/configuration.md`.

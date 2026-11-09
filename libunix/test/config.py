@@ -25,6 +25,7 @@ def test_named_ipv4_config_reaches_real_semantic_targets(tmp_path):
             f"-I{PUBLIC}",
             f"-I{UNIX}",
             str(UNIX / "eigrp_unix_config.c"),
+            str(UNIX / "eigrp_unix_config_apply.c"),
             str(HARNESS),
             "-o",
             str(binary),

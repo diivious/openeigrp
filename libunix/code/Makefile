@@ -16,7 +16,7 @@ UUT_OBJS := eigrp_uut_interface.o eigrp_uut_rib.o eigrp_uut_segment.o \
             eigrp_uut_wire.o eigrp_uut_policy.o
 
 .PHONY: all clean
-all: libeigrp_unix.a libeigrp_uut.a eigrp_unix_config.o eigrp-wire
+all: libeigrp_unix.a libeigrp_uut.a eigrp_unix_config.o eigrp_unix_config_apply.o eigrp-wire
 
 libeigrp_unix.a: $(UNIX_OBJS)
 	$(AR) rcs $@ $^
@@ -26,7 +26,10 @@ libeigrp_uut.a: $(UUT_OBJS)
 
 # This parser is native-daemon-facing and not part of either shared archive.
 # Continue building it to detect integration errors before the daemon lands.
-eigrp_unix_config.o: eigrp_unix_config.c eigrp_unix_config.h eigrp_unix.h ../../eigrp/code/eigrp_cli.h
+eigrp_unix_config.o: eigrp_unix_config.c eigrp_unix_config.h eigrp_unix_config_private.h eigrp_unix.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+eigrp_unix_config_apply.o: eigrp_unix_config_apply.c eigrp_unix_config_private.h ../../eigrp/code/eigrp_cli.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 eigrp_unix_sys.o: eigrp_unix_sys.c eigrp_unix.h ../../eigrp/code/eigrp_sys.h
@@ -57,7 +60,7 @@ eigrp-wire: eigrp_uut_wire_broker.c eigrp_uut_wire.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ eigrp_uut_wire_broker.c
 
 clean:
-	rm -f $(UNIX_OBJS) $(UUT_OBJS) eigrp_unix_config.o \
+	rm -f $(UNIX_OBJS) $(UUT_OBJS) eigrp_unix_config.o eigrp_unix_config_apply.o \
 	      libeigrp_unix.a libeigrp_uut.a libeigrp-unix-runtime.a \
 	      eigrp_unix_rib.o eigrp_unix_interface.o eigrp_unix_segment.o \
 	      eigrp_unix_wire.o eigrp_unix_policy.o eigrp_log.o eigrp-wire

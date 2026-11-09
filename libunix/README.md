@@ -90,3 +90,14 @@ integration contract is in
 Unix-specific configuration, timer, socket, interface, and routing-table
 objects must not appear in the portable EIGRP API. The FRR and BIRD adapters
 have independent host implementations.
+
+## Native configuration staging
+
+The native parser now provides `eigrp_unix_config_parse_file()` and
+`eigrp_unix_config_parse_text()` for all-or-nothing syntactic validation into
+an owned plan. `eigrp_unix_config_commit()` forwards that plan to the portable
+semantic `eigrp_cli.h` targets once, for initial startup only. A failed
+semantic dispatch is reported as failure, not silently accepted. Runtime
+mutation is not transactionally rolled back: do not use `apply_file()` or
+`apply_text()` on a running daemon as a SIGHUP reload implementation.
+The standalone Linux checker is `linux/code/openeigrpd-config -t`.
