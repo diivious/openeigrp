@@ -23,6 +23,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.eigrp.mkdir()
         self.frr.mkdir()
         self.git(self.eigrp, "init", "-q")
+        self.git(self.eigrp, "branch", "-M", "master")
         self.git(self.frr, "init", "-q")
         for repo in (self.eigrp, self.frr):
             self.git(repo, "config", "user.name", "Release Test")
@@ -49,6 +50,20 @@ class DockerSourceSelectionTest(unittest.TestCase):
         docker.write_text(
             "#!/bin/bash\n"
             "printf '%s\\n' \"$*\" >> \"$DOCKER_TEST_LOG\"\n"
+            "if [[ ${1:-} == run ]]; then\n"
+            "  version=; arch=; stage=\n"
+            "  for arg in \"$@\"; do\n"
+            "    case \"$arg\" in\n"
+            "      PACKAGE_VERSION=*) version=${arg#PACKAGE_VERSION=} ;;\n"
+            "      PACKAGE_ARCH=*) arch=${arg#PACKAGE_ARCH=} ;;\n"
+            "      type=bind,source=*,target=/out) stage=${arg#*source=}; stage=${stage%,target=/out} ;;\n"
+            "    esac\n"
+            "  done\n"
+            "  if [[ -n $version && -n $arch && -n $stage ]]; then\n"
+            "    printf 'fixture' > \"$stage/openeigrpd_${version}_${arch}.deb\"\n"
+            "  fi\n"
+            "  exit 0\n"
+            "fi\n"
             "for arg in \"$@\"; do\n"
             "  case \"$arg\" in\n"
             "    eigrp-source=*)\n"
@@ -83,6 +98,14 @@ class DockerSourceSelectionTest(unittest.TestCase):
         (self.eigrp / "tools").mkdir()
         (self.eigrp / "tools/frr.sh").write_text("#!/bin/sh\n")
         (self.eigrp / "tools/docker.sh").write_bytes(SCRIPT.read_bytes())
+        (self.eigrp / "tools/version.sh").write_bytes(
+            (SCRIPT.parent / "version.sh").read_bytes())
+        (self.eigrp / "tools/version.sh").chmod(0o755)
+        (self.eigrp / "linux/packaging").mkdir(parents=True)
+        for relative in ("tools/package.sh", "linux/packaging/build-packages.sh"):
+            target = self.eigrp / relative
+            target.write_bytes((SCRIPT.parents[1] / relative).read_bytes())
+            target.chmod(0o755)
         (self.eigrp / "docker/Dockerfile").write_text("ARG ALPINE_VERSION=3.21\nRUN echo TAGGED_OLD\n")
         self.write_config("frr-10.7.1", self.frr_old_sha)
         self.commit(self.eigrp)
@@ -93,6 +116,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.git(self.eigrp, "tag", "-a", "rel-1.10.0", "-m", "new")
         (self.eigrp / "docker/Dockerfile").write_text("RUN echo WORKING_BRANCH\n")
         self.commit(self.eigrp)
+        self.git(self.eigrp, "remote", "add", "origin", str(self.eigrp))
 
     @staticmethod
     def git(repo, *args):
@@ -109,10 +133,11 @@ class DockerSourceSelectionTest(unittest.TestCase):
             f"FRR_TAG={tag}\nFRR_SHA={sha}\n"
         )
 
-    def build(self, mode, *args):
+    def build(self, mode, *args, script=None):
         env = dict(os.environ, PATH=str(self.bin) + ":" + os.environ["PATH"],
                    DOCKER_TEST_LOG=str(self.log))
-        result = subprocess.run(["bash", str(SCRIPT), mode, *args], cwd=self.eigrp,
+        result = subprocess.run(["bash", str(script or self.eigrp / "tools/docker.sh"), mode, *args],
+                                cwd=self.eigrp,
                                 env=env, text=True, capture_output=True, timeout=40)
         log = self.log.read_text() if self.log.exists() else ""
         return result, log
@@ -145,6 +170,51 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertIn("WORKING_BRANCH", log)
         self.assertIn("EIGRP_UNCOMMITTED", log)
         self.assertIn("FRR_UNCOMMITTED", log)
+        self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
+        self.assertIn("Image:     openeigrp:dev-test", result.stdout)
+
+    def test_default_local_version_uses_user_test_suffix(self):
+        result, log = self.build("--local", "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.frr))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-", log)
+        self.assertIn("-test", log)
+
+    def test_remote_development_build_uses_shared_version(self):
+        result, log = self.build("--build", "dev-test", "--eigrp-ref",
+                                 "refs/heads/master")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
+        self.assertIn("Image:     ghcr.io/diivious/openeigrp-frr:dev-test", result.stdout)
+
+    def test_unmerged_higher_tag_not_selected_locally(self):
+        self.git(self.eigrp, "checkout", "-qb", "experiment")
+        (self.eigrp / "experiment").write_text("new\n")
+        self.commit(self.eigrp)
+        self.git(self.eigrp, "tag", "rel-9.0.0")
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.frr))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
+
+    def test_docker_and_debian_embed_the_same_version(self):
+        result, log = self.build("--local", "diivious-test",
+                                 "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.frr),
+                                 "--image", "openeigrp:diivious-test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-diivious-test", log)
+        output = self.root / "dist"
+        env = dict(os.environ, PATH=str(self.bin) + ":" + os.environ["PATH"],
+                   DOCKER_TEST_LOG=str(self.log), USER="diivious")
+        package = subprocess.run(
+            [str(self.eigrp / "tools/package.sh"), "--local", "diivious-test",
+             "--platform", "linux/amd64", "--image", "openeigrp:diivious-test",
+             "--output", str(output)],
+            cwd=self.eigrp, env=env, text=True, capture_output=True, timeout=40)
+        self.assertEqual(package.returncode, 0, package.stderr)
+        self.assertTrue((output / "openeigrpd_1.10.0-diivious-test_amd64.deb").exists())
+        self.assertIn("PACKAGE_VERSION=1.10.0-diivious-test", self.log.read_text())
 
     def test_release_ref_cannot_override_its_frr(self):
         result, log = self.build("--build", "1.9.0", "--frr-ref", "refs/heads/main")
@@ -161,7 +231,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         )
         self.commit(self.eigrp)
         self.git(self.eigrp, "tag", "rel-1.8.0")
-        result, log = self.build("--build", "1.8.0")
+        result, log = self.build("--build", "1.8.0", script=SCRIPT)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("historical FRR pin", result.stderr)
         self.assertIn("FRR_OLD", log)

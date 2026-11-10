@@ -16,6 +16,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "linux/packaging/build-deb.sh"
+VERIFIER = ROOT / "linux/packaging/verify-deb.sh"
 CODE = ROOT / "linux/code"
 FIXTURE = r'''
 #include <signal.h>
@@ -57,6 +58,10 @@ def run(*args, check=True, **kwargs):
 class PackagingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.arch = run("dpkg-architecture", "-qDEB_HOST_ARCH").stdout.strip()
+        if cls.arch not in ("amd64", "arm64"):
+            raise unittest.SkipTest(f"unsupported package architecture: {cls.arch}")
+        cls.other_arch = "arm64" if cls.arch == "amd64" else "amd64"
         cls.temp = tempfile.TemporaryDirectory(prefix="openeigrpd-package-")
         cls.work = Path(cls.temp.name)
         source = cls.work / "fixture.c"
@@ -165,6 +170,72 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("./etc/openeigrpd.conf", contents)
         self.assertIn("#!/bin/sh", (ctrl / "postinst").read_text())
         self.assertTrue(os.access(ctrl / "postinst", os.X_OK))
+
+    def test_native_package_architecture(self):
+        for version, package in (("0.0.1", self.first),
+                                 ("0.0.2", self.second)):
+            with self.subTest(version=version):
+                self.assertEqual(package.name,
+                                 f"openeigrpd_{version}_{self.arch}.deb")
+                self.assertEqual(run("dpkg-deb", "-f", package,
+                                     "Architecture").stdout.strip(), self.arch)
+
+    def test_completed_package_verification_rejects_unsafe_artifacts(self):
+        run(VERIFIER, self.first, "0.0.1", self.arch)
+        for version, arch in (("0.0.2", self.arch),
+                              ("0.0.1", self.other_arch)):
+            with self.subTest(version=version, arch=arch):
+                result = run(VERIFIER, self.first, version, arch, check=False)
+                self.assertNotEqual(result.returncode, 0)
+        with tempfile.TemporaryDirectory(dir=self.work) as root:
+            root = Path(root)
+            bad = root / "truncated.deb"
+            bad.write_bytes(b"not a Debian package")
+            self.assertNotEqual(run(VERIFIER, bad, "0.0.1", self.arch,
+                                    check=False).returncode, 0)
+
+            for defect in ("missing-cli", "exposed-config", "setuid-daemon",
+                           "missing-conffile", "external-dependency",
+                           "unexpected-file"):
+                with self.subTest(defect=defect):
+                    package_dir = root / "package"
+                    if package_dir.exists():
+                        shutil.rmtree(package_dir)
+                    shutil.copytree(self.dest, package_dir)
+                    shutil.copytree(self.ctrl, package_dir / "DEBIAN")
+                    control = package_dir / "DEBIAN"
+                    if defect == "missing-cli":
+                        (package_dir / "usr/bin/oectl").unlink()
+                    elif defect == "exposed-config":
+                        (package_dir / "etc/openeigrpd.conf").chmod(0o644)
+                    elif defect == "setuid-daemon":
+                        (package_dir / "usr/sbin/openeigrpd").chmod(0o4755)
+                    elif defect == "missing-conffile":
+                        (control / "conffiles").unlink()
+                    elif defect == "external-dependency":
+                        path = control / "control"
+                        path.write_text(path.read_text().replace(
+                            "Depends: ", "Depends: libfrr9, "))
+                    elif defect == "unexpected-file":
+                        (package_dir / "usr/bin/unexpected").write_text("extra")
+                    bad = root / (defect + ".deb")
+                    run("dpkg-deb", "--build", "--root-owner-group",
+                        package_dir, bad)
+                    result = run(VERIFIER, bad, "0.0.1", self.arch,
+                                 check=False)
+                    self.assertNotEqual(result.returncode, 0,
+                                        f"{defect} accepted: {result.stdout}")
+
+    def test_restrictive_umask_creates_traversable_package(self):
+        # A 077 administrator umask previously made DEBIAN mode 0700,
+        # causing dpkg-deb to refuse to build the package altogether.
+        command = (f'umask 077; exec "{BUILDER}" --version 0.0.9 '
+                   f'--daemon "{self.daemon}" --output "{self.out}"')
+        result = run("sh", "-c", command)
+        package = Path(result.stdout.strip().splitlines()[-1])
+        run(VERIFIER, package, "0.0.9", self.arch)
+        contents = run("dpkg-deb", "--contents", package).stdout
+        self.assertIn("drwxr-xr-x root/root", contents)
 
     def test_credentials_and_service_boundaries(self):
         dest = self.dest

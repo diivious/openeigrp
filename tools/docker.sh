@@ -15,7 +15,7 @@ alpine_version=3.22
 usage() {
     cat <<'USAGE'
 Usage:
-  tools/docker.sh --local [VERSION] [--eigrp-root PATH] [--frr-root PATH]
+  tools/docker.sh --local [LABEL|X.Y.Z] [--eigrp-root PATH] [--frr-root PATH]
                     [--platform linux/amd64|linux/arm64] [--image NAME:TAG]
                     [--jobs N] [--pull-base]
   tools/docker.sh --build VERSION|latest [--eigrp-ref REF] [--frr-ref REF]
@@ -27,12 +27,14 @@ Usage:
   tools/docker.sh --verify [IMAGE:TAG]  # default openeigrp:$USER
 
   --local   Build from local EIGRP and FRR checkouts (including working edits).
-            Default VERSION: $USER; image: openeigrp:VERSION.
+            Default label: $USER-test; image: openeigrp:LABEL.
+            EIGRP version: latest rel-X.Y.Z tag on origin/master + -LABEL.
+            For a release, VERSION=X.Y.Z is preserved unchanged.
             Default FRR root: sibling ../frr (or ~/projects/frr).
   --build   Fetch both repositories from GitHub. VERSION=latest selects the
-            highest rel-X.Y.Z OpenEIGRP tag. Specific X.Y.Z selects rel-X.Y.Z.
+            highest rel-X.Y.Z tag on origin/master. X.Y.Z selects rel-X.Y.Z.
             FRR is pinned by docker/docker.cfg in that OpenEIGRP checkout.
-            Nonrelease versions require --eigrp-ref; --frr-ref may override
+            Nonrelease labels require --eigrp-ref; --frr-ref may override
             FRR only for development builds.
   --deploy  Start a persistent container. Pull an image only if not present.
   --test    Run automated, destructive-on-temporary-volume integration tests;
@@ -44,8 +46,9 @@ Usage:
             BuildKit's cached layers where available (no forced pull).
 
 The Alpine base defaults to alpine:3.22 for both architectures. Docker caches
-base layers and build dependencies. --local does not contact GitHub; --build
-requires GitHub. Neither build mode pushes an image to GHCR.
+base layers and build dependencies. Development builds fetch release metadata
+from origin/master (Git access required); --build also fetches sources from
+GitHub. Neither build mode pushes an image to GHCR.
 USAGE
 }
 
@@ -54,7 +57,7 @@ release_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 release_git_tag() { [[ "$1" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 frr_git_tag() { [[ "$1" =~ ^frr-[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 source_git_tag() { release_git_tag "$1" || frr_git_tag "$1"; }
-version_valid() { [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]]; }
+version_valid() { [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]; }
 ref_valid() {
     source_git_tag "$1" ||
       [[ "$1" =~ ^[0-9a-f]{40}$ || "$1" =~ ^refs/pull/[0-9]+/merge$ ||
@@ -82,13 +85,10 @@ resolve_sha() {
 }
 
 
-# Select the highest numeric rel-X.Y.Z tag. Avoid sort -V (not available in
-# macOS BSD sort). Annotated tags may also produce ^{} rows; deduplicate.
+# Both integration artifacts must resolve the same release baseline. The
+# helper rejects tags not reachable from origin/master.
 latest_version() {
-    local refs
-    refs="$(git ls-remote --tags "$eigrp_url" 'refs/tags/rel-*')" || return 1
-    awk '{sub(/^refs\/tags\/rel-/, "", $2); sub(/\^\{\}$/, "", $2); if ($2 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/) print $2}' <<< "$refs" | \
-        sort -u | sort -t . -k1,1n -k2,2n -k3,3n | tail -1
+    "$root/tools/version.sh" --latest --repo "$root"
 }
 
 # The selected OpenEIGRP release determines both FRR tag and the exact
@@ -267,7 +267,7 @@ case "$operation" in
     *) usage >&2; exit 2 ;;
 esac
 
-version="${USER:-$(id -un)}"
+version="${USER:-$(id -un)}-test"
 if [[ "$operation" == --build ]]; then
     [[ $# -gt 0 && "$1" != --* ]] || die '--build requires a version'
     version="$1"; shift
@@ -280,10 +280,17 @@ if [[ "$operation" == --build && "$version" == latest ]]; then
     release_version "$version" || die 'no rel-X.Y.Z OpenEIGRP tags found'
     printf 'Selected latest OpenEIGRP release: rel-%s\n' "$version"
 fi
+# Image references keep the developer's short label; the embedded version
+# is release-qualified, including for remote development builds.
+image_tag="$version"
+if [[ "$operation" == --build ]] && ! release_version "$version"; then
+    version="$("$root/tools/version.sh" --local "$image_tag" --repo "$root")" ||
+        die 'cannot resolve development version from origin/master'
+fi
 if [[ "$operation" == --build ]]; then
-    image="ghcr.io/diivious/openeigrp-frr:$version"
+    image="ghcr.io/diivious/openeigrp-frr:$image_tag"
 else
-    image="openeigrp:$version"
+    image="openeigrp:$image_tag"
 fi
 platform="$(host_platform)"
 jobs=4
@@ -326,6 +333,12 @@ if [[ "$operation" == --local ]]; then
     frr_root="$(cd "$frr_root" && pwd)"
     require_git_checkout "$eigrp_root" EIGRP
     require_git_checkout "$frr_root" FRR
+    if ! release_version "$version"; then
+        label="$version"
+        version="$("$root/tools/version.sh" --local "$label" --repo "$eigrp_root")" ||
+            die 'cannot resolve local OpenEIGRP version from origin/master'
+        printf 'OpenEIGRP development version: %s\n' "$version"
+    fi
     [[ -f "$eigrp_root/tools/frr.sh" && -f "$frr_root/bootstrap.sh" ]] || die 'incorrect local source roots'
     eigrp_sha="$(git -C "$eigrp_root" rev-parse HEAD)"
     frr_sha="$(git -C "$frr_root" rev-parse HEAD)"

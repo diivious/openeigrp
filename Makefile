@@ -69,7 +69,8 @@ check: ## Run style validation and its executable unit tests (SOURCE=changed|all
 	$(PYTHON) tools/test/test_style_check.py
 	$(PYTHON) tools/test/test_style_fix.py
 	$(PYTHON) -m unittest -q tools.test.test_make_targets \
-	  tools.test.test_frr_release_selection tools.test.test_docker_source_selection
+	  tools.test.test_frr_release_selection tools.test.test_docker_source_selection \
+	  tools.test.test_version tools.test.test_package
 
 uut: build ## Run pytest + YAML scenarios; SUITE or SCENARIO selects a subset.
 	$(PYTHON) -m pytest -q libunix/test/test_archive_boundaries.py

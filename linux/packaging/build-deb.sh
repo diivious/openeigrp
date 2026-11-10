@@ -3,6 +3,9 @@
 # Copyright (C) 2026 Donnie V. Savage
 # Build a native OpenEIGRP Debian package from local, already built sources.
 set -eu
+# Debian control and installed directories must stay traversable even when
+# the invoking administrator uses a restrictive umask (e.g. 077).
+umask 022
 
 usage()
 {
@@ -78,7 +81,9 @@ check_binary "$root/linux/code/oectl"
 check_binary "$root/linux/code/openeigrpd-config"
 
 output=$(mkdir -p -- "$output" && CDPATH= cd -- "$output" && pwd)
-work=$(mktemp -d)
+# Keep the verified artifact on the output filesystem so publication is an
+# atomic rename; failed validation must never leave a new public .deb behind.
+work=$(mktemp -d "$output/.openeigrpd-stage.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 pkg="$work/package"
 mkdir -p "$pkg/DEBIAN" "$pkg/etc" "$pkg/usr/sbin" "$pkg/usr/bin" \
@@ -138,5 +143,7 @@ Description: Native Linux EIGRP routing daemon and management client
 CTRL
 filename="openeigrpd_${version}_${arch}.deb"
 # The archive is built by an unprivileged user without fakeroot.
-dpkg-deb --build --root-owner-group "$pkg" "$output/$filename" >/dev/null
+dpkg-deb --build --root-owner-group "$pkg" "$work/$filename" >/dev/null
+"$root/linux/packaging/verify-deb.sh" "$work/$filename" "$version" "$arch"
+mv -f -- "$work/$filename" "$output/$filename"
 printf '%s\n' "$output/$filename"

@@ -50,6 +50,11 @@ rejects non-native ELF executables and unsupported architectures; it does
 not cross-compile. It runs the existing Linux CLI/config-validator build,
 derives actual shared-library dependencies using `dpkg-shlibdeps`, and
 assembles the package unprivileged with `dpkg-deb --root-owner-group`.
+The final archive is independently checked for package identity, architecture,
+configuration ownership/mode, required executables, service files, and routing-suite
+dependencies before it is reported as built or published. The builder
+normalizes directory modes so an administrator's restrictive shell `umask`
+cannot produce an uninstallable package or inaccessible installed paths.
 Build on the oldest distribution you intend to support, or use a clean
 per-distribution builder, because binary glibc requirements are build-host
 specific. Only native amd64 package construction has been exercised here;
@@ -61,6 +66,7 @@ Inspect before installing:
 dpkg-deb --info dist/openeigrpd_*.deb
 dpkg-deb --contents dist/openeigrpd_*.deb
 dpkg-deb --ctrl-tarfile dist/openeigrpd_*.deb | tar -tvf -
+linux/packaging/verify-deb.sh dist/openeigrpd_0.1.0_amd64.deb 0.1.0 amd64
 ```
 
 ## Dual-architecture builds on an ARM64 Mac
@@ -203,3 +209,73 @@ real daemon, actual IP proto-88 peers and Netlab scenarios; verify the
 control socket group and capability restrictions, graceful withdrawal,
 shutdown and restart. No native daemon or live systemd PID 1 is present in
 the provided baseline, so those release gates cannot yet pass.
+
+## Developer entrypoint: `tools/package.sh`
+
+The repository's `tools/package.sh` is the Debian packaging counterpart to
+`tools/docker.sh`. It uses the local working tree (including uncommitted edits),
+and executes Linux build operations inside Docker rather than requiring a Linux
+compiler on macOS.
+
+Both integrations resolve the development version from the highest numeric
+`rel-X.Y.Z` tag reachable from the freshly fetched `origin/master`. A release
+must be merged into `master` before it advances development versioning. If
+Git metadata is unavailable or the fetch fails, the scripts stop rather than
+manufacture a fallback version.
+
+For example, with `rel-0.5.0` on `master`:
+
+```sh
+./tools/docker.sh --local diivious-test --platform linux/amd64 \
+    --image openeigrp:diivious-test
+./tools/package.sh --local diivious-test --platform linux/amd64 \
+    --image openeigrp:diivious-test
+# Both embed 0.5.0-diivious-test.
+# Docker image reference: openeigrp:diivious-test
+# Debian output: dist/openeigrpd_0.5.0-diivious-test_amd64.deb
+```
+
+Omitting a local label uses `$USER-test`; `--local X-Y` uses `0.5.0-X-Y`.
+After `rel-0.6.0` is merged to `master`, the same commands embed
+`0.6.0-diivious-test`. An explicitly requested release version (e.g.
+`--local 0.6.0`) stays `0.6.0`, subject to the Docker release-source checks.
+Run `tools/version.sh --latest` to inspect the fetched release baseline.
+
+`--image` in `tools/package.sh` identifies the corresponding Docker image;
+its tag must match the `--local` label. The image is **not** executed or
+required for packaging. Use `--builder-image debian:12` (default) or
+`--builder-image ubuntu:24.04` to select the real Debian package builder.
+An Alpine OpenEIGRP runtime image is not a suitable package builder.
+
+```sh
+# Compile and test fixture-based dpkg install/upgrade/remove/purge in Docker.
+tools/package.sh --uut
+tools/package.sh --uut --platform linux/arm64 --builder-image ubuntu:24.04
+
+# Build the production package from the working tree (real daemon required).
+tools/package.sh --local diivious-test --platform linux/amd64 \
+    --image openeigrp:diivious-test
+tools/package.sh --local X-Y --platform linux/arm64 \
+    --image openeigrp:X-Y --builder-image ubuntu:24.04
+
+# Optional output override.
+tools/package.sh --local X-Y --platform linux/amd64 --output /tmp/packages
+```
+
+The local working tree is mounted read-only and copied into the builder.
+`--uut` does not publish test fixtures, and `--local` refuses to publish a
+production package without a real native `openeigrpd`. Neither mode enables
+routing. A separate production release build uses the exact release version
+without a development suffix.
+
+Wrapper tests that do not require a Docker daemon:
+
+```sh
+python3 tools/test/test_version.py
+python3 tools/test/test_package.py
+python3 tools/test/test_docker_source_selection.py
+python3 linux/test/test_package_builds.py
+```
+
+`--uut` covers the Debian package lifecycle, not portable EIGRP YAML UUT
+scenarios or live systemd routing, which must be qualified separately.

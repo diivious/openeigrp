@@ -174,7 +174,15 @@ Numeric local `--local X.Y.Z` is a special reproducibility check: it requires
 both clean working trees, the matching `rel-X.Y.Z` OpenEIGRP tag at HEAD,
 and FRR HEAD equal to the `FRR_SHA` pinned in the current `docker/docker.cfg`.
 Normal `make docker` intentionally uses a nonrelease `${USER}-test` tag and
-does not impose those restrictions.
+does not impose those restrictions. Both the Docker OCI version label and the
+native Debian package version are derived from the highest `rel-X.Y.Z` tag
+reachable from `origin/master` plus `-LABEL` for development builds. Thus
+`--local diivious-test --image openeigrp:diivious-test` yields image tag
+`diivious-test` while its embedded version is `0.5.0-diivious-test` when
+`rel-0.5.0` is the latest release on master. Once `rel-0.6.0` is merged to
+master, the embedded version becomes `0.6.0-diivious-test`. The local mode
+refreshes release metadata from Git and fails if it cannot do so; `--build latest` also uses the master-reachable release set. Tags on branches not yet
+merged into master cannot advance the shared baseline.
 
 All modes use the same managed FRR patch/install/configure/build pipeline.
 Patch drift stops the build. Labels retain EIGRP/FRR commit identities;
@@ -215,8 +223,9 @@ docker image inspect openeigrp:docker-test --format '{{json .Config.Labels}}'
   produces `ghcr.io/diivious/openeigrp-frr:0.1.0`; the `rel-` prefix is **not**
   part of the Docker image tag.
 - Commit, review, and verify sources **before** tagging. Tag the intended
-  OpenEIGRP commit (including the Docker workflow). Tags may point to `docker`
-  or `master`; a merge to `master` is not a prerequisite for tag publishing.
+  OpenEIGRP commit (including the Docker workflow). A release tag on a
+  development branch can still be built explicitly, but does not become the
+  default development version until its commit is reachable from `master`.
 - Record the compatible FRR repository, tag and commit in `docker/docker.cfg`
   **before** tagging, and commit that file. Both platforms build from the
   OpenEIGRP release commit and its configured FRR tag/verified SHA.
@@ -299,7 +308,7 @@ The test performs these checks:
 A successful test reports a message similar to:
 
 ```text
-PASS: openeigrp:docker-test — FRR, OpenEIGRP, AS 4453, version docker-test, save/restart, optional eigrpd
+PASS: openeigrp:docker-test — FRR, OpenEIGRP, AS 4453, version X.Y.Z-docker-test, save/restart, optional eigrpd
 ```
 
 The integration test uses a temporary container and Docker volume, removing
