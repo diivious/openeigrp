@@ -4,10 +4,12 @@ Copyright (C) 2026 Donnie V. Savage
 
 ## Baseline and current status
 
-`linux-support` has native interface, packet, and RIB libraries, but does not
-have a runnable `openeigrpd` process or an event loop binding these libraries
-to the portable EIGRP runtime. This task cannot responsibly install a SIGHUP
-handler into a non-existent daemon.
+`linux-support` now contains a runnable `openeigrpd` process, connecting
+the existing native interface, packet, Netlink RIB/redistribution, policy,
+configuration and IPC services to the portable AF scheduler. The daemon
+loads the staged semantic plan once during startup, tears down on semantic
+failure and rejects SIGHUP without mutating the active configuration.
+Initial-load commit remains nontransactional by design.
 
 The Unix parser now has two deliberately separate operations:
 
@@ -112,5 +114,7 @@ initial-load parser would violate the invalid-reload requirement.
 repeated staging, semantic dispatch, failure propagation and CLI tests.
 `eigrp/test/uut/config-lifecycle/ipv4-configuration-lifecycle.yaml` exercises
 actual *portable* configuration change effects in UUT, not a Linux daemon
-reload. Native restart, SIGHUP, parser-to-kernel full-path and Netlab Cisco
-interoperability cannot be tested until the native daemon is integrated.
+reload. Native startup, SIGHUP rejection, and IPC lifecycle are exercised in
+`linux/test/test_daemon.py`. Raw protocol-88 adjacency, kernel RIB mutations,
+privileged Netlab/Cisco interoperability and real systemd lifecycle remain
+qualification requirements outside a restricted container.

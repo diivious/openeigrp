@@ -19,7 +19,7 @@ UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topolo
 help: ## Show developer commands and selectors.
 	@printf '%s\n' 'Usage: make [target] [options]' '' 'Targets:' \
 	  '  build          Build portable EIGRP and Unix support (default: make)' \
-	  '  linux          Build portable/Unix support and native Linux libraries' \
+	  '  linux          Build native openeigrpd, CLI and Linux services' \
 	  '  packages       Build Debian amd64 and arm64 packages in Docker (VERSION=X.Y.Z)' \
 	  '  all            Build (including Linux on Linux), full check, UUT and quick scale' \
 	  '  check          Style validation and style-checker unit tests' \
@@ -55,7 +55,7 @@ portable-build:
 build: portable-build ## Build portable EIGRP and Unix support.
 	$(MAKE) -C libunix/code
 
-linux: build ## Build the native Linux libraries (Linux hosts only).
+linux: build ## Build the native daemon, CLI and Linux services (Linux only).
 	@test "$(HOST_OS)" = Linux || { echo "error: make linux requires a Linux host" >&2; exit 1; }
 	$(MAKE) -C linux/code
 

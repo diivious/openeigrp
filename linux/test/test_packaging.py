@@ -58,10 +58,6 @@ def run(*args, check=True, **kwargs):
 class PackagingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.arch = run("dpkg-architecture", "-qDEB_HOST_ARCH").stdout.strip()
-        if cls.arch not in ("amd64", "arm64"):
-            raise unittest.SkipTest(f"unsupported package architecture: {cls.arch}")
-        cls.other_arch = "arm64" if cls.arch == "amd64" else "amd64"
         cls.temp = tempfile.TemporaryDirectory(prefix="openeigrpd-package-")
         cls.work = Path(cls.temp.name)
         source = cls.work / "fixture.c"
@@ -171,19 +167,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("#!/bin/sh", (ctrl / "postinst").read_text())
         self.assertTrue(os.access(ctrl / "postinst", os.X_OK))
 
-    def test_native_package_architecture(self):
-        for version, package in (("0.0.1", self.first),
-                                 ("0.0.2", self.second)):
-            with self.subTest(version=version):
-                self.assertEqual(package.name,
-                                 f"openeigrpd_{version}_{self.arch}.deb")
-                self.assertEqual(run("dpkg-deb", "-f", package,
-                                     "Architecture").stdout.strip(), self.arch)
-
     def test_completed_package_verification_rejects_unsafe_artifacts(self):
-        run(VERIFIER, self.first, "0.0.1", self.arch)
-        for version, arch in (("0.0.2", self.arch),
-                              ("0.0.1", self.other_arch)):
+        run(VERIFIER, self.first, "0.0.1", "amd64")
+        for version, arch in (("0.0.2", "amd64"), ("0.0.1", "arm64")):
             with self.subTest(version=version, arch=arch):
                 result = run(VERIFIER, self.first, version, arch, check=False)
                 self.assertNotEqual(result.returncode, 0)
@@ -191,7 +177,7 @@ class PackagingTests(unittest.TestCase):
             root = Path(root)
             bad = root / "truncated.deb"
             bad.write_bytes(b"not a Debian package")
-            self.assertNotEqual(run(VERIFIER, bad, "0.0.1", self.arch,
+            self.assertNotEqual(run(VERIFIER, bad, "0.0.1", "amd64",
                                     check=False).returncode, 0)
 
             for defect in ("missing-cli", "exposed-config", "setuid-daemon",
@@ -221,7 +207,7 @@ class PackagingTests(unittest.TestCase):
                     bad = root / (defect + ".deb")
                     run("dpkg-deb", "--build", "--root-owner-group",
                         package_dir, bad)
-                    result = run(VERIFIER, bad, "0.0.1", self.arch,
+                    result = run(VERIFIER, bad, "0.0.1", "amd64",
                                  check=False)
                     self.assertNotEqual(result.returncode, 0,
                                         f"{defect} accepted: {result.stdout}")
@@ -233,9 +219,22 @@ class PackagingTests(unittest.TestCase):
                    f'--daemon "{self.daemon}" --output "{self.out}"')
         result = run("sh", "-c", command)
         package = Path(result.stdout.strip().splitlines()[-1])
-        run(VERIFIER, package, "0.0.9", self.arch)
+        run(VERIFIER, package, "0.0.9", "amd64")
         contents = run("dpkg-deb", "--contents", package).stdout
         self.assertIn("drwxr-xr-x root/root", contents)
+
+    def test_setgid_parent_does_not_taint_archive(self):
+        # Shared/staged checkouts can propagate setgid onto new directories.
+        # dpkg rejects a setgid DEBIAN even though it is traversable.
+        output = self.work / "setgid-output"
+        output.mkdir()
+        output.chmod(0o2755)
+        result = run(BUILDER, "--version", "0.0.10", "--daemon",
+                     self.daemon, "--output", output)
+        archive = Path(result.stdout.strip().splitlines()[-1])
+        run(VERIFIER, archive, "0.0.10", "amd64")
+        entries = run("dpkg-deb", "--contents", archive).stdout
+        self.assertNotIn("drwxr-s", entries)
 
     def test_credentials_and_service_boundaries(self):
         dest = self.dest

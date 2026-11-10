@@ -49,7 +49,10 @@ to check the full file for syntax errors and unsupported directives before
 attempting startup. A successful check does not establish that network
 privileges, host providers or runtime semantic operations will succeed.
 .SH LIMITATIONS
-The native daemon and atomic SIGHUP configuration reload are not yet connected.
+The native daemon performs initial-load semantic configuration and rejects
+invalid runtime configuration with a nonzero exit and cleanup.
+SIGHUP is currently rejected without changing live state; operators should
+validate configuration offline and restart the service to apply it.
 The standalone checker does not install routes or modify EIGRP runtime state.
 See linux/specs/configuration.md for the supported directives and required
 transaction semantics.

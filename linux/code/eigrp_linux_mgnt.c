@@ -55,6 +55,7 @@ struct mgnt_request {
 	uint16_t op;
 	struct mgnt_selector selector;
 	struct mgnt_response response;
+	eigrp_instance_context_t context;
 	eigrp_result_t result;
 };
 
@@ -421,33 +422,15 @@ mgnt_lookup_protocol(const eigrp_status_protocol_state_t *s, void *arg)
 	return EIGRP_RESULT_CONFLICT;
 }
 
-static eigrp_result_t mgnt_query(void *arg)
+static eigrp_result_t mgnt_query_scoped(void *arg)
 {
 	struct mgnt_request *req = arg;
 	struct mgnt_response *r = &req->response;
-	struct mgnt_lookup lookup = {.selector = req->selector};
-	eigrp_instance_context_t *context = &lookup.context;
+	eigrp_instance_context_t *context = &req->context;
 	eigrp_eventlog_state_t event_state;
 	eigrp_result_t result;
 	char line[360];
 	size_t i;
-
-	if (req->op == EIGRP_LINUX_MGNT_CAPABILITIES)
-		return mgnt_capabilities(r);
-	if (req->op == EIGRP_LINUX_MGNT_PROTOCOLS) {
-		result = eigrp_status_protocol_iterate(mgnt_protocol, r);
-		return r->stopped
-			       ? (r->too_large ? EIGRP_RESULT_INTERNAL_FAILURE
-					       : EIGRP_RESULT_SUCCESS)
-			       : result;
-	}
-
-	result = eigrp_status_protocol_iterate(mgnt_lookup_protocol, &lookup);
-	if (!lookup.found)
-		return result == EIGRP_RESULT_SUCCESS
-				       || result == EIGRP_RESULT_NOT_FOUND
-			       ? EIGRP_RESULT_NOT_FOUND
-			       : result;
 
 	switch (req->op) {
 	case EIGRP_LINUX_MGNT_NEIGHBORS:
@@ -523,6 +506,37 @@ static eigrp_result_t mgnt_query(void *arg)
 		return r->too_large ? EIGRP_RESULT_INTERNAL_FAILURE
 				    : EIGRP_RESULT_SUCCESS;
 	return result == EIGRP_RESULT_NOT_FOUND ? EIGRP_RESULT_SUCCESS : result;
+}
+
+static eigrp_result_t mgnt_query(void *arg)
+{
+	struct mgnt_request *req = arg;
+	struct mgnt_response *r = &req->response;
+	struct mgnt_lookup lookup = {.selector = req->selector};
+	eigrp_result_t result;
+
+	if (req->op == EIGRP_LINUX_MGNT_CAPABILITIES)
+		return mgnt_capabilities(r);
+	if (req->op == EIGRP_LINUX_MGNT_PROTOCOLS) {
+		result = eigrp_status_protocol_iterate(mgnt_protocol, r);
+		return r->stopped
+			       ? (r->too_large ? EIGRP_RESULT_INTERNAL_FAILURE
+					       : EIGRP_RESULT_SUCCESS)
+			       : result;
+	}
+
+	result = eigrp_status_protocol_iterate(mgnt_lookup_protocol, &lookup);
+	if (!lookup.found)
+		return result == EIGRP_RESULT_SUCCESS
+				       || result == EIGRP_RESULT_NOT_FOUND
+			       ? EIGRP_RESULT_NOT_FOUND
+			       : result;
+
+	req->context = lookup.context;
+	/* Configuration identity is protected by the daemon executor. Runtime
+	 * topology and neighbor descriptors belong to the AF packet thread. */
+	return eigrp_mgnt_runtime_execute(req->context.runtime,
+					  mgnt_query_scoped, req);
 }
 
 static uint16_t mgnt_result(eigrp_result_t result)

@@ -19,6 +19,7 @@
 
 #include "eigrp_linux_packet.h"
 #include "eigrp_sys.h"
+#include "eigrp_unix.h"
 
 #define EIGRP_LINUX_PROTO 88
 #define EIGRP_LINUX_GROUP 0xe000000aU
@@ -189,6 +190,7 @@ eigrp_result_t eigrp_sys_socket_open(eigrp_instance_t *eigrp)
 	entry->fd = fd;
 	entry->next = packet_sockets;
 	packet_sockets = entry;
+	eigrp_unix_runtime_fd_set(eigrp, fd);
 	pthread_mutex_unlock(&packet_lock);
 	return EIGRP_RESULT_SUCCESS;
 }
@@ -204,6 +206,9 @@ void eigrp_sys_socket_close(eigrp_instance_t *eigrp)
 		if (entry->eigrp != eigrp)
 			continue;
 		*cursor = entry->next;
+		/* Cancel socket-backed host scheduler events before fd reuse.
+		 */
+		eigrp_unix_runtime_fd_clear(eigrp);
 		close(entry->fd); /* Kernel also retires multicast memberships.
 				   */
 		free(entry);

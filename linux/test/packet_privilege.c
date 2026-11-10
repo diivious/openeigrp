@@ -5,6 +5,20 @@
 #include <stdio.h>
 #include <string.h>
 #include "../code/eigrp_linux_packet.c"
+static int runtime_bindings;
+void eigrp_unix_runtime_fd_set(eigrp_instance_t *instance, int fd)
+{
+	(void)instance;
+	assert(fd >= 0);
+	runtime_bindings++;
+}
+void eigrp_unix_runtime_fd_clear(eigrp_instance_t *instance)
+{
+	(void)instance;
+	assert(runtime_bindings > 0);
+	runtime_bindings--;
+}
+
 
 struct eigrp_instance {
 	eigrp_afi_t afi;
@@ -78,5 +92,6 @@ int main(void)
 		assert(eigrp_linux_packet_fd(&v6) == -1);
 		puts("real IPv6 raw socket CAP_NET_RAW denial and cleanup: PASS");
 	}
+	assert(runtime_bindings == 0);
 	return 0;
 }

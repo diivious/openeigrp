@@ -5,22 +5,21 @@ image, FRR/BIRD component or UUT broker is required at runtime. The package
 name is `openeigrpd`; it installs `openeigrpd`, `oectl`, and the offline
 `openeigrpd-config` validator.
 
-## Prerequisite: a real native daemon
+## Native daemon prerequisite
 
-**The current `linux-support` branch (Task 12) has no runnable
-`linux/code/openeigrpd`.** It builds native libraries and `oectl`, but the
-scheduler/process entry point has not landed. Consequently the package
-builder intentionally fails without a daemon executable. It must not package
-the configuration validator, a test fixture, or the UUT broker as the daemon.
+`make linux` builds the real `linux/code/openeigrpd` foreground daemon,
+connecting the portable EIGRP runtime to Linux raw sockets, Netlink and
+local IPC. The package builder still fails closed if this executable is
+missing or is not a native Linux ELF; UUT fixtures must never be shipped
+as a routing daemon.
 
-The executable supplied to the builder must be a complete native Linux ELF
-implementing `openeigrpd -f PATH` and reading the specified configuration.
-The systemd unit uses this interface to pass a private `LoadCredential=` copy
-of the root-owned configuration. It must also create the IPC socket at
-`/run/openeigrpd/control.sock` with mode `0660` and group `openeigrpctl`,
-handle SIGTERM, and use the routing capabilities supplied by systemd. These
-are integration requirements, **not capabilities currently verified in
-`linux-support`**.
+The daemon accepts `-f PATH`, `-s SOCKET`, `-t` for offline syntax checks,
+`-V` and `-h`. Systemd uses `LoadCredential=` to read the root-only
+configuration, creates `/run/openeigrpd` with safe ownership, and launches
+the daemon with the EIGRP routing capabilities. The management socket is
+`/run/openeigrpd/control.sock` (0660, group `openeigrpctl`). SIGTERM
+stops management and AF workers and releases kernel routes. SIGHUP is
+rejected without mutation until a failure-atomic live reload exists.
 
 ## Build
 
@@ -30,8 +29,13 @@ Install local build prerequisites (example on Debian/Ubuntu):
 sudo apt-get install build-essential dpkg-dev binutils systemd
 ```
 
-With a **real** daemon executable already compiled as `linux/code/openeigrpd`,
-run from the repository root:
+Build the real daemon and create a native package from the repository root:
+
+```sh
+make linux
+```
+
+Then run:
 
 ```sh
 linux/packaging/build-deb.sh --version 0.1.0
@@ -128,8 +132,9 @@ overwrite release assets, and does not start a hosted APT repository.
 
 This is separate from the existing FRR Docker release workflow; neither is a
 replacement for the full portable UUT/Netlab release regression gates.
-Release publishing remains blocked until the standalone daemon is available
-and live Linux routing/systemd lifecycle tests pass.
+Release qualification still requires live Linux routing, real-systemd
+lifecycle and Cisco interoperability tests on privileged infrastructure;
+the executable and local package builder are implemented.
 
 ## Installation and service lifecycle
 
@@ -147,8 +152,8 @@ sudo systemctl disable openeigrpd.service
 
 **Installation does not enable or start routing.** To activate it, explicitly
 configure and enable/start the service. The default configuration contains
-no routing instance. Do not enable before the real daemon's process and
-configuration contract is verified. `systemctl restart` is intentionally
+no routing instance. Validate your router configuration and privileges before
+enabling the service. `systemctl restart` is intentionally
 used instead of reload: a failure-atomic daemon reload has not landed.
 
 The service runs under system user `openeigrp`, using capabilities
@@ -207,75 +212,7 @@ package-manager behavior only. For release qualification, repeat installation
 and the `systemctl` commands above inside fresh Debian/Ubuntu VMs, with a
 real daemon, actual IP proto-88 peers and Netlab scenarios; verify the
 control socket group and capability restrictions, graceful withdrawal,
-shutdown and restart. No native daemon or live systemd PID 1 is present in
-the provided baseline, so those release gates cannot yet pass.
-
-## Developer entrypoint: `tools/package.sh`
-
-The repository's `tools/package.sh` is the Debian packaging counterpart to
-`tools/docker.sh`. It uses the local working tree (including uncommitted edits),
-and executes Linux build operations inside Docker rather than requiring a Linux
-compiler on macOS.
-
-Both integrations resolve the development version from the highest numeric
-`rel-X.Y.Z` tag reachable from the freshly fetched `origin/master`. A release
-must be merged into `master` before it advances development versioning. If
-Git metadata is unavailable or the fetch fails, the scripts stop rather than
-manufacture a fallback version.
-
-For example, with `rel-0.5.0` on `master`:
-
-```sh
-./tools/docker.sh --local diivious-test --platform linux/amd64 \
-    --image openeigrp:diivious-test
-./tools/package.sh --local diivious-test --platform linux/amd64 \
-    --image openeigrp:diivious-test
-# Both embed 0.5.0-diivious-test.
-# Docker image reference: openeigrp:diivious-test
-# Debian output: dist/openeigrpd_0.5.0-diivious-test_amd64.deb
-```
-
-Omitting a local label uses `$USER-test`; `--local X-Y` uses `0.5.0-X-Y`.
-After `rel-0.6.0` is merged to `master`, the same commands embed
-`0.6.0-diivious-test`. An explicitly requested release version (e.g.
-`--local 0.6.0`) stays `0.6.0`, subject to the Docker release-source checks.
-Run `tools/version.sh --latest` to inspect the fetched release baseline.
-
-`--image` in `tools/package.sh` identifies the corresponding Docker image;
-its tag must match the `--local` label. The image is **not** executed or
-required for packaging. Use `--builder-image debian:12` (default) or
-`--builder-image ubuntu:24.04` to select the real Debian package builder.
-An Alpine OpenEIGRP runtime image is not a suitable package builder.
-
-```sh
-# Compile and test fixture-based dpkg install/upgrade/remove/purge in Docker.
-tools/package.sh --uut
-tools/package.sh --uut --platform linux/arm64 --builder-image ubuntu:24.04
-
-# Build the production package from the working tree (real daemon required).
-tools/package.sh --local diivious-test --platform linux/amd64 \
-    --image openeigrp:diivious-test
-tools/package.sh --local X-Y --platform linux/arm64 \
-    --image openeigrp:X-Y --builder-image ubuntu:24.04
-
-# Optional output override.
-tools/package.sh --local X-Y --platform linux/amd64 --output /tmp/packages
-```
-
-The local working tree is mounted read-only and copied into the builder.
-`--uut` does not publish test fixtures, and `--local` refuses to publish a
-production package without a real native `openeigrpd`. Neither mode enables
-routing. A separate production release build uses the exact release version
-without a development suffix.
-
-Wrapper tests that do not require a Docker daemon:
-
-```sh
-python3 tools/test/test_version.py
-python3 tools/test/test_package.py
-python3 tools/test/test_docker_source_selection.py
-python3 linux/test/test_package_builds.py
-```
-
-`--uut` covers the Debian package lifecycle, not portable EIGRP YAML UUT
-scenarios or live systemd routing, which must be qualified separately.
+shutdown and restart. `linux/test/test_daemon.py` exercises the actual executable and IPC server,
+but this restricted test environment cannot exercise CAP_NET_RAW,
+CAP_NET_ADMIN or privileged Cisco/Netlab adjacency and kernel RIB paths.
+A live systemd PID 1 VM remains required for release qualification.

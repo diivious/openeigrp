@@ -16,7 +16,7 @@ process management must not be implemented in the portable core.
 
 The UUT simulation backend is not a production dependency.
 
-## Building the native Linux libraries
+## Building and running the native Linux daemon
 
 From the repository root on Linux:
 
@@ -24,16 +24,34 @@ From the repository root on Linux:
 make linux
 ```
 
-This builds the portable EIGRP core, shared Unix support, and the native
-interface, packet, Netlink RIB, read-only route-observation, native
-policy-evaluation, and local management IPC libraries. On Linux, `make all` also runs
-this build before the existing style, UUT, and scale checks. On non-Linux
-hosts, `make all` retains the portable build and test flow; `make linux`
-explicitly reports that a Linux host is required. `make clean` removes the
-Linux build outputs as well.
+This builds `linux/code/openeigrpd`, `oectl`, `openeigrpd-config`, the
+portable EIGRP core, shared Unix scheduling and the native interface,
+IPv4/IPv6 packet, Netlink RIB/redistribution, policy and management services.
+The executable contains no FRR, BIRD or UUT simulation code. On non-Linux
+hosts, `make linux` rejects the build; `make clean` removes the outputs.
 
-These targets currently produce libraries, **not** a runnable `openeigrpd`
-daemon. The native daemon integration is separate work.
+```sh
+linux/code/openeigrpd -t -f linux/config/openeigrpd.conf.example
+# Use an existing, owner-controlled, non-group-writable directory for -s.
+linux/code/openeigrpd -f /etc/openeigrpd.conf
+# In a second terminal:
+linux/code/oectl show protocols
+```
+
+The foreground daemon handles SIGTERM/SIGINT gracefully, publishes a
+mode-0660 Unix management socket, drives interface and redistribution
+Netlink notifications, and periodically reconciles the kernel RIB. The
+portable Unix scheduler drives raw EIGRP protocol-88 packet readiness and
+timers. Raw IPv4/IPv6 sockets require `CAP_NET_RAW`; modifying the kernel
+RIB requires `CAP_NET_ADMIN`. The packaged systemd unit grants precisely
+these capabilities to the non-root `openeigrp` account.
+
+`SIGHUP` does **not** change live configuration: initial-load semantic
+commit cannot guarantee an atomic rollback. It is explicitly rejected and
+logged, preserving the active generation. Validate changes with
+`openeigrpd-config -t`, then use `systemctl restart openeigrpd` for a
+reconfigured instance. See `specs/configuration.md` for the transaction
+requirements that must be met before supporting live reload.
 
 
 ## Route redistribution observer
@@ -51,9 +69,9 @@ are never redistributed by this observer.
 Run `python3 linux/test/test_redist.py` for crafted Netlink route tests and,
 where user/network namespaces are available, real route mutation tests.
 Run the portable YAML scenarios under `eigrp/test/uut/redist-lifecycle/` to verify
-the unaffected core redistribution/DUAL contract. Netlab daemon
-interoperability remains blocked until the native daemon task connects the
-scheduler, configuration and startup paths.
+the unaffected core redistribution/DUAL contract. Native Netlab and Cisco interoperability still require privileged
+network namespaces or a qualified Linux lab; the socket/scheduler wiring
+is covered separately by the packet tests.
 
 ## Native configuration staging and policy/authentication services
 
@@ -75,9 +93,11 @@ constructs are rejected rather than treated as permit-all.
 
 Run `python3 linux/test/test_policy.py`, `python3 linux/test/test_config.py`
 and the portable YAML scenario in `eigrp/test/uut/filter-auth/`.
-**There is no runnable `openeigrpd` here, so neither startup configuration nor
-SIGHUP reload is yet wired to an operational daemon.** Do not use the initial
-semantic commit API as a substitute for a failure-atomic live reload. The
+Startup configuration is now loaded by `openeigrpd` after initializing
+host services and before publishing management readiness. Invalid semantic
+configuration causes process teardown and a nonzero exit. SIGHUP is
+rejected explicitly; do not replay the initial semantic commit on a running
+instance as a substitute for a failure-atomic live reload. The
 transaction design and remaining integration requirements are documented in
 `linux/specs/configuration.md` and `linux/specs/policy-authentication.md`.
 
@@ -90,10 +110,10 @@ It reads portable protocol state through `eigrp_mgnt.h`; clearing the event
 log is the only exposed privileged command. `make linux` also builds the
 standalone `linux/code/oectl` client (no portable core linkage).
 
-The host must call `eigrp_linux_mgnt_start()` with a synchronous safe
-protocol-context executor and stop the server before destroying core state.
-There is still no runnable native `openeigrpd` in this branch, so daemon
-startup wiring and real live-AF concurrency remain untested. The public
+`openeigrpd` wires `eigrp_linux_mgnt_start()` to host-lifecycle
+serialization and dispatches each scoped runtime-state walk synchronously
+onto its owning AF thread. Shutdown stops IPC before destroying core state.
+Concurrent and sequential IPC clients are tested by `test_daemon.py`. The public
 management topology walker lacks cursor support; IPC offsets are therefore
 bounded and large-topology pagination is incomplete. See
 [`specs/management-ipc.md`](specs/management-ipc.md) for the protocol,
@@ -128,18 +148,18 @@ reply contains VRF names, not IDs. `show tech-support` captures all running
 default-VRF instances unless a specific selector is supplied. Its output is
 based solely on existing IPC views and never changes daemon state.
 
-`oectl` does not start `openeigrpd`, implement a configuration shell, or
-include a production native daemon. IPC tests use the Task 11 fixture;
-real daemon startup and Netlab interoperability remain pending the daemon
-integration. See `man/oectl.8` for command and exit-status details.
+`oectl` does not start `openeigrpd` or implement an interactive
+configuration shell. Existing IPC fixture tests are complemented by real
+native daemon lifecycle tests. Privileged Netlab and Cisco adjacency tests
+remain a separate qualification requirement. See `man/oectl.8` for command and exit-status details.
 
 ## Native Debian/Ubuntu packaging
 
 The local package builder, systemd unit, security policy, lifecycle tests
 and installation instructions are in [`packaging/README.md`](packaging/README.md).
-The builder refuses to create a production package until a real native
-`openeigrpd` executable is supplied. `linux-support` currently has no daemon
-entry point; test fixture packages are for package-manager validation only.
+`make linux` now builds the production `openeigrpd` executable. The builder
+verifies a real native ELF and refuses UUT fixtures or non-native images.
+Package-manager fixture tests remain separate from live routing qualification.
 
 ## Debian release packages
 
@@ -147,5 +167,5 @@ Docker Desktop on ARM64 macOS can build both Linux package architectures
 using `make packages VERSION=0.1.0`; GitHub Actions builds both on native
 AMD64/ARM64 runners and publishes release assets only on version tags.
 See [`packaging/README.md`](packaging/README.md) for prerequisites, tests,
-installation and release security boundaries. No daemon package can be
-created until `linux/code/openeigrpd` is implemented and built.
+installation and release security boundaries. Actual package construction is available after `make linux`; qualified
+Cisco adjacency and systemd-in-VM tests remain release gates.

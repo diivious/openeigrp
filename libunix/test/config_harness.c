@@ -150,7 +150,7 @@ eigrp_intf_config_t *eigrp_intf_config_read(eigrp_af_config_t *af,
 	return (eigrp_intf_config_t *)&fake_interface;
 }
 
-eigrp_intf_t *eigrp_intf_runtime_lookup(eigrp_instance_t *runtime,
+eigrp_intf_t *eigrp_intf_lookup_by_name(eigrp_instance_t *runtime,
 					const char *ifname)
 {
 	assert(runtime == (eigrp_instance_t *)&fake_runtime);

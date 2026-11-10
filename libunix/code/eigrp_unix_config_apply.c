@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "eigrp_cli.h"
+#include "eigrp_interface.h"
 #include "eigrp_unix.h"
 #include "eigrp_unix_config_private.h"
 #include "eigrp_unix_keychain.h"
@@ -89,7 +90,7 @@ eigrp_unix_config_command_commit(const eigrp_unix_config_command_t *cmd)
 		intf.address_family = af;
 		intf.config = eigrp_intf_config_read(af, cmd->ifname);
 		intf.runtime =
-			eigrp_intf_runtime_lookup(context.runtime, cmd->ifname);
+			eigrp_intf_lookup_by_name(context.runtime, cmd->ifname);
 		if (!intf.config)
 			return EIGRP_RESULT_NOT_FOUND;
 		if (cmd->action == EIGRP_UNIX_CONFIG_AUTH_MODE)

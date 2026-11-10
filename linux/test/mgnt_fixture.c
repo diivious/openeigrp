@@ -21,6 +21,16 @@ static int config_identity;
 static atomic_uint clear_count;
 static volatile sig_atomic_t shutdown_requested;
 
+/* Fixture models the AF-owner dispatch contract without linking a core AF. */
+eigrp_result_t eigrp_mgnt_runtime_execute(eigrp_instance_t *runtime,
+					  eigrp_mgnt_runtime_cb callback,
+					  void *arg)
+{
+	if (runtime != (eigrp_instance_t *)&runtime_identity)
+		return EIGRP_RESULT_NOT_FOUND;
+	return callback(arg);
+}
+
 static eigrp_address_t fixture_addr(const char *str)
 {
 	eigrp_address_t a = {.afi = EIGRP_AFI_IPV4};

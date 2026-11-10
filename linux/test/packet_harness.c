@@ -32,6 +32,20 @@ static ssize_t fake_recvmsg(int fd, struct msghdr *msg, int flags);
 #define sendmsg fake_sendmsg
 #define recvmsg fake_recvmsg
 #include "../code/eigrp_linux_packet.c"
+static int runtime_bindings;
+void eigrp_unix_runtime_fd_set(eigrp_instance_t *instance, int fd)
+{
+	(void)instance;
+	assert(fd >= 0);
+	runtime_bindings++;
+}
+void eigrp_unix_runtime_fd_clear(eigrp_instance_t *instance)
+{
+	(void)instance;
+	assert(runtime_bindings > 0);
+	runtime_bindings--;
+}
+
 #undef socket
 #undef setsockopt
 #undef getsockopt
@@ -477,6 +491,7 @@ int main(void)
 	assert(eigrp_sys_socket_open(&runtime) == EIGRP_RESULT_SUCCESS);
 	eigrp_sys_socket_close(&runtime);
 	assert(opened == closed);
+	assert(runtime_bindings == 0);
 	puts("Repeated shutdown and recovery: PASS");
 	return 0;
 }

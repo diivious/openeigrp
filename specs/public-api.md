@@ -16,7 +16,7 @@ It answers four questions:
 4. what ownership, lifetime, threading, and translation rules apply when they do.
 
 This is a repository-wide contract. FRR-specific call chains belong in
-`frr/specs/integration.md`. BIRD-specific call chains belong under `bird/`.
+`frr/specs/integration.md`. Linux-specific call chains belong under `bird/`.
 Portable DUAL, topology, packetizer, RTP, and TLV internals belong under
 `eigrp/specs/` and are intentionally not part of this API.
 
@@ -92,7 +92,7 @@ The following are explicitly private and must not cross the public boundary:
 - private DUAL/FSM objects;
 - private topology/table/list objects;
 - FRR `struct interface`, Zebra, VTY, YANG, event, stream, route-map, or list objects;
-- BIRD protocol, channel, route-table, event-loop, timer, socket, or interface objects.
+- Linux protocol, channel, route-table, event-loop, timer, socket, or interface objects.
 
 Opaque public pointers are identities, not permission to inspect private layout.
 
@@ -1700,6 +1700,10 @@ frr/specs/integration.md
 
 bird/... platform spec
     BIRD/BSD call flows implementing the same contract
+```
+
+linux/... platform spec
+    Linux call flows implementing the same contract
 ```
 
 A platform spec may name native functions and objects, but it may not enlarge the

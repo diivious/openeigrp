@@ -12,6 +12,7 @@
 #include "eigrp.h"
 #include "eigrp_structs.h"
 #include "eigrp_instance.h"
+#include "eigrp_mgnt.h"
 #include "eigrp_features.h"
 #include "eigrp_interface.h"
 #include "eigrp_neighbor.h"
@@ -179,6 +180,35 @@ eigrp_result_t eigrp_virt_router_delete(eigrp_virt_router_t *virt_router)
 	return EIGRP_RESULT_SUCCESS;
 }
 
+struct eigrp_mgnt_runtime_request {
+	eigrp_mgnt_runtime_cb callback;
+	void *arg;
+};
+
+static eigrp_result_t eigrp_mgnt_runtime_call(eigrp_instance_t *runtime,
+					      void *arg)
+{
+	struct eigrp_mgnt_runtime_request *request = arg;
+
+	(void)runtime;
+	return request->callback(request->arg);
+}
+
+eigrp_result_t eigrp_mgnt_runtime_execute(eigrp_instance_t *runtime,
+					  eigrp_mgnt_runtime_cb callback,
+					  void *arg)
+{
+	struct eigrp_mgnt_runtime_request request = {
+		.callback = callback,
+		.arg = arg,
+	};
+
+	if (!runtime || !callback)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	return eigrp_instance_message_call(runtime, eigrp_mgnt_runtime_call,
+					   &request);
+}
+
 /* Allocate a protocol runtime/control context. */
 eigrp_instance_t *eigrp_instance_create(eigrp_virt_router_t *virt_router,
 					eigrp_afi_t afi, uint16_t as,
@@ -309,8 +339,9 @@ eigrp_instance_t *eigrp_instance_create(eigrp_virt_router_t *virt_router,
 	if (eigrp_sys_socket_open(eigrp) != EIGRP_RESULT_SUCCESS) {
 		eigrp_log(
 			EIGRP_LOG_ERROR,
-			"eigrp_instance_create: fatal error: host runtime was unable to open an EIGRP socket");
-		exit(1);
+			"eigrp_instance_create: host runtime was unable to open an EIGRP socket");
+		eigrp_instance_delete_final(eigrp);
+		return NULL;
 	}
 
 	eigrp->ibuf = eigrp_stream_create(EIGRP_PACKET_MAX_LEN + 1);

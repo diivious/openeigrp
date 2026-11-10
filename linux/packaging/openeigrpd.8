@@ -3,7 +3,11 @@
 openeigrpd \- native Linux EIGRP daemon
 .SH SYNOPSIS
 .B openeigrpd
-.BI -f " path"
+.RI [ -f " path" ]
+.RI [ -s " socket" ]
+.RI [ -t ]
+.RI [ -V ]
+.RI [ -h ]
 .SH DESCRIPTION
 The native OpenEIGRP daemon is packaged together with
 .BR oectl (8)
@@ -19,8 +23,29 @@ The service passes a per-service protected copy of
 .B /etc/openeigrpd.conf
 using the
 .B -f
-option. The native daemon must support this option as an integration
-contract before packaging can be used in production.
+option. The daemon runs in the foreground and processes Linux Netlink,
+raw protocol-88 packet events and management IPC while the portable core
+owns RTP, timers and DUAL. It needs CAP_NET_RAW and CAP_NET_ADMIN for
+routing. SIGTERM and SIGINT trigger orderly shutdown.
+SIGHUP is rejected without applying a partial live configuration.
+.SH OPTIONS
+.TP
+.BI -f " path"
+Read the named-mode configuration file (default /etc/openeigrpd.conf).
+.TP
+.BI -s " socket"
+Override the Unix management socket (default /run/openeigrpd/control.sock).
+The parent directory must exist, be owned by root or the daemon user,
+and not be writable by group or other users.
+.TP
+.B -t
+Validate configuration syntax without opening raw sockets or changing routes.
+.TP
+.B -V
+Print the portable OpenEIGRP release identifier and exit.
+.TP
+.B -h
+Print command help and exit.
 .SH FILES
 .TP
 .B /etc/openeigrpd.conf
@@ -29,7 +54,7 @@ Root-owned, mode 0600 dpkg conffile.
 .B /run/openeigrpd/control.sock
 Read-only management control socket. Grant membership in the
 .B openeigrpctl
-group to authorized observers; the daemon must create this socket
+group to authorized observers; the daemon creates the socket
 with group access (0660).
 .SH SEE ALSO
 .BR oectl (8),

@@ -141,6 +141,11 @@ Description: Native Linux EIGRP routing daemon and management client
  Installs the openeigrpd daemon, oectl client, configuration validator and
  an intentionally disabled systemd unit. No FRR, BIRD or UUT broker.
 CTRL
+# A setgid parent directory (e.g. shared build checkout) propagates mode
+# 2xxx into staging. dpkg rejects a setgid DEBIAN directory even when umask
+# is 022; canonicalize directories for reproducible, safe package metadata.
+find "$pkg" -type d -exec chmod g-s,u-s {} +
+find "$pkg" -type d -exec chmod 0755 {} +
 filename="openeigrpd_${version}_${arch}.deb"
 # The archive is built by an unprivileged user without fakeroot.
 dpkg-deb --build --root-owner-group "$pkg" "$work/$filename" >/dev/null

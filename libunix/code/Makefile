@@ -6,8 +6,8 @@ CFLAGS ?= -O2 -g
 CPPFLAGS += -I../../eigrp/code -I.
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -pthread
 
-# Host scheduling, formatting and explicit keychain registration are usable by
-# both the UUT and a future native Linux daemon. Do not add UUT callbacks here.
+# Host scheduling, formatting and explicit keychain registration are shared
+# by the UUT and native Linux daemon. Do not add UUT callbacks here.
 UNIX_OBJS := eigrp_unix_sys.o eigrp_unix_format.o eigrp_unix_keychain.o
 
 # The virtual host is deliberately confined to this archive. In particular,
@@ -25,7 +25,7 @@ libeigrp_uut.a: $(UUT_OBJS)
 	$(AR) rcs $@ $^
 
 # This parser is native-daemon-facing and not part of either shared archive.
-# Continue building it to detect integration errors before the daemon lands.
+# Build it independently so native configuration errors fail early.
 eigrp_unix_config.o: eigrp_unix_config.c eigrp_unix_config.h eigrp_unix_config_private.h eigrp_unix.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 

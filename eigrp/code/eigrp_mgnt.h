@@ -12,6 +12,14 @@
 
 #include "eigrp.h"
 
+/* Execute a management walk on the owning AF thread. The caller must
+ * prevent runtime teardown until the synchronous call completes. This is
+ * required for descriptors modified by DUAL/packet processing on that AF. */
+typedef eigrp_result_t (*eigrp_mgnt_runtime_cb)(void *arg);
+eigrp_result_t eigrp_mgnt_runtime_execute(eigrp_instance_t *runtime,
+					  eigrp_mgnt_runtime_cb callback,
+					  void *arg);
+
 /* Interface state snapshot. */
 typedef struct eigrp_intf_state {
 	const char *interface_name;

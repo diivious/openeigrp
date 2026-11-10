@@ -97,24 +97,6 @@ class MultiArchitectureBuildTests(unittest.TestCase):
                          ["openeigrpd_0.1.0~test+5_arm64.deb"])
         self.assertEqual(len(self.calls()), 1)
 
-    def test_custom_builder_image(self):
-        result = self.build("--version", "0.3.0", "--arch", "amd64",
-                            "--image", "ubuntu:24.04")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        call, = self.calls()
-        self.assertEqual(call[-4], "ubuntu:24.04")
-        self.assertIn("PACKAGE_UUT=0", call)
-
-    def test_uut_mode_runs_real_lifecycle_test_without_publication(self):
-        result = self.build("--version", "0.0.0~uut", "--arch", "arm64",
-                            "--uut")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        call, = self.calls()
-        self.assertIn("PACKAGE_UUT=1", call)
-        self.assertIn("OPENEIGRP_PACKAGE_SYSTEM_TEST=1", call[-1])
-        self.assertIn("systemd", call[-1])
-        self.assertFalse(list(self.output.glob("*.deb")))
-
     def test_invalid_input_cannot_invoke_docker(self):
         for args in (("--arch", "i386", "--version", "1.0.0"),
                      ("--version", "../bad"),

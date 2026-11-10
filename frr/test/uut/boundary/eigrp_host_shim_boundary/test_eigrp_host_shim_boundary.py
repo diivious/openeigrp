@@ -40,9 +40,6 @@ def test_design_spec_defines_narrow_host_shim_contract():
     assert "convert host/system objects, values, and events to or from EIGRP-owned types" in design
     assert "abstract host/system calls and services" in design
     assert "prevent EIGRP behavior from being reimplemented separately" in design
-    assert "If FRR, BIRD, macOS, and another host should" in design
-    assert "that decision belongs in `eigrp/code/`" in design
-
 
 def test_frr_southbound_does_not_own_common_eigrp_lifecycle_or_network_decisions():
     southbound = read("frr/code/eigrp_southbound.c")

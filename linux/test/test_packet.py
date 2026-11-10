@@ -33,6 +33,7 @@ class LinuxPacketTests(unittest.TestCase):
                 os.environ.get("CC", "cc"), "-std=c11", "-D_GNU_SOURCE",
                 "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
                 "-I", str(ROOT / "eigrp" / "code"),
+                "-I", str(ROOT / "libunix" / "code"),
                 str(TEST / (name + ".c")), "-o", str(binary),
             )
             if compiled.returncode:
