@@ -14,7 +14,7 @@ This directory owns repository-wide developer utilities only:
 Integration-specific entry points live with their owners:
 
 - [FRR tools](../frr/tools/README.md): staging, FRR builds, Docker images and FRR UUT.
-- [Linux packaging](../linux/packaging/README.md): Debian build and package wrapper.
+- [Linux package maintainer guide](../linux/specs/maintainer.md): Debian build and package wrapper.
 - [Netlab tools](../netlabs/tools/README.md): optional personal Netlab regression system, **not** part of `make all`.
 
 From the repository root, `make`/`make all` runs the standard developer gate;

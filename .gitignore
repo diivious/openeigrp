@@ -28,9 +28,10 @@ __pycache__/
 *.log
 *.logs
 *.dSYM/
+eigrp/test/uut/eigrp-uut-node
 
-/frr/test/build/obj/
 # FRR/generated daemon artifacts when staged inside FRR
+/frr/test/build/obj/
 eigrpd/.deps/
 eigrpd/.dirstamp
 eigrpd/.libs/
@@ -38,6 +39,11 @@ eigrpd/eigrpd
 eigrpd/eigrpd.conf
 eigrpd/eigrpd.xref
 
-eigrp/test/uut/eigrp-uut-node
+# Linux/generated daemon artifacts
+*.deb
+
+# unix lib
 libunix/code/eigrp-wire
+
+# netlabs config
 netlabs/remote-lab.cfg

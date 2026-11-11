@@ -96,9 +96,9 @@ install -m 0755 "$root/linux/code/openeigrpd-config" "$pkg/usr/bin/openeigrpd-co
 install -m 0600 "$root/linux/packaging/openeigrpd.conf" "$pkg/etc/openeigrpd.conf"
 install -m 0644 "$root/linux/packaging/openeigrpd.service" "$pkg/usr/lib/systemd/system/openeigrpd.service"
 install -m 0644 "$root/linux/packaging/openeigrpd.sysusers" "$pkg/usr/lib/sysusers.d/openeigrpd.conf"
-install -m 0644 "$root/linux/man/oectl.8" "$pkg/usr/share/man/man8/oectl.8"
-install -m 0644 "$root/linux/man/openeigrpd.conf.5" "$pkg/usr/share/man/man5/openeigrpd.conf.5"
-install -m 0644 "$root/linux/packaging/openeigrpd.8" "$pkg/usr/share/man/man8/openeigrpd.8"
+install -m 0644 "$root/linux/packaging/man/oectl.8" "$pkg/usr/share/man/man8/oectl.8"
+install -m 0644 "$root/linux/packaging/man/openeigrpd.conf.5" "$pkg/usr/share/man/man5/openeigrpd.conf.5"
+install -m 0644 "$root/linux/packaging/man/openeigrpd.8" "$pkg/usr/share/man/man8/openeigrpd.8"
 for script in postinst prerm postrm; do
     install -m 0755 "$root/linux/packaging/$script" "$pkg/DEBIAN/$script"
 done

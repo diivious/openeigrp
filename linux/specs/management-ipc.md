@@ -1,126 +1,98 @@
-# Local management IPC
+# Native Linux management IPC
 
-The native Linux integration exports a versioned, binary-framed Unix-domain
-`SOCK_STREAM` service (`eigrp_linux_mgnt_start` / `eigrp_linux_mgnt_stop`).
-The daemon supplies an absolute pathname, peer-visible socket group, and a
-**synchronous protocol-context executor**. The library does not create or run a
-daemon. The standalone `linux/code/oectl.c` client consumes this protocol
-without linking the portable EIGRP core. No virtual-wire UUT transport
-or `eigrp/code/` source changes are required.
+This document specifies the Linux adapter's local control protocol. For
+commands and examples use [oectl(8)](../packaging/man/oectl.8); for daemon lifecycle
+use [openeigrpd(8)](../packaging/man/openeigrpd.8). Portable state is obtained through
+`eigrp/code/eigrp_mgnt.h`; the Linux adapter owns framing, serialization,
+permissions and client scheduling.
 
-## Frame format (version 1)
+## Version 1 wire format
 
-All integer fields are network-byte-order; never transmit C structures.
-The 16-byte header has `magic:u32` (0x45474d54, ASCII EGMT), `version:u16`
-(1), `operation:u16`, `status:u16`, `flags:u16`, and `length:u32`.
-Request status and flags must be zero. `length` must be exactly 0 or 16,
-depending on the operation. Wrong frame lengths, reserved fields, or magic
-are rejected without receiving arbitrary client-supplied payloads; the
-connection is then closed. Unsupported version returns status 2.
+The transport is an `AF_UNIX` `SOCK_STREAM` service. Integer fields are
+network-byte-order; never transmit raw C structures. Every request and
+response begins with a 16-byte header:
 
-Operations:
+| Field | Width | Value |
+|---|---:|---|
+| magic | 32 bits | `0x45474d54` (EGMT) |
+| version | 16 bits | 1 |
+| operation | 16 bits | Operation code |
+| status | 16 bits | Request must be zero |
+| flags | 16 bits | Request must be zero |
+| length | 32 bits | Exact payload byte length |
 
-| Operation | Code | Request | Response contents |
-|---|---:|---|---|
-| capabilities | 1 | empty | release, supported AF/TLV capabilities |
-| protocols | 2 | empty | configured protocol instances |
-| neighbors | 3 | selector | live neighbors and queue/timing data |
-| interfaces | 4 | selector | runtime/configuration and packet interface metrics |
-| topology | 5 | selector | DUAL prefixes and all advertised paths |
-| routes | 6 | selector | DUAL prefixes and successor/feasible paths |
-| traffic | 7 | selector | portable sent/received counters |
-| events | 8 | selector | event summary and formatted event ring |
-| diagnostics | 9 | selector | image capabilities, debug state and timers |
-| clear events | 10 | selector | clear ring via public `eigrp_eventlog_clear` semantic API |
+Operations 1 (`capabilities`) and 2 (`protocols`) have empty request payloads.
+Operations 3-10 carry a **16-byte selector** consisting of `afi:u16`,
+`asn:u16`, `vrf_id:u32`, `topology_id:u16`, reserved `flags:u16`, and
+`offset:u32`. Valid AFI is 4 or 6; ASN must be nonzero; only base topology
+ID 0 is accepted; selector flags are zero; offset is at most 8192.
 
-The selector is `afi:u16`, `asn:u16`, `vrf_id:u32`, `topology_id:u16`,
-`flags:u16` (must be zero), and `offset:u32`. AFI is 4 or 6, ASN must
-be nonzero, topology ID must be base (0), and offset must be at most 8192. Configuration is matched through
-public `eigrp_af_config_context_read()` and runtime VRF identity, not private
-lists. Only a configured **running** AF is addressable by a scoped query.
-Route information here means the public topology/path snapshot, **not** the
-Linux kernel RIB (the public `eigrp_mgnt.h` API has no kernel-RIB walker).
+| Code | Operation | Portable content |
+|---:|---|---|
+| 1 | capabilities | Core release and AF/TLV capabilities |
+| 2 | protocols | Configured protocol AF instances |
+| 3 | neighbors | Neighbor runtime and queues |
+| 4 | interfaces | Interface settings and traffic counters |
+| 5 | topology | DUAL prefixes and paths |
+| 6 | routes | Successor and feasible paths in portable topology |
+| 7 | traffic | EIGRP packet statistics |
+| 8 | events | Event ring and summary |
+| 9 | diagnostics | Capabilities, debug state, timers |
+| 10 | clear events | Privileged event-ring reset |
 
-Response status is 0=success, 1=invalid, 2=unsupported version, 3=denied,
-4=not found, 5=unsupported, 6=busy, 7=internal. Response `flags&1` means
-more rows. A successful response contains newline-delimited JSON objects;
-each object is one record. Other status responses have empty bodies. Pages
-contain at most 32 records and 16,384 bytes. Increment `offset` by the
-number of JSON objects returned and use the same selector for the next page.
-The APIs do not guarantee a stable snapshot between pages; clients must
-reconcile routing changes. Pagination of topology paths can begin with a
-path whose prefix row appeared in a previous page; every path carries its
-own destination prefix. Objects are never serialized as pointers.
+Responses use status 0=success, 1=invalid, 2=unsupported version,
+3=denied, 4=not found, 5=unsupported, 6=busy, or 7=internal.
+Success responses contain newline-delimited JSON objects, at most 32 records
+and 16 KiB per page. Response flag bit 0 indicates more records. Clients
+advance the offset by the number of records returned. All other response
+statuses have empty payloads.
 
-The public topology iterator only accepts a full walk or exact prefix; it
-cannot resume at a cursor. Therefore a page with a high offset necessarily
-resets the iterator at its beginning. The offset cap bounds this work, but
-also limits access to the first 8,224 records. Large-topology correctness
-requires a future *portable* cursor API, rather than bypassing public state
-or holding private DNDB/DRDB pointers inside the Linux layer. This is an
-explicit pre-production scale limitation.
+Malformed magic, length, reserved bits or framing is rejected with bounded
+resource use. There is no stable snapshot guarantee between pages.
+The portable topology iterator cannot resume from a cursor, so an offset
+above 8192 is rejected rather than allowing unlimited replay cost.
+This limits very large topology dumps until a portable cursor API exists.
+The route operation is a **topology view**, not the Linux kernel RIB.
 
-## Access and lifecycle
+## Permissions and lifecycle
 
-The daemon must create a protected directory (e.g. `/run/openeigrpd`, root
-owned, mode 0755 or stricter) and call `start()` with a pathname such as
-`/run/openeigrpd/control.sock`. The immediate parent must be a real
-directory owned by root or the daemon and not group/world writable.
-Modes are limited to 0600 or 0660; the
-specified group grants access to **read-only** commands. Mutating commands
-require a `SO_PEERCRED` UID equal to 0 or the daemon's effective UID at
-startup. Client-supplied UID/flags are never trusted. Changing the daemon
-UID after creating the listener does not change the authenticated admin UID.
-No configuration updates, neighbor resets, topology clearing, or arbitrary
-debug mutations are exposed by this protocol.
+The daemon publishes `/run/openeigrpd/control.sock` after a successful
+initial configuration load. The default socket mode is 0660, typically
+with group `openeigrpctl`. The parent must be a real, owner-controlled
+(non-group/world-writable) directory. Startup refuses to unlink another
+process's existing socket; shutdown only removes the socket it created.
 
-The socket is created only when no path already exists. Startup never removes
-an existing socket or symlink. Shutdown removes the path only if its
-filesystem device/inode still identifies the service's own socket. The
-server accepts at most 32 clients, uses nonblocking `accept4`, `recv`, and
-`send(MSG_NOSIGNAL)`, and drops idle clients after five seconds. Each client
-has one bounded outstanding response; slow readers cannot stall other socket
-I/O. The service's separate poll worker does not parse EIGRP packets or
-schedule protocol timers. Stop signals this worker, joins it, closes all
-client descriptors and listener, and removes its own socket path.
+Read-only clients need Unix socket access, not root. The daemon validates
+`SO_PEERCRED` for `clear events`, which only root or the daemon startup UID
+may execute. No configuration mutation, neighbor reset or topology clearing
+exists in IPC version 1.
 
-**Protocol ownership is delegated explicitly to the daemon executor.** The
-server invokes it synchronously for every portable-core read or semantic
-mutation. That executor must schedule reads on a state-safe protocol context,
-and prevent the walk from racing with AF teardown; the library refuses to
-start without one. This is not a guarantee of latency isolation: large
-walks still occupy the owning protocol context while they execute. Daemon
-startup/termination/reload wiring and real AF-thread concurrency tests cannot
-run until the native daemon is available. The API must not be wired to an
-executor that merely takes the shared Unix scheduler mutex while AF threads
-continue to mutate topology independently.
+The service supports at most 32 concurrent clients with nonblocking socket
+I/O, bounded response buffers and an approximately five-second idle timeout.
+The daemon serializes each public management walk onto the relevant AF owner
+and protects shutdown from in-flight management access. Management stops
+before portable state is destroyed. Heavy state walks may still occupy an AF
+worker while they execute.
 
-Native IPC tests (`python3 linux/test/test_mgnt.py`) compile the actual
-server code against public management callback fixtures and exercise framing,
-privileges, public-state rendering, pagination, concurrent clients,
-backpressure, disconnects and cleanup. The YAML UUT scenario under
-`eigrp/test/uut/management/` separately verifies the underlying portable
-neighbor/topology/route state lifecycle; it is not an IPC integration test.
+`oectl` validates response framing, operation, version, status, record lengths
+and pagination; it fails on truncation rather than silently producing an
+incomplete state dump. `show tech-support` combines read-only views for
+running default-VRF instances. Nondefault VRF numeric IDs are not discoverable
+from protocol listing, so such views require explicit `--asn`, `--afi` and
+`--vrf-id` selectors. Current native configuration itself accepts only the
+default VRF.
 
-## Command-line client
+## Validation
 
-`oectl` provides a one-shot client for all ten IPC operations. It validates
-response magic/version/operation, flags, lengths, and JSON-line framing;
-fetches pages until complete; and fails rather than silently truncating when
-the server's offset limit is reached. It cannot make a changing topology into
-a snapshot. A temporary stalled or disconnected socket produces an error.
-Only `clear events` can modify daemon state, and the daemon is responsible
-for authorization. `oectl` never elevates privileges or changes socket modes.
+```sh
+python3 linux/test/test_mgnt.py
+python3 linux/test/test_oectl.py
+python3 linux/test/test_daemon.py
+python3 linux/test/test_docs.py
+```
 
-`show tech-support` collects capabilities, protocols and the read-only scoped
-views for running default-VRF instances. JSON output includes a local
-`integration` record and `scope` separators for the selected instances. A nondefault VRF cannot be identified
-by numeric ID through the v1 protocol listing, so `--asn`, `--afi` and
-`--vrf-id` are mandatory to collect it. Integration version output uses the
-host-neutral `eigrp_integration_version_t` fields and distinguishes local
-integration build information from the daemon's portable core release.
-
-CLI regression (`python3 linux/test/test_oectl.py`) executes the actual client
-against the real Task 11 server with public management-state fixtures and
-crafted broken-peer replies. Portable UUT management scenarios continue to
-exercise routing state independently; they do not execute the Linux CLI.
+These exercise actual IPC framing, concurrent clients, permissions, malformed
+peers, process shutdown, options and documented scope handling. The portable
+YAML management scenario under `eigrp/test/uut/management/` exercises
+EIGRP state lifecycle **without** using Linux IPC. A privileged Netlab/Cisco
+interop run is separate evidence, not implied by an IPC fixture pass.

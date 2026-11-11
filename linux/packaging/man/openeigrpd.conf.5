@@ -1,0 +1,181 @@
+.Dd November 11, 2026
+.Dt OPENEIGRPD.CONF 5
+.Os
+.Sh NAME
+.Nm openeigrpd.conf
+.Nd native OpenEIGRP named-mode configuration file
+.Sh DESCRIPTION
+.Nm
+is an initial-load, declarative named-mode EIGRP configuration.
+Each directive occupies one line. Lines beginning with
+.Sq #
+or
+.Sq !
+are comments.
+Nested scopes are closed with their corresponding
+.Cm exit-*
+command.
+Only default-VRF IPv4 and IPv6 unicast address families are accepted.
+This is a supported subset of named-mode EIGRP; it is not a generic
+FRR or Cisco configuration interpreter.
+.Sh CONFIGURATION
+.Bl -tag -width Ds
+.It Cm router eigrp Ar name
+Open a named process; close with
+.Cm exit .
+The process accepts
+.Cm shutdown
+and
+.Cm no shutdown .
+.It Cm address-family ipv4|ipv6 Op unicast Op vrf default Cm autonomous-system Ar asn
+Configure an AF and AS (1 through 65535); close with
+.Cm exit-address-family .
+Only
+.Cm vrf default
+is accepted when a VRF is given.
+AF scope supports
+.Cm eigrp router-id Ar A.B.C.D ,
+.Cm shutdown ,
+.Cm no shutdown
+and
+.Cm distance eigrp Ar internal external .
+.It Cm network Ar IPv4-address Op wildcard
+In an IPv4 AF, select matching interfaces.
+An IPv4 prefix in CIDR notation is also accepted.
+Noncontiguous wildcards are rejected.
+This directive is not available for IPv6 AFs.
+.It Cm neighbor Ar address interface
+Configure a static peer in the enclosing AF.
+.It Cm metric weights Ar tos k1 k2 k3 k4 k5 Op k6
+Set the EIGRP metric weights in the enclosing AF.
+.It Cm af-interface Ar interface
+Open an interface scope; close with
+.Cm exit-af-interface .
+Supported controls include
+.Cm bandwidth-percent ,
+.Cm bandwidth ,
+.Cm delay ,
+.Cm hello-interval ,
+.Cm hold-time ,
+.Cm passive-interface ,
+.Cm split-horizon ,
+.Cm next-hop-self ,
+.Cm shutdown
+and their supported
+.Cm no
+forms.
+.It Cm topology base
+Open the base topology scope; close with
+.Cm exit-af-topology .
+Supported settings include
+.Cm default-metric ,
+.Cm variance ,
+.Cm metric maximum-hops ,
+.Cm maximum-paths ,
+.Cm redistribute connected
+and
+.Cm redistribute static .
+Redistribution can carry
+.Cm metric Ar bandwidth delay reliability load mtu
+and/or
+.Cm route-map Ar name .
+.It Cm ip|ipv6 prefix-list Ar name seq n permit|deny prefix Op ge n Op le n
+Define a global prefix filter with first-match ordering and implicit deny.
+.It Cm ip|ipv6 access-list Ar name seq n permit|deny prefix
+Define a global destination-prefix ACL with first-match semantics and
+implicit deny.
+.It Cm route-map Ar name permit|deny n Op match ...
+Define a global, first-match route-map clause.
+Supported matches are
+.Cm prefix-list ,
+.Cm access-list
+and
+.Cm tag .
+There are no
+.Cm set
+operations.
+.It Cm distribute-list prefix|access Ar name in|out Op interface
+Apply an AF-level distribution policy.
+Undefined referenced policies deny rather than silently permit.
+.It Cm key-chain Ar name key n secret plaintext
+Define one authentication key per chain.
+The file must be protected from group and other access.
+An AF-interface uses both
+.Cm authentication mode md5
+and
+.Cm authentication key-chain Ar name
+to enable MD5 authentication.
+.El
+.Sh EXAMPLES
+An IPv4 AS with interface participation and connected-route
+redistribution:
+.Bd -literal -offset indent
+router eigrp campus
+ address-family ipv4 unicast autonomous-system 4453
+  eigrp router-id 192.0.2.1
+  network 192.0.2.0 0.0.0.255
+  af-interface eth0
+   hello-interval 5
+   hold-time 15
+  exit-af-interface
+  topology base
+   default-metric 100000 10 255 1 1500
+   redistribute connected
+  exit-af-topology
+ exit-address-family
+exit
+.Ed
+.Pp
+An IPv6 unicast AF (IPv6 participation is interface-based):
+.Bd -literal -offset indent
+router eigrp campus6
+ address-family ipv6 unicast autonomous-system 6473
+  eigrp router-id 192.0.2.1
+  af-interface eth0
+   hello-interval 5
+  exit-af-interface
+ exit-address-family
+exit
+.Ed
+.Sh VALIDATION AND RELOAD
+Validate a proposed file without changing routing:
+.Bd -literal -offset indent
+openeigrpd-config -t -f /etc/openeigrpd.conf
+openeigrpd -t -f /etc/openeigrpd.conf
+.Ed
+.Pp
+The standalone validator tests syntax, not all runtime capabilities.
+A live start applies the parsed plan through the actual semantic targets;
+invalid runtime configuration fails startup rather than partially
+activating an instance.
+Signal
+.Dv SIGHUP
+is rejected with no live state change.
+Restart
+.Xr openeigrpd 8
+after validating changes.
+.Sh SECURITY
+Keep key-bearing configuration files as root-owned regular files
+with no group or other access bits, normally mode 0600.
+The packaged service uses systemd credentials to make a protected copy
+available to its unprivileged daemon user.
+Do not pass secrets on the daemon command line.
+.Sh UNSUPPORTED FEATURES
+Nondefault VRFs, arbitrary nonbase topologies, route-map
+.Cm set
+actions, complex ACL syntax, HMAC-SHA-256, encoded type-7 secrets,
+EIGRP Stub runtime and atomic live reload are not supported by this
+native configuration path.
+The source routing observer supports only default-VRF
+.Cm connected
+and
+.Cm static
+redistribution.
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa /etc/openeigrpd.conf
+Default configuration file.
+.El
+.Sh SEE ALSO
+.Xr openeigrpd 8 ,
+.Xr oectl 8

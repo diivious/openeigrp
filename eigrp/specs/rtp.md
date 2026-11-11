@@ -18,7 +18,10 @@ integration is specified in `../../specs/platform-integration.md`.
 
 ## 2. Authority and invariants
 
-Protocol behavior follows RFC 7868 and explicit OpenEIGRP design decisions.
+Verified Cisco on-wire evidence is authoritative for packet formats; observed
+Cisco behavior supports semantics. RFC 7868 is the reference where consistent
+with that evidence. See [Cisco/RFC errata](cisco-errata.md) for the authority
+order and decision record.
 
 The packetization/RTP implementation must preserve these invariants:
 
@@ -454,8 +457,8 @@ It does not own RTP policy.
 
 ## 31. Host boundary
 
-Portable packet/RTP modules do not call FRR, BIRD, or raw host event-loop APIs
-directly.
+Portable packet/RTP modules do not call integration-specific or raw host
+event-loop APIs directly.
 
 They request scheduling and packet I/O through `eigrp_sys.h`.
 

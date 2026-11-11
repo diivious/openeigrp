@@ -1,9 +1,14 @@
-# Native Debian/Ubuntu package
+# Native Debian/Ubuntu package maintenance
 
 This is a **local build** for Debian and Ubuntu. No APT repository, Docker
 image, FRR/BIRD component or UUT broker is required at runtime. The package
 name is `openeigrpd`; it installs `openeigrpd`, `oectl`, and the offline
 `openeigrpd-config` validator.
+
+This guide is for package and release maintainers. For a first installation,
+configuration, and day-to-day operations, start with the [Linux README](../README.md).
+The packaging sources and scripts remain in `linux/packaging/`; manual-page
+sources are in `linux/packaging/man/`.
 
 ## Native daemon prerequisite
 
@@ -76,8 +81,8 @@ linux/packaging/verify-deb.sh dist/openeigrpd_0.1.0_amd64.deb 0.1.0 amd64
 ## Dual-architecture builds on an ARM64 Mac
 
 Docker Desktop can build **Linux** Debian binaries for both `arm64` (native
-container) and `amd64` (emulated container). No development toolchain is
-required on Stormtroopers, and macOS binaries are never included. From the
+container) and `amd64` (emulated container). No native Linux development toolchain is
+required on the macOS host, and macOS binaries are never included. From the
 repository root, with Docker Desktop running:
 
 ```sh
@@ -86,12 +91,15 @@ make packages VERSION=0.1.0
 ```
 
 For labeled development builds and package lifecycle tests, the Debian-owned
-wrapper remains available without adding more top-level Make targets:
+wrapper is available without adding more top-level Make targets:
 
 ```sh
 linux/packaging/package.sh --local my-test
 linux/packaging/package.sh --uut --platform linux/amd64
 ```
+
+The wrapper lives under `linux/packaging/` on this branch. It delegates to
+the isolated `build-packages.sh` build and lifecycle test machinery.
 
 Both packages appear in `dist/` **only after both builds succeed**:
 
@@ -224,3 +232,8 @@ shutdown and restart. `linux/test/test_daemon.py` exercises the actual executabl
 but this restricted test environment cannot exercise CAP_NET_RAW,
 CAP_NET_ADMIN or privileged Cisco/Netlab adjacency and kernel RIB paths.
 A live systemd PID 1 VM remains required for release qualification.
+
+Manual source files are in [`linux/packaging/man/`](../packaging/man/);
+the `.deb` installs them in `/usr/share/man/man5/` and `/usr/share/man/man8/`.
+For privileged service qualification, follow the
+[live systemd procedure](systemd-qualification.md).

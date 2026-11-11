@@ -111,7 +111,6 @@ for arch in $archs; do
             cp -a /src/libunix/code /work/libunix/code
             cp -a /src/linux/Makefile /work/linux/Makefile
             cp -a /src/linux/code /work/linux/code
-            cp -a /src/linux/man /work/linux/man
             cp -a /src/linux/packaging /work/linux/packaging
             cp -a /src/linux/test /work/linux/test
             cd /work

@@ -1,0 +1,137 @@
+.Dd November 11, 2026
+.Dt OPENEIGRPD 8
+.Os
+.Sh NAME
+.Nm openeigrpd
+.Nd native Linux EIGRP routing daemon
+.Sh SYNOPSIS
+.Nm
+.Op Fl f Ar config
+.Op Fl s Ar socket
+.Op Fl t
+.Op Fl V
+.Op Fl h
+.Sh DESCRIPTION
+.Nm
+runs the portable OpenEIGRP protocol engine on Linux using raw IP protocol
+88 sockets, interface and route Netlink services, and a local management
+socket.
+The daemon runs in the foreground; it does not fork into the background.
+The portable core owns DUAL, topology, metric calculation, neighbor state,
+packetization, and reliable transport.
+.Pp
+The packaged
+.Xr systemd 1
+service runs as the
+.Sy openeigrp
+system user with
+.Dv CAP_NET_RAW
+and
+.Dv CAP_NET_ADMIN .
+Installation does not automatically start or enable routing.
+The service starts only after an administrator enables it, or starts it
+explicitly.
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl f Ar config
+Read the named-mode configuration from the absolute pathname
+.Ar config .
+The default is
+.Pa /etc/openeigrpd.conf .
+.It Fl s Ar socket
+Bind the Unix-domain management socket at the absolute pathname
+.Ar socket .
+The default is
+.Pa /run/openeigrpd/control.sock .
+The parent directory must exist and must be a real directory owned by root
+or the daemon user, without group/world write permissions.
+.It Fl t
+Parse and validate the configuration syntax, then exit without
+initializing routing, packet sockets, or kernel routes.
+This does not prove that a semantic operation will succeed at runtime.
+.It Fl V
+Print the portable OpenEIGRP release identifier and exit.
+.It Fl h
+Display usage and exit.
+.El
+.Sh STARTUP AND SHUTDOWN
+At startup,
+.Nm
+parses the entire configuration file, initializes host and portable services,
+then applies the configuration through portable semantic APIs.
+An invalid or unsupported semantic operation aborts startup with cleanup
+and a nonzero exit status.
+Only after successful configuration does it publish the management socket.
+.Pp
+During operation the daemon processes interface and route Netlink events
+and periodically reconciles the desired kernel RIB with the host RIB.
+It logs startup, configuration failures, socket failures, rejected reloads,
+and host processing errors to standard error, captured by the systemd
+journal when started by the packaged service.
+.Pp
+Shutdown first stops management access, then terminates protocol workers,
+removes EIGRP-owned routes and releases host and configuration resources.
+.Sh SIGNALS
+.Bl -tag -width SIGTERM
+.It Dv SIGTERM
+Request orderly shutdown.
+.It Dv SIGINT
+Request orderly shutdown.
+.It Dv SIGHUP
+Log that reload is unsupported; retain the active configuration unchanged.
+Validate the new file and restart the service instead.
+.El
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa /etc/openeigrpd.conf
+Root-controlled configuration file, normally mode 0600.
+The Debian package installs it as a preserved conffile.
+.It Pa /run/openeigrpd/control.sock
+Management socket, mode 0660, normally accessible to the daemon and the
+.Sy openeigrpctl
+group.
+.It Pa /usr/lib/systemd/system/openeigrpd.service
+Packaged service unit.
+.El
+.Sh EXAMPLES
+Validate an IPv4/IPv6 configuration without starting routing:
+.Bd -literal -offset indent
+openeigrpd -t -f /etc/openeigrpd.conf
+.Ed
+.Pp
+Start and inspect the packaged service:
+.Bd -literal -offset indent
+sudo systemctl enable --now openeigrpd
+sudo systemctl status openeigrpd
+sudo oectl show protocols
+.Ed
+.Pp
+Use a dedicated socket for a foreground development run:
+.Bd -literal -offset indent
+sudo openeigrpd -f /etc/openeigrpd.conf -s /run/openeigrpd/control.sock
+.Ed
+.Sh SECURITY
+Raw EIGRP packets and RIB changes need appropriate network privileges.
+Do not grant those privileges to the read-only control client.
+The socket's filesystem permissions grant observational access; the daemon
+additionally verifies peer credentials before permitting
+.Cm clear events .
+Only root or the daemon startup UID may issue that mutating command.
+Do not use a group-writable socket directory or place secrets in a
+world-readable configuration file.
+.Sh LIMITATIONS
+Only default-VRF unicast address families are accepted by the current
+native configuration parser.
+Live configuration reload, EIGRP Stub runtime, and unsupported
+policy/authentication modes are not implemented.
+Refer to
+.Xr openeigrpd.conf 5
+for the accepted configuration subset.
+A successful syntax check does not guarantee interface, socket,
+permissions or runtime semantic readiness.
+.Sh EXIT STATUS
+.Ex -std
+.Sh SEE ALSO
+.Xr openeigrpd.conf 5 ,
+.Xr oectl 8 ,
+.Xr systemctl 1

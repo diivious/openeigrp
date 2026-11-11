@@ -35,9 +35,9 @@ install: all
 	fi
 	install -m 0644 packaging/openeigrpd.service "$(DESTDIR)$(SYSTEMDDIR)/openeigrpd.service"
 	install -m 0644 packaging/openeigrpd.sysusers "$(DESTDIR)$(SYSUSERSDIR)/openeigrpd.conf"
-	install -m 0644 man/oectl.8 "$(DESTDIR)$(MANDIR)/man8/oectl.8"
-	install -m 0644 man/openeigrpd.conf.5 "$(DESTDIR)$(MANDIR)/man5/openeigrpd.conf.5"
-	install -m 0644 packaging/openeigrpd.8 "$(DESTDIR)$(MANDIR)/man8/openeigrpd.8"
+	install -m 0644 packaging/man/oectl.8 "$(DESTDIR)$(MANDIR)/man8/oectl.8"
+	install -m 0644 packaging/man/openeigrpd.conf.5 "$(DESTDIR)$(MANDIR)/man5/openeigrpd.conf.5"
+	install -m 0644 packaging/man/openeigrpd.8 "$(DESTDIR)$(MANDIR)/man8/openeigrpd.8"
 	@# No daemon enable/start or systemd invocation in an install recipe.
 
 clean:

@@ -14,7 +14,7 @@ class NativeInstallTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="linux-install-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve() / "openeigrp"
-        for directory in ("linux", "eigrp/code", "libunix/code", "linux/code", "linux/man", "linux/packaging"):
+        for directory in ("linux", "eigrp/code", "libunix/code", "linux/code", "linux/packaging", "linux/packaging/man"):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / "linux/Makefile", self.root / "linux/Makefile")
         for directory in ("eigrp/code", "libunix/code", "linux/code"):
@@ -23,10 +23,10 @@ class NativeInstallTest(unittest.TestCase):
             f = self.root / "linux/code" / name
             f.write_text("#!/bin/sh\nexit 0\n")
             f.chmod(0o755)
-        for name in ("openeigrpd.conf", "openeigrpd.service", "openeigrpd.sysusers", "openeigrpd.8"):
+        for name in ("openeigrpd.conf", "openeigrpd.service", "openeigrpd.sysusers"):
             (self.root / "linux/packaging" / name).write_text(name)
-        for name in ("oectl.8", "openeigrpd.conf.5"):
-            (self.root / "linux/man" / name).write_text(name)
+        for name in ("openeigrpd.8", "oectl.8", "openeigrpd.conf.5"):
+            (self.root / "linux/packaging/man" / name).write_text(name)
         self.dest = self.root / "stage"
 
     def install(self, host="Linux"):

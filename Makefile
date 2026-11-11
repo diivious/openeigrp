@@ -84,6 +84,7 @@ check:
 	  tools.test.test_tool_ownership tools.test.test_backup tools.test.test_uut_make \
 	  linux.test.test_install_make linux.test.test_package_builds \
 	  frr.test.setup.test_frr_setup_clone frr.test.setup.test_frr_setup_tag
+	$(PYTHON) -m unittest -q linux.test.test_docs
 
 uut: portable-build
 	@$(if $(and $(SUITE),$(SCENARIO)),echo 'error: select either SUITE or SCENARIO' >&2; exit 2;,true)
