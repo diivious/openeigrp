@@ -163,8 +163,10 @@ Package-manager fixture tests remain separate from live routing qualification.
 
 ## Debian release packages
 
-Docker Desktop on ARM64 macOS can build both Linux package architectures
-using `make packages VERSION=0.1.0`; GitHub Actions builds both on native
+`make pre-commit` builds and tests `amd64` and `arm64` packages after
+`make all` and both FRR Docker images. Docker Desktop on ARM64 macOS can
+build both Linux package architectures using `make packages VERSION=0.1.0`;
+GitHub Actions builds both on native
 AMD64/ARM64 runners and publishes release assets only on version tags.
 See [`packaging/README.md`](packaging/README.md) for prerequisites, tests,
 installation and release security boundaries. Actual package construction is available after `make linux`; qualified

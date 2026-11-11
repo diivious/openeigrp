@@ -1,29 +1,26 @@
+# Copyright (C) 2026 Donnie V. Savage
 PYTHON ?= ../../../tools/python
 CC ?= cc
 CFLAGS ?= -O2 -g
-CPPFLAGS += -DEIGRP_UUT_TEST -DEIGRP_DISABLE_SNMP  -I../../../eigrp/code -I../../../libunix/code
+CPPFLAGS += -DEIGRP_UUT_TEST -DEIGRP_DISABLE_SNMP -I../../../eigrp/code -I../../../libunix/code
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -pthread
+LOG_TEST := ../../../tools/test-log.py
 
-# Link the same portable core archive used by the standalone build. The UUT
-# host callbacks and shared Unix services are compiled independently, with
-# EIGRP_UUT_TEST confined to the UUT archive and this frontend.
 CORE_LIB := ../../../eigrp/code/libeigrp-core.a
 UNIX_LIB := ../../../libunix/code/libeigrp_unix.a
 UUT_LIB := ../../../libunix/code/libeigrp_uut.a
 
-# Cyclic core/host callback references require a linker group on ELF. Darwin
-# does not support --start-group; repeating the archives supports its linker.
 ifeq ($(shell uname -s),Darwin)
 LIBS := $(CORE_LIB) $(UUT_LIB) $(UNIX_LIB) $(CORE_LIB) $(UUT_LIB) $(UNIX_LIB)
 else
 LIBS := -Wl,--start-group $(CORE_LIB) $(UUT_LIB) $(UNIX_LIB) -Wl,--end-group
 endif
 
-.PHONY: all clean
+.PHONY: all clean distclean ipv4-basic-core ipv6-basic-core basic-core \
+	md5-mixed-lan md5-security rtp-core dual-diamond kite-topology \
+	core-topology mesh-topology active-topology summary-topology all-scenarios
 all: eigrp-uut-node
 
-# Track the source members here as well as in the archive Makefiles: the
-# scenario runner invokes this Makefile directly, without a prior root build.
 $(CORE_LIB): $(wildcard ../../../eigrp/code/*.c)
 	$(MAKE) -C ../../../eigrp/code
 
@@ -44,85 +41,77 @@ eigrp-uut-node: node.c $(CORE_LIB) $(UNIX_LIB) $(UUT_LIB)
 
 clean:
 	rm -f eigrp-uut-node
-	rm -rf logs
+	rm -rf eigrp-uut-node.dSYM
 
-.PHONY: ipv4-basic-core ipv6-basic-core basic-core md5-mixed-lan md5-security rtp-core dual-diamond kite-topology core-topology mesh-topology active-topology all-scenarios
+distclean: clean
+	rm -rf ../../../logs/uut/eigrp
+
 ipv4-basic-core: eigrp-uut-node
-	$(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml
-
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml
 
 ipv6-basic-core: eigrp-uut-node
-	$(PYTHON) run.py examples/ipv6-basic-core.yaml examples/ipv6-basic-core-gate.yaml
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv6-basic-core.yaml examples/ipv6-basic-core-gate.yaml
 
 md5-mixed-lan: eigrp-uut-node
-	$(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml auth-topology/scenario-md5-mixed-lan.yaml
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml auth-topology/md5-mixed-lan.yaml
 
-# Three-router MD5 admission/replay/retransmission UUT qualification.
 md5-security: eigrp-uut-node
 	@status=0; \
-	for scenario in auth-topology/scenario-md5-*.yaml; do \
-		$(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml $$scenario || status=$$?; \
-	done; \
-	exit $$status
+	for scenario in auth-topology/md5-*.yaml; do \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml $$scenario || status=$$?; \
+	done; exit $$status
 
 basic-core: eigrp-uut-node
 	@status=0; \
-	$(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml || status=$$?; \
-	$(PYTHON) run.py examples/ipv6-basic-core.yaml examples/ipv6-basic-core-gate.yaml || status=$$?; \
-	exit $$status
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv6-basic-core.yaml examples/ipv6-basic-core-gate.yaml || status=$$?; exit $$status
 
 dual-diamond: eigrp-uut-node
-	$(PYTHON) run.py dual-diamond/ipv4-diamond-fs.yaml dual-diamond/scenario-a-feasible-successor.yaml
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py dual-diamond/ipv4-diamond-fs.yaml dual-diamond/feasible-successor.yaml
 
 kite-topology: eigrp-uut-node
 	@status=0; \
-	for scenario in dual-kite/scenario-*.yaml; do \
-		$(PYTHON) run.py dual-kite/ipv4-kite.yaml $$scenario || status=$$?; \
-	done; \
-	exit $$status
+	for scenario in dual-kite/[a-d]-*.yaml dual-kite/query-*.yaml; do \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py dual-kite/ipv4-kite.yaml $$scenario || status=$$?; \
+	done; exit $$status
 
 core-topology: eigrp-uut-node
 	@status=0; \
-	for scenario in core-topology/scenario-square-*.yaml; do \
-		$(PYTHON) run.py core-topology/ipv4-core-square.yaml $$scenario || status=$$?; \
+	for scenario in core-topology/square*.yaml; do \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py core-topology/ipv4-core-square.yaml $$scenario || status=$$?; \
 	done; \
-	for scenario in core-topology/scenario-cross-*.yaml; do \
-		$(PYTHON) run.py core-topology/ipv4-core-cross.yaml $$scenario || status=$$?; \
-	done; \
-	exit $$status
-
+	for scenario in core-topology/cross*.yaml; do \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py core-topology/ipv4-core-cross.yaml $$scenario || status=$$?; \
+	done; exit $$status
 
 mesh-topology: eigrp-uut-node
 	@status=0; \
-	for scenario in mesh-topology/scenario-k6-*.yaml; do \
-		$(PYTHON) run.py mesh-topology/ipv4-dense-mesh-k6.yaml $$scenario || status=$$?; \
-	done; \
-	exit $$status
+	for scenario in mesh-topology/k6-*.yaml; do \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py mesh-topology/ipv4-dense-mesh-k6.yaml $$scenario || status=$$?; \
+	done; exit $$status
 
 active-topology: eigrp-uut-node
 	@status=0; \
-	for scenario in active-topology/scenario-sia-*.yaml; do \
-		$(PYTHON) run.py active-topology/ipv4-sia-chain.yaml $$scenario || status=$$?; \
-	done; \
-	exit $$status
+	for scenario in active-topology/sia-*.yaml; do \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py active-topology/ipv4-sia-chain.yaml $$scenario || status=$$?; \
+	done; exit $$status
 
 rtp-core: eigrp-uut-node
 	@status=0; \
-	$(PYTHON) run.py ../rtp/two-router.yaml ../rtp/srtt-rto.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-reliable-packet.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-ack.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-before-eot.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-hold.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/backpressure-recovery.yaml || status=$$?; \
-	$(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/reliable-multicast-peer-retry.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/srtt-rto.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-reliable-packet.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-ack.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-before-eot.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-hold.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/backpressure-recovery.yaml || status=$$?; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/reliable-multicast-peer-retry.yaml || status=$$?; \
 	exit $$status
 
 all-scenarios: eigrp-uut-node
 	$(PYTHON) run_all.py
 
-.PHONY: summary-topology
 summary-topology: eigrp-uut-node
-	$(PYTHON) run.py summary-topology/ipv4-summary-boundary.yaml summary-topology/scenario-summary-query-boundary.yaml
-	$(PYTHON) run.py summary-topology/ipv4-summary-metric.yaml summary-topology/scenario-summary-metric-selection.yaml
-	$(PYTHON) run.py summary-topology/ipv4-summary-static-metric.yaml summary-topology/scenario-summary-static-metric.yaml
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py summary-topology/ipv4-summary-boundary.yaml summary-topology/query-boundary.yaml
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py summary-topology/ipv4-summary-metric.yaml summary-topology/metric-selection.yaml
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py summary-topology/ipv4-summary-static-metric.yaml summary-topology/static-metric.yaml

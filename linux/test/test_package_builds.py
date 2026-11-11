@@ -125,7 +125,7 @@ class MultiArchitectureBuildTests(unittest.TestCase):
         result = subprocess.run(["make", "-n", "packages", "VERSION=1.2.3"],
                                 cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('build-packages.sh --version "1.2.3"', result.stdout)
+        self.assertIn('build-packages.sh --version "$version" --arch', result.stdout)
 
 
 if __name__ == "__main__":

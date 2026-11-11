@@ -36,7 +36,7 @@ docker ps
 
 The volume retains `/etc/frr/frr.conf` and `/etc/frr/daemons` across container
 replacement. For an image you have already built locally, you can instead use
-`./tools/docker.sh --deploy IMAGE:TAG` (see Development).
+`./frr/tools/docker.sh --deploy IMAGE:TAG` (see Development).
 
 `NET_ADMIN` and `NET_RAW` are needed for the router and IP protocol 88. This
 FRR build also needs `SYS_ADMIN` for its Linux capability setup; this is a
@@ -116,10 +116,11 @@ The Docker integration test checks both configurations before boot.
 
 ## Development
 
-**Before opening a merge pull request, run `make all`** from the repository
-root. This sequentially executes build, `check SOURCE=all`, all portable UUTs,
-and the quick scale gate. Heavy scale cases and Docker image tests remain
-separate qualifications.
+**Before committing, run `make pre-commit`** from the repository root.
+`make all` performs the non-Docker build and regression gate, including all
+portable YAML UUTs and scale suites. `make pre-commit` additionally builds
+both Docker architectures and both Debian packages with lifecycle tests.
+Live FRR UUT and Netlab remain separate.
 
 **Requirements:** Docker Engine/Desktop with Buildx, Git and `rsync`.
 All commands below build a local image only; none pushes to GHCR.
@@ -127,23 +128,27 @@ All commands below build a local image only; none pushes to GHCR.
 ### Simple Makefile interface
 
 ```sh
-make docker                   # Both local checkouts, including working edits
-make docker FRR=../frr        # Explicit FRR checkout (local mode only)
+make docker                   # amd64 and arm64, including working edits
+make docker FRR=../frr        # Optional local FRR checkout
 make docker GITHUB=latest     # Highest numeric rel-X.Y.Z OpenEIGRP tag
-make docker GITHUB=1.2.3     # Exact OpenEIGRP rel-1.2.3 release
+make docker GITHUB=1.2.3      # Exact OpenEIGRP rel-1.2.3 release
 ```
 
-Local builds use the OpenEIGRP checkout containing this Makefile and the
-FRR checkout at `../frr` by default (or `FRR=/path/to/frr`). The resulting
-image is `openeigrp:${USER}-test`. Local branches and uncommitted changes
-from both repositories are included. `GITHUB` and `FRR` cannot be combined.
+Local builds use the current working OpenEIGRP checkout, including
+uncommitted changes. The FRR checkout at `../frr` is used if present, or
+`FRR=/path/to/frr` may specify one explicitly; otherwise FRR is fetched
+at the exact commit recorded in `docker/docker.cfg`. Both images are tagged
+`openeigrp:${USER}-test-amd64` and `openeigrp:${USER}-test-arm64`.
+The unqualified `openeigrp:${USER}-test` tag aliases the native host
+architecture, preserving existing deployment commands. `GITHUB` and `FRR`
+cannot be combined.
 
 GitHub builds use the selected OpenEIGRP `rel-X.Y.Z` commit, **including that
 revision's Dockerfile, patches, and `docker/docker.cfg`**. The config pins
 `FRR_REPO`, `FRR_TAG` and `FRR_SHA`; FRR is fetched and checked against the
 specified immutable commit. Releases predating `docker.cfg` use the FRR
-pin recorded in **their own tagged `tools/docker.sh`** (never the developer's
-current pin). The Alpine minor-version default also comes from the selected
+pin recorded in **their own tagged `tools/docker.sh`** (legacy releases only, never the
+developer's current pin). The Alpine minor-version default also comes from the selected
 release's Dockerfile. The image tag is
 `ghcr.io/diivious/openeigrp-frr:X.Y.Z` (built locally, not pushed). The
 `GITHUB=latest` selector chooses the highest numeric release tag, not the
@@ -155,15 +160,15 @@ its triggering exact release tag to avoid races.
 The native script retains platform, image tag, job count, and source overrides:
 
 ```sh
-./tools/docker.sh --local my-test --frr-root ../frr \
+./frr/tools/docker.sh --local my-test --frr-root ../frr \
   --platform linux/arm64 --image openeigrp:my-test --jobs 8
-./tools/docker.sh --build 1.2.3 --platform linux/arm64 \
+./frr/tools/docker.sh --build 1.2.3 --platform linux/arm64 \
   --image openeigrp:release-test
-./tools/docker.sh --build dev-branch --eigrp-ref refs/heads/docker-update \
+./frr/tools/docker.sh --build dev-branch --eigrp-ref refs/heads/docker-update \
   --image openeigrp:dev-branch
-./tools/docker.sh --test openeigrp:my-test
-./tools/docker.sh --verify openeigrp:my-test
-./tools/docker.sh --deploy openeigrp:my-test \
+./frr/tools/docker.sh --test openeigrp:my-test
+./frr/tools/docker.sh --verify openeigrp:my-test
+./frr/tools/docker.sh --deploy openeigrp:my-test \
   --name openeigrp-test --volume openeigrp-test-vol
 ```
 
@@ -254,10 +259,10 @@ make docker GITHUB=latest
 make docker GITHUB=1.2.3
 
 # For custom image names/platforms and post-build integration:
-./tools/docker.sh --local my-test --image openeigrp:docker-test
-./tools/docker.sh --test openeigrp:docker-test
-./tools/docker.sh --verify openeigrp:docker-test
-./tools/docker.sh --deploy openeigrp:docker-test \
+./frr/tools/docker.sh --local my-test --image openeigrp:docker-test
+./frr/tools/docker.sh --test openeigrp:docker-test
+./frr/tools/docker.sh --verify openeigrp:docker-test
+./frr/tools/docker.sh --deploy openeigrp:docker-test \
   --name openeigrp-test --volume openeigrp-test-vol
 ```
 
@@ -286,7 +291,7 @@ and PyYAML):
 Then run the image integration test, using the image you just built:
 
 ```sh
-./tools/docker.sh --test "$IMAGE"
+./frr/tools/docker.sh --test "$IMAGE"
 ```
 
 The test performs these checks:
@@ -320,7 +325,7 @@ portable/Unix UUT suite; `--verify` adds the two-router network tests.
 After the integration test passes, deploy the image for interactive use:
 
 ```sh
-./tools/docker.sh --deploy "$IMAGE" --name openeigrp-test --volume openeigrp-test-vol
+./frr/tools/docker.sh --deploy "$IMAGE" --name openeigrp-test --volume openeigrp-test-vol
 ```
 
 Verify that the container is running and the required FRR processes exist:
@@ -476,7 +481,7 @@ on R1/R2 to distinguish Docker multicast forwarding problems from EIGRP
 receive-path problems. Packet capture is passive and runs only in the
 verification containers; it does not modify the image or host bridge.
 
-`tools/docker.sh --verify` performs these checks automatically, requiring
+`frr/tools/docker.sh --verify` performs these checks automatically, requiring
 both remote prefixes to be learned through the peer, as well as exactly
 three topology destinations on each router. It checks again after an interval
 to reject transient success. This verifies basic route advertisement and
@@ -503,7 +508,7 @@ docker rm -fv eigrp-r1 eigrp-r2
 docker network rm eigrp-test-r1-lan eigrp-test-r2-lan eigrp-test-transit
 ```
 
-The two-router test is automated by `tools/docker.sh --verify`. GitHub Actions
+The two-router test is automated by `frr/tools/docker.sh --verify`. GitHub Actions
 also runs `--verify` on both native architectures before publishing any
 GHCR release image.
 
@@ -521,7 +526,7 @@ git push origin refs/tags/rel-0.1.0
 
 A `rel-X.Y.Z` tag push runs `.github/workflows/docker.yml` **from the tagged
 commit**, building native `amd64` and `arm64` images. Both jobs run
-`./tools/docker.sh --verify`; only if both succeed does the publish job push
+`./frr/tools/docker.sh --verify`; only if both succeed does the publish job push
 `X.Y.Z-amd64`, `X.Y.Z-arm64`, and the combined `X.Y.Z` manifest to
 `ghcr.io/diivious/openeigrp-frr`. Ordinary pushes to `master` or `docker` affecting the workflow's watched
 paths, pull requests, and manual workflow runs are build-and-test-only; they
@@ -544,8 +549,8 @@ actual target platform:
 
 ```sh
 docker pull ghcr.io/diivious/openeigrp-frr:0.1.0
-./tools/docker.sh --verify ghcr.io/diivious/openeigrp-frr:0.1.0
-./tools/docker.sh --deploy ghcr.io/diivious/openeigrp-frr:0.1.0 \
+./frr/tools/docker.sh --verify ghcr.io/diivious/openeigrp-frr:0.1.0
+./frr/tools/docker.sh --deploy ghcr.io/diivious/openeigrp-frr:0.1.0 \
   --name openeigrp-release-test --volume openeigrp-release-test-vol
 ```
 

@@ -1,6 +1,6 @@
 # OpenEIGRP
 
-[![OpenEIGRP Core CI](https://github.com/diivious/eigrp/actions/workflows/core.yml/badge.svg?branch=master)](https://github.com/diivious/eigrp/actions/workflows/core.yml?query=branch%3Amaster)
+[![OpenEIGRP Core CI](https://github.com/diivious/openeigrp/actions/workflows/core.yml/badge.svg?branch=master)](https://github.com/diivious/openeigrp/actions/workflows/core.yml?query=branch%3Amaster)
 
 OpenEIGRP is a portable implementation of the Enhanced Interior Gateway Routing Protocol defined by RFC 7868. OpenEIGRP is the project name; EIGRP remains the protocol name used by the wire protocol, CLI, data structures, and source APIs.
 
@@ -67,49 +67,53 @@ The Docker package uses Alpine Linux and FRR with OpenEIGRP. For local/GitHub bu
 
 ### Portable/Unix build
 
-From the repository root:
-
-```sh
-make
-```
-
-The root build compiles the portable EIGRP core and Unix host support without requiring an FRR checkout, BIRD checkout, VM, root privileges, or host VLAN configuration.
+From the repository root, `make portable-build` builds the portable core and
+Unix libraries without running tests. `make` and `make all` run the complete
+platform-appropriate regression gate. Neither requires an FRR or Netlab checkout.
 
 ### Build, test and pre-merge qualification
 
 From the repository root:
 
 ```sh
-make                        # Build portable EIGRP and Unix support (default)
+make                        # All non-Docker builds and regressions (same as make all)
+make pre-commit             # make all, plus both Docker images and Debian packages/UUTs
+make portable-build         # Compile portable EIGRP and Unix support only
+make linux                  # Compile native daemon on Linux only
 make check                  # Changed-file style check + checker unit tests
 make check SOURCE=all       # Full-tree style check + checker unit tests
 make uut                    # All portable pytest and YAML UUT scenarios
 make uut SUITE=rtp-core     # Named scenario group
-make uut SCENARIO=prefix-limit-lifecycle/scenario-peer-timers-ipv6.yaml
+make uut SCENARIO=prefix-limit-lifecycle/peer-timers-ipv6.yaml
 make scale                  # Quick pacing/backpressure qualification
-make scale SUITE=100k       # Heavy scale qualification when needed
+make scale SUITE=100k       # Run only the 100k scale group
 ```
 
-**Run `make all` before opening a pull request for merge.** It runs `build`,
-`check SOURCE=all`, `uut`, then the quick `scale` gate in that order. It stops
-at the first failure. `make` alone remains a build only. Full scale suites are
-explicit, not part of `make all`.
+**Run `make all` during development; run `make pre-commit` before committing.**
+`make all` builds the native daemon on Linux (portable libraries on macOS),
+checks style, runs all portable Python and YAML UUTs, the quick scale gate,
+all extended scale suites, and Linux-native tests where supported. It requires
+neither Docker nor an external FRR or Netlab environment. `make pre-commit`
+then builds FRR Docker images for `amd64` and `arm64`, builds Debian packages
+for both architectures, and tests the package lifecycle on both. It stops at
+the first failure. Docker Desktop/Engine with cross-platform support, Git,
+network access, and `rsync` are required for `pre-commit`. FRR UUT and your
+personal Netlab regressions remain independent.
 
-`make help` lists the short command interface and selectors. GitHub Actions
-runs its build, style and portable UUT gates on Linux and macOS; the local
-pre-merge `make all` also runs the quick scale qualification.
+GitHub Actions runs the platform-appropriate gate on Linux and macOS.
 
 For Docker development:
 
 ```sh
-make docker                 # Local OpenEIGRP and FRR checkouts
-make docker FRR=../frr      # Choose a different FRR checkout
+make docker                 # Both architectures from working OpenEIGRP source
+make docker FRR=../frr      # Use an optional local FRR checkout
 make docker GITHUB=latest   # Latest OpenEIGRP release tag
-make docker GITHUB=1.2.3   # Specific rel-1.2.3 plus its FRR pin
+make docker GITHUB=1.2.3    # Specific rel-1.2.3 plus its FRR pin
+make packages                # Both architectures; developer version from Git
 ```
 
 See [Docker development](docker/README.md) for source selection and advanced
-`tools/docker.sh` options.
+`frr/tools/docker.sh` options.
 
 </details>
 

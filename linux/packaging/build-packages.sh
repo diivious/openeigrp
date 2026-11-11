@@ -60,7 +60,8 @@ case "$image" in
     *[!A-Za-z0-9._/:@-]*|'') fail 'invalid Docker build image' ;;
 esac
 command -v docker >/dev/null 2>&1 || fail 'Docker is required'
-docker info >/dev/null 2>&1 || fail 'Docker daemon is not running or accessible'
+docker info >/dev/null 2>&1 || \
+    fail 'Docker daemon unavailable. Start Docker Desktop or Docker Engine and verify docker info'
 if [ "$uut" -eq 1 ]; then
     # A UUT run is read-only with respect to the checkout and dist/.
     staging=$(mktemp -d)
@@ -108,6 +109,7 @@ for arch in $archs; do
             cp -a /src/Makefile /work/Makefile
             cp -a /src/eigrp/code /work/eigrp/code
             cp -a /src/libunix/code /work/libunix/code
+            cp -a /src/linux/Makefile /work/linux/Makefile
             cp -a /src/linux/code /work/linux/code
             cp -a /src/linux/man /work/linux/man
             cp -a /src/linux/packaging /work/linux/packaging

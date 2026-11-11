@@ -13,7 +13,7 @@ def test_example_schemas():
     m.validate_scenario(m.load_yaml(root/"ipv6-basic-core-gate.yaml"))
     diamond=root.parent/"dual-diamond"
     m.validate_topology(m.load_yaml(diamond/"ipv4-diamond-fs.yaml"))
-    m.validate_scenario(m.load_yaml(diamond/"scenario-a-feasible-successor.yaml"))
+    m.validate_scenario(m.load_yaml(diamond/"feasible-successor.yaml"))
 
 def test_arbitrary_shared_segment_width():
     t={"schema":m.TOPOLOGY_SCHEMA,"segments":{"lan":{}},"routers":{}}
@@ -93,8 +93,8 @@ def test_redistribution_scenarios_use_three_real_routers():
     topology = m.validate_topology(m.load_yaml(root / "ipv4-static-three-router.yaml"))
     assert set(topology["routers"]) == {"r1", "r2", "r3"}
     assert topology["routers"]["r1"]["redistribute"] == ["static"]
-    for name in ("scenario-static-source-withdrawal.yaml",
-                 "scenario-static-disable-redistribution.yaml"):
+    for name in ("static-source-withdrawal.yaml",
+                 "static-disable-redistribution.yaml"):
         scenario = m.validate_scenario(m.load_yaml(root / name))
         operations = [next(iter(s)) for s in scenario["steps"]]
         assert "validate-convergence" in operations

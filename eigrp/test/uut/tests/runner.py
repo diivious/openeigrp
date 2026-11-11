@@ -64,7 +64,7 @@ def test_sia_failure_requires_absence_and_timeout_reason():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     scenario = module.validate_scenario(module.load_yaml(Path(__file__).resolve().parents[1]
-                                                         / "active-topology/scenario-sia-failure.yaml"))
+                                                         / "active-topology/sia-failure.yaml"))
     steps = scenario["steps"]
     assert any("validate-neighbor" in step and
                step["validate-neighbor"].get("state") == "down" and

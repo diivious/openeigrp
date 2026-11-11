@@ -30,7 +30,7 @@ Usage: netlabs/tools/remote-uut.sh --list
 New live scenarios: netlabs/test/{rtp,dual}/<case>/{driver.py,scenario.yaml,topology.yml}
 Existing scenarios under netlabs/uut/ remain supported. Live tests execute
 sequentially on the appliance; no further scenario starts after unverified
-or failed teardown. Results are saved to netlabs/results/.
+or failed teardown. Results are saved to logs/netlab/.
 HELP
 }
 
@@ -107,6 +107,7 @@ discover() {
 
 run_image_update() {
     remote_transport_prepare
+    check_remote_docker || return $?
     printf 'Checking published OpenEIGRP images on %s...\n' "$REMOTE_HOST"
     local stage rc
     stage="$(remote_new_stage)"
@@ -122,6 +123,28 @@ run_image_update() {
     fi
 }
 
+# Check prerequisites before staging regressions, reporting blocked scenarios,
+# or claiming that a development image is absent. Published-image tests need
+# Docker on the appliance only; a local daemon is required for --image.
+check_local_docker() {
+    command -v docker >/dev/null 2>&1 || {
+        echo 'ERROR: local Docker CLI is required for --image' >&2
+        return 2
+    }
+    docker info >/dev/null 2>&1 || {
+        echo 'ERROR: local Docker daemon unavailable. Start Docker Desktop or Docker Engine and verify docker info.' >&2
+        return 2
+    }
+}
+
+check_remote_docker() {
+    if ! remote_ssh 'command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1'; then
+        printf 'ERROR: Docker daemon unavailable on %s. Start Docker Engine and verify docker info on the appliance.\n' \
+            "$REMOTE_HOST" >&2
+        return 2
+    fi
+}
+
 # --image selects an existing local build. Never rename/publish a development
 # image under a GHCR release tag. The server-side importer takes the session
 # lock and rejects active labs before modifying any Docker image.
@@ -130,10 +153,8 @@ DEV_ID=''
 run_image_sync() {
     local tag="$1" local_id local_platform stage status=0 remote_id
     DEV_IMAGE="openeigrp:$tag"
-    command -v docker >/dev/null 2>&1 || {
-        echo 'ERROR: local Docker is required for --image' >&2; return 1;
-    }
-    local_id="$(docker image inspect --format '{{.Id}}' "$DEV_IMAGE")" || {
+    check_local_docker || return $?
+    local_id="$(docker image inspect --format '{{.Id}}' "$DEV_IMAGE" 2>/dev/null)" || {
         echo "ERROR: local image not found: $DEV_IMAGE (build with make docker first)" >&2
         return 1
     }
@@ -178,6 +199,7 @@ run_image_sync() {
 run_purge() {
     local stage rc=0 local_images image
     remote_transport_prepare || return 1
+    check_remote_docker || return $?
     stage="$(remote_new_stage)" || return 1
     if ! remote_stage "$stage" netlabs/tools/remote/dev-image.sh; then
         remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || :
@@ -198,7 +220,7 @@ run_purge() {
         done <<<"$local_images"
     fi
     # Delete known report artifacts only. Preserve unrelated files and config.
-    local f results="$REMOTE_REPO_ROOT/netlabs/results"
+    local f results="$REMOTE_REPO_ROOT/logs/netlab"
     if [[ -d "$results" ]]; then
         for f in "$results"/uut-* "$results"/batch-*.json; do
             [[ -e "$f" ]] || continue
@@ -262,7 +284,7 @@ run_live() {
     rm -f -- "$transcript"
 
     if [[ -n "$report" ]]; then
-        local local_results="$REMOTE_REPO_ROOT/netlabs/results"
+        local local_results="$REMOTE_REPO_ROOT/logs/netlab"
         if remote_fetch_report "$report" "$local_results"; then
             printf 'Report: %s/%s\n' "$local_results" "$report"
             LAST_RESULT="$report"
@@ -349,7 +371,7 @@ run_remote_regressions() {
         record unit regressions BLOCKED
         return 1
     fi
-    local_results="$REMOTE_REPO_ROOT/netlabs/results"
+    local_results="$REMOTE_REPO_ROOT/logs/netlab"
     if ! remote_fetch_report "$report" "$local_results"; then
         echo "BLOCKED: cannot retrieve remote regression report $report" >&2
         record unit regressions BLOCKED
@@ -398,7 +420,7 @@ PYRESULT
 
 write_summary() {
     local suite="$1" dir stamp out rows
-    dir="$REMOTE_REPO_ROOT/netlabs/results"
+    dir="$REMOTE_REPO_ROOT/logs/netlab"
     mkdir -p "$dir"
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
     out="$(mktemp "$dir/batch-${suite}-${stamp}-XXXXXXXX.json")"
@@ -474,6 +496,9 @@ if [[ -n "$image_tag" ]]; then
         *) echo 'ERROR: --image requires a live test selection' >&2; exit 2 ;;
     esac
 fi
+if [[ -n "$image_tag" ]]; then
+    check_local_docker || exit $?
+fi
 case "$requested" in
     update) run_image_update; exit $? ;;
     abort) run_abort; exit $? ;;
@@ -503,6 +528,7 @@ fi
 
 if [[ "$requested" == scenario ]]; then
     remote_transport_prepare
+    check_remote_docker || exit $?
     if [[ -n "$image_tag" ]]; then
         run_image_sync "$image_tag" || exit $?
     fi
@@ -519,6 +545,9 @@ regressions_ok=0
 if ! remote_transport_prepare; then
     echo 'ERROR: Remote preflight failed; no tests executed.' >&2
     exit 2
+fi
+if (( ${#selected[@]} > 0 )); then
+    check_remote_docker || exit $?
 fi
 if run_remote_regressions "$requested"; then
     regressions_ok=1

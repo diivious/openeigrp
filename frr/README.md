@@ -161,9 +161,9 @@ The supported FRR path is documented in the top-level `README.md` and in
 `tools/README.md`:
 
 ```sh
-tools/frr.sh --install --frr-root ../frr
-tools/frr.sh --patch --frr-root ../frr
-tools/frr.sh --build --frr-root ../frr
+frr/tools/frr.sh --install --frr-root ../frr
+frr/tools/frr.sh --patch --frr-root ../frr
+frr/tools/frr.sh --build --frr-root ../frr
 ```
 
 `--install` copies `eigrp/code/` plus the adapter files in `code/` into `frr/eigrpd/`.
@@ -191,8 +191,8 @@ change. Do not reach into `prefix_descriptor` or packet objects from host code.
 FRR-native daemon tests live in `test/eigrpd/` and are staged to `frr/tests/eigrpd/`; actual topotests live in `test/topotests/` and stage to `frr/tests/topotests/`.
 See `test/README.md`.
 
-Live named-mode config/writeback is driven by `tools/frr.sh --uut` and
-`tools/frr-uut.sh`.
+Live named-mode config/writeback is driven by `frr/tools/frr.sh --uut` and
+`frr/tools/frr-uut.sh`.
 
 ## Debugging
 

@@ -12,7 +12,7 @@ uut = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(uut)
 
 
-SCENARIO = RUN.parent / "mesh-topology" / "scenario-k6-b-concurrent-multiprefix.yaml"
+SCENARIO = RUN.parent / "mesh-topology" / "k6-b-concurrent-multiprefix.yaml"
 
 
 def test_concurrent_active_reply_gate_blocks_only_expected_direction(tmp_path):

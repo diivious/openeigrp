@@ -36,6 +36,11 @@ cat >"$client/netlabs/tools/remote/common.sh" <<'MOCK'
 REMOTE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 REMOTE_HOST=mock-appliance
 remote_transport_prepare() { :; }
+remote_ssh() {
+    # The client checks the appliance daemon before starting remote work.
+    [[ "$*" == 'command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1' ]] || return 99
+    printf 'docker-preflight\n' >>"$MOCK_REMOTE_LOG"
+}
 remote_new_stage() { printf '/home/netlab-data/runs/upload.mock\n'; }
 remote_stage() { printf 'stage %s\n' "$*" >>"$MOCK_REMOTE_LOG"; }
 remote_install_runner() { :; }
@@ -112,6 +117,7 @@ bash "$client/netlabs/tools/remote-uut.sh" --scenario 4R-feasibility >"$tmp/sing
 [[ ! -s "$MOCK_LOCAL_LOG" ]]
 grep -Fq 'uut-start 4R-feasibility dual' "$MOCK_REMOTE_LOG"
 grep -Fq 'netlabs/test/dual/4R-feasibility' "$MOCK_REMOTE_LOG"
+grep -Fxq docker-preflight "$MOCK_REMOTE_LOG"
 echo 'PASS: single grouped case staging and dispatch without local regressions'
 
 : >"$MOCK_REMOTE_LOG"; : >"$MOCK_LOCAL_LOG"
@@ -141,6 +147,9 @@ grep -Fq 'regressions all' "$MOCK_REMOTE_LOG"
 # Report names have random suffixes; sorting them is not execution order.
 # Read the exact result emitted by this invocation.
 first_report="$(sed -n 's/^Batch report: //p' "$tmp/all.log")"
+[[ "$first_report" == "$client/logs/netlab/"* ]] || {
+    echo "FAIL: batch evidence must be under logs/netlab" >&2; exit 1;
+}
 if [[ ! -f "$first_report" ]]; then
     echo 'FAIL: no batch result for first run' >&2
     exit 1
@@ -160,7 +169,7 @@ echo 'PASS: --all preserves failure and continues independent live cases'
 
 # Even an older result with a lexicographically larger filename must not
 # override the report emitted by the current invocation.
-cp "$first_report" "$client/netlabs/results/batch-all-20991231T235959Z-zzzzzzzz.json"
+cp "$first_report" "$client/logs/netlab/batch-all-20991231T235959Z-zzzzzzzz.json"
 
 # Failed required infrastructure regressions block every live case.
 : >"$MOCK_REMOTE_LOG"; : >"$MOCK_LOCAL_LOG"

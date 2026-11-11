@@ -77,5 +77,5 @@ for selection in --all '--scenario 2R-neighbor'; do
     [[ "$output" != *'BLOCKED: live scenarios'* ]] || exit 1
     [[ "$output" != *'Running all regressions'* ]] || exit 1
 done
-[[ ! -d "$tmp/client/netlabs/results" ]]
+[[ ! -d "$tmp/client/logs/netlab" ]]
 echo 'PASS: remote preflight diagnoses SSH failures and stops before tests'

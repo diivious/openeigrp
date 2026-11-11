@@ -94,6 +94,7 @@ class Broker(threading.Thread):
         super().__init__(daemon=True); self.path=path; self.address_owner=address_owner
         self.stop_event=threading.Event(); self.ready=threading.Event(); self.journal=[]; self.error=None
         self._lock=threading.Lock(); self._faults={}; self._next_fault=1; self._delayed=[]; self._delay_serial=0; self._disconnected=set()
+        self._endpoint_cv=threading.Condition(); self._registered={}
     def add_fault(self,spec):
         if not isinstance(spec,dict): raise WireFaultError("fault must be a mapping")
         allowed={"name","action","source_uut","destination_uut","source_interface","destination_interface","segment","afi","multicast","opcode","prefix","sequence","ack","cr","delay_ms","copies","count"}
@@ -156,6 +157,15 @@ class Broker(threading.Thread):
                     try: frame=recv_frame(c)
                     except OSError: frame=b""
                     if not frame:
+                        with self._endpoint_cv:
+                            for endpoint in endpoints:
+                                if endpoint[0] is c:
+                                    registrations = self._registered.get(endpoint[6])
+                                    if registrations is not None:
+                                        registrations.discard(c)
+                                        if not registrations:
+                                            del self._registered[endpoint[6]]
+                            self._endpoint_cv.notify_all()
                         endpoints[:]=[e for e in endpoints if e[0] is not c]
                         try: sel.unregister(c); c.close()
                         except Exception: pass
@@ -167,7 +177,10 @@ class Broker(threading.Thread):
                     src_key=(afi,src[:4] if afi==4 else src); owner=self.address_owner.get(src_key,"?")
                     if typ==REGISTER:
                         item=(c,afi,ifindex,seg,ifname,src,owner)
-                        if not any(e[:6]==item[:6] for e in endpoints): endpoints.append(item)
+                        if not any(e[:6]==item[:6] for e in endpoints):
+                            endpoints.append(item)
+                            with self._endpoint_cv:
+                                self._registered.setdefault(owner,set()).add(c)
                         continue
                     if typ!=PACKET: continue
                     pm=_packet_meta(payload,afi); mc=bool(flags&MULTICAST)
@@ -205,4 +218,10 @@ class Broker(threading.Thread):
         finally:
             try: os.unlink(self.path)
             except FileNotFoundError: pass
+    def wait_node_closed(self, name, timeout=2):
+        """Wait until the stopped node's registrations have been retired."""
+        with self._endpoint_cv:
+            return self._endpoint_cv.wait_for(
+                lambda: not self._registered.get(name), timeout)
+
     def close(self): self.stop_event.set(); self.join(2)

@@ -13,12 +13,14 @@ You do not need to know every EIGRP packet type on day one. You do need to know
 which directory you are changing:
 
 ```text
-eigrpd/   portable protocol. same behavior on every host
-frr/      FRR adapter, CLI, YANG, Zebra, process main
-bird/     reserved BIRD adapter. not an implementation yet
-test/     host-independent tests and compile smoke
-specs/    project rules. read before you invent a new pattern
-tools/    FRR stage/build/UUT helpers
+eigrp/    portable protocol and its tests
+libunix/  portable Unix host support and virtual-wire UUT
+linux/    native Linux daemon, tools, and Debian packaging
+frr/      FRR adapter and its tools/tests
+bird/     reserved BIRD adapter
+netlabs/  optional maintainer regression environment
+tools/    shared development utilities and their tests
+specs/    project rules
 ```
 
 If the change is protocol behavior, it belongs in `eigrp/code/`.
@@ -30,7 +32,7 @@ same patch as the header.
 ## 2. How work is delivered
 
 This is a normal git project. Canonical source is
-https://github.com/diivious/eigrp
+https://github.com/diivious/openeigrp
 
 Do not send zip files, recursive copies, or `tools/backup.sh` output as a
 contribution. Do not develop against a staged FRR copy of `eigrpd/` and copy
@@ -39,13 +41,13 @@ edits back.
 Flow:
 
 ```text
-1. Fork https://github.com/diivious/eigrp
+1. Fork https://github.com/diivious/openeigrp
 2. Clone your fork
 3. Branch from current master
 4. Make the change in this tree
-5. Run `make all` and record its result
+5. Run `make pre-commit` and record its result
 6. Push the branch
-7. Open a pull request against diivious/eigrp master
+7. Open a pull request against diivious/openeigrp master
 ```
 
 Small, reviewable changes beat large mixed diffs. One feature or one defect per
@@ -86,7 +88,7 @@ Ask before you:
 - add a compatibility wrapper or second code path
 - change whitespace, comment style, or include order across a file
 - add a new public header or public function
-- move code between `eigrpd/` and a host directory
+- move code between `eigrp/` and a host directory
 - change managed patches under `frr/patch/`
 
 Do the work first only when the change is local, obvious, and already covered by
@@ -129,11 +131,12 @@ untracked changes and runs the style-checker's executable regression tests.
 `make check SOURCE=all` checks the entire tree. Fix all reported violations;
 CI checks the pushed or proposed-merge diff using `STYLE_CHECK_BASE`.
 
-**Before opening a pull request for merge, run `make all` locally.** It runs
-build, full-tree style validation, all portable pytest/YAML UUT scenarios,
-and the quick scale gate, sequentially. Do not open the PR if a stage fails.
-If host limitations prevent a stage, disclose the unverified stage in the PR
-rather than describing the gate as passed.
+**Before committing or opening a pull request, run `make pre-commit` locally.**
+It runs `make all` first, then builds both Docker image architectures, builds
+both Debian package architectures, and runs both package lifecycle UUTs.
+`make all` covers native/portable builds, full-tree style validation, portable
+pytest/YAML UUTs, quick and extended scale suites, and native Linux tests on
+Linux. Do not describe a gate as passed if any stage is unverified or failed.
 
 C source checks require `clang-format` on `PATH` (install with Homebrew or the
 host package manager). The check enforces whitespace hygiene, C formatting,
@@ -167,35 +170,37 @@ New files use the copyright of the person who wrote them.
 From the repository root, the normal standalone development loop is:
 
 ```sh
-make                # Build
-make all            # Required before opening a merge PR
+make portable-build   # Compile portable engine and Unix libraries only
+make                 # All non-Docker builds and UUTs
+make all             # Same as make; day-to-day regression gate
+make pre-commit      # Add amd64/arm64 Docker builds, packages, and package UUTs
 ```
 
-`make` builds `eigrp/code` plus `libunix/code`. `make all` is the
-pre-merge gate, with `make uut` providing the portable/core tests: portable build validation, `eigrp/test`, `libunix/test`, the
-IPv4 and IPv6 Basic Core Gates, and the RTP Core Gate. It requires no FRR/BIRD
-checkout or VM, root privileges, or host VLAN configuration, and it never
-invokes platform tooling implicitly.
+`make all` builds the native daemon on Linux (portable libraries on macOS),
+runs full-tree style checks, portable Python and YAML UUTs, quick and extended
+scale suites, and native Linux tests on Linux. It requires no Docker, FRR
+checkout, or Netlab installation. `make pre-commit` additionally requires
+Docker with `amd64`/`arm64` support and network access. Live FRR UUT and
+personal Netlab tests remain outside both gates.
 
-GitHub Actions executes the build, style, and UUT stages on Linux and macOS;
-the local `make all` additionally includes the quick scale gate. See
+GitHub Actions runs the platform-appropriate gate on Linux and macOS. See
 the root `Makefile` and `.github/workflows/` for the hosted CI contract.
 
 For protocol changes that also require FRR platform validation, move to the FRR
 environment after the portable gate and run explicitly:
 
 ```sh
-tools/frr.sh --install --frr-root ../frr
-tools/frr.sh --build --frr-root ../frr
+frr/tools/frr.sh --install --frr-root ../frr
+frr/tools/frr.sh --build --frr-root ../frr
 ```
 
 If you changed managed FRR-wide files, apply patches on a fresh FRR checkout
-with `tools/frr.sh --patch` first. Do not fuzz or force a patch.
+with `frr/tools/frr.sh --patch` first. Do not fuzz or force a patch.
 
 If you changed named-mode CLI, config retention, or writeback, run the live UUT:
 
 ```sh
-tools/frr.sh --uut --frr-root ../frr
+frr/tools/frr.sh --uut --frr-root ../frr
 ```
 
 CLI work is not done until parse, mutation, running-config writeback, and the

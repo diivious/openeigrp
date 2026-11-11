@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: ISC
 # Copyright (C) 2026 Donnie V. Savage
-"""Exercise tools/package.sh and the real Docker build orchestration API."""
+"""Exercise linux/packaging/package.sh and the real Docker build orchestration API."""
 
 import json
 import os
@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "tools/package.sh"
+SCRIPT = ROOT / "linux/packaging/package.sh"
 
 FAKE_DOCKER = '''#!/usr/bin/env python3
 import json
@@ -72,7 +72,7 @@ class PackageCommandTests(unittest.TestCase):
         self.git("commit", "-qm", "fixture")
         self.git("tag", "-a", "rel-0.5.0", "-m", "0.5")
         self.git("remote", "add", "origin", str(self.repo))
-        self.script = self.repo / "tools/package.sh"
+        self.script = self.repo / "linux/packaging/package.sh"
         self.env = {**os.environ, "USER": "diivious", "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
                     "DOCKER_RECORD": str(self.record)}
 

@@ -400,10 +400,11 @@ Run `make check` before committing. This runs the style checker over the
 Git index, working tree and untracked files, followed by the checker's own
 executable regression tests. It never changes source, the index, or history.
 
-Run `make check SOURCE=all` for a full-tree audit. **Run `make all` before
-opening a pull request for merge**: build, full-tree style check and checker
-tests, all portable UUTs, then quick scale. A failing stage must not be
-reported as success.
+Run `make check SOURCE=all` for a full-tree audit. **Run `make pre-commit` before
+committing or opening a pull request**: `make all` (build, full-tree style
+checks, portable UUTs, quick and extended scale) followed by both Docker
+architectures, both Debian packages, and package lifecycle UUTs. A failing
+stage must not be reported as success.
 
 CI uses the same changed-file checker with `STYLE_CHECK_BASE` selecting the
 committed comparison revision: `make check STYLE_CHECK_BASE=<git-revision>`.

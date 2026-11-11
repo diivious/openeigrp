@@ -22,16 +22,15 @@ __pycache__/
 .dirstamp
 .libs/
 
-# Test / UUT generated output
+# All generated test result evidence, independent of file extension
+/logs/
+# Historical output, removed by explicit migration rather than ignored as source
 *.log
 *.logs
 *.dSYM/
 
-# FRR test build output
 /frr/test/build/obj/
-/frr/test/build/logs/
-
-# FRR/generated daemon artifacts when this tree is staged inside FRR
+# FRR/generated daemon artifacts when staged inside FRR
 eigrpd/.deps/
 eigrpd/.dirstamp
 eigrpd/.libs/

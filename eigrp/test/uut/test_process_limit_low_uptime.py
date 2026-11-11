@@ -12,7 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 UUT = ROOT / "eigrp/test/uut"
-SCENARIO = UUT / "prefix-limit/scenario-process-dampened-ipv4.yaml"
+SCENARIO = UUT / "prefix-limit/process-dampened-ipv4.yaml"
 
 # YAML may wait 15s for the initial adjacency, 15s for the learned route,
 # six times 10s for process state, and 20s for adjacency recovery. The outer

@@ -145,7 +145,7 @@ netlabs/tools/remote-uut.sh --scenario 2R-neighbor
 ```
 
 `remote-uut.sh` provisions the scenario, validates the outcome, copies logs
-and results into `netlabs/results/`, and tears down the topology. The
+and results into `logs/netlab/`, and tears down the topology. The
 interactive `remote-lab.sh` maintains a lab until explicitly stopped; numbered
 instructional labs are not yet implemented. The two tools share an exclusive
 session lock, so run **only one** lab or UUT session at a time. The separate

@@ -85,6 +85,14 @@ make packages VERSION=0.1.0
 # or: linux/packaging/build-packages.sh --version 0.1.0
 ```
 
+For labeled development builds and package lifecycle tests, the Debian-owned
+wrapper remains available without adding more top-level Make targets:
+
+```sh
+linux/packaging/package.sh --local my-test
+linux/packaging/package.sh --uut --platform linux/amd64
+```
+
 Both packages appear in `dist/` **only after both builds succeed**:
 
 ```text
@@ -102,8 +110,8 @@ linux/packaging/build-packages.sh --version 0.1.0 --arch arm64
 The wrapper uses `debian:12` for each platform, copies source into a fresh
 container workspace, deletes stale object files and host-built binaries,
 runs `make linux` and the executable packaging tests, then builds the package.
-It deliberately requires a **newly built** `linux/code/openeigrpd`. Until
-that daemon exists in the Linux Makefile, production packages fail closed.
+It deliberately requires a **newly built** `linux/code/openeigrpd` and fails
+closed if daemon compilation or validation does not succeed.
 The source mount is read-only and an unsuccessful dual-build does not
 publish half a pair. Emulated AMD64 builds on Apple silicon are slower and
 should be independently tested on actual AMD64 Linux.

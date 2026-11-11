@@ -851,7 +851,12 @@ class Runner:
                     raise
         elif op=="stop":
             names=list(self.nodes) if arg in (None,"all") else ([arg] if isinstance(arg,str) else arg.get("uuts",list(self.nodes)))
-            for n in names: self.nodes[n].stop()
+            for n in names:
+                self.nodes[n].stop()
+                if (self.broker and hasattr(self.broker, "wait_node_closed")
+                        and not self.broker.stop_event.is_set()):
+                    if not self.broker.wait_node_closed(n):
+                        raise RuntimeError(f"{n}: wire endpoint remained registered after stop")
         elif op in ("link-up","link-down"):
             self.nodes[arg["uut"]].link(op=="link-up",arg["interface"])
         elif op in ("links-up","links-down"):

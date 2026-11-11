@@ -4,7 +4,7 @@
 
 Use a stub for FRR's daemon_list and watchfrr executable, without needing Docker.
 The production validation block is executed unchanged; startup is tested in
-full by tools/docker-test.sh against a built image.
+full by frr/tools/docker-test.sh against a built image.
 """
 
 import os
@@ -16,7 +16,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 START = ROOT / "docker/docker-start"
-SCENARIO = ROOT / "docker/test/uut/scenario-daemon-start.yaml"
+SCENARIO = ROOT / "docker/test/uut/daemon-start.yaml"
 MARKER = 'read -r -a running_daemons <<< "$(daemon_list)"'
 
 

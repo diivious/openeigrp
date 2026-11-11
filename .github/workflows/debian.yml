@@ -14,6 +14,8 @@ on:
       - 'linux/code/**'
       - 'linux/man/**'
       - 'linux/packaging/**'
+      - 'tools/version.sh'
+      - 'tools/test/test_package.py'
       - 'linux/test/test_packaging.py'
       - 'linux/test/test_package_builds.py'
   workflow_dispatch:
@@ -66,8 +68,10 @@ jobs:
             echo 'invalid Debian test version' >&2; exit 1;
           }
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Verify package builder invocation
-        run: python3 linux/test/test_package_builds.py
+      - name: Verify package builder and wrapper invocation
+        run: |
+          python3 linux/test/test_package_builds.py
+          python3 -m unittest -q tools.test.test_package
       - name: Build and test native architecture in Debian 12
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -105,7 +109,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deb-release-uut-failures
-          path: eigrp/test/uut/logs/
+          path: logs/uut/eigrp/
           if-no-files-found: warn
 
   release:

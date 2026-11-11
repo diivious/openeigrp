@@ -10,7 +10,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "docker.sh"
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "frr/tools/docker.sh"
 
 
 class DockerSourceSelectionTest(unittest.TestCase):
@@ -96,15 +97,17 @@ class DockerSourceSelectionTest(unittest.TestCase):
 
         (self.eigrp / "docker").mkdir()
         (self.eigrp / "tools").mkdir()
-        (self.eigrp / "tools/frr.sh").write_text("#!/bin/sh\n")
-        (self.eigrp / "tools/docker.sh").write_bytes(SCRIPT.read_bytes())
+        (self.eigrp / "frr/tools").mkdir(parents=True)
+        # The Docker source probe must exercise the integration-owned path.
+        (self.eigrp / "frr/tools/frr.sh").write_text("#!/bin/sh\n")
+        (self.eigrp / "frr/tools/docker.sh").write_bytes(SCRIPT.read_bytes())
         (self.eigrp / "tools/version.sh").write_bytes(
-            (SCRIPT.parent / "version.sh").read_bytes())
+            (ROOT / "tools/version.sh").read_bytes())
         (self.eigrp / "tools/version.sh").chmod(0o755)
         (self.eigrp / "linux/packaging").mkdir(parents=True)
-        for relative in ("tools/package.sh", "linux/packaging/build-packages.sh"):
+        for relative in ("linux/packaging/package.sh", "linux/packaging/build-packages.sh"):
             target = self.eigrp / relative
-            target.write_bytes((SCRIPT.parents[1] / relative).read_bytes())
+            target.write_bytes((ROOT / relative).read_bytes())
             target.chmod(0o755)
         (self.eigrp / "docker/Dockerfile").write_text("ARG ALPINE_VERSION=3.21\nRUN echo TAGGED_OLD\n")
         self.write_config("frr-10.7.1", self.frr_old_sha)
@@ -134,9 +137,11 @@ class DockerSourceSelectionTest(unittest.TestCase):
         )
 
     def build(self, mode, *args, script=None):
-        env = dict(os.environ, PATH=str(self.bin) + ":" + os.environ["PATH"],
+        # Keep source selection independent of the developer's FRR checkout.
+        env = dict(os.environ, HOME=str(self.root),
+                   PATH=str(self.bin) + ":" + os.environ["PATH"],
                    DOCKER_TEST_LOG=str(self.log))
-        result = subprocess.run(["bash", str(script or self.eigrp / "tools/docker.sh"), mode, *args],
+        result = subprocess.run(["bash", str(script or self.eigrp / "frr/tools/docker.sh"), mode, *args],
                                 cwd=self.eigrp,
                                 env=env, text=True, capture_output=True, timeout=40)
         log = self.log.read_text() if self.log.exists() else ""
@@ -173,6 +178,34 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
         self.assertIn("Image:     openeigrp:dev-test", result.stdout)
 
+    def test_local_build_uses_pinned_frr_without_checkout(self):
+        # No candidate checkout: the builder must use the FRR commit pinned
+        # by the current working OpenEIGRP tree, not a mutable branch.
+        (self.frr / "bootstrap.sh").unlink()
+        (self.eigrp / "local-edit").write_text("EIGRP_UNCOMMITTED\n")
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Using pinned FRR frr-10.7.2", result.stderr)
+        self.assertIn("WORKING_BRANCH", log)
+        self.assertIn("EIGRP_UNCOMMITTED", log)
+        self.assertIn("FRR_NEW", log)
+        self.assertNotIn("FRR_OLD", log)
+
+    def test_local_pin_mismatch_stops_before_docker(self):
+        (self.frr / "bootstrap.sh").unlink()
+        self.write_config("frr-10.7.2", "0" * 40)
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FRR pin changed", result.stderr)
+        self.assertNotIn("buildx build", log)
+
+    def test_explicit_missing_frr_checkout_is_error(self):
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.root / "missing"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("local FRR checkout not found", result.stderr)
+        self.assertNotIn("buildx build", log)
+
     def test_default_local_version_uses_user_test_suffix(self):
         result, log = self.build("--local", "--eigrp-root", str(self.eigrp),
                                  "--frr-root", str(self.frr))
@@ -205,10 +238,11 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EIGRP_VERSION=1.10.0-diivious-test", log)
         output = self.root / "dist"
-        env = dict(os.environ, PATH=str(self.bin) + ":" + os.environ["PATH"],
+        env = dict(os.environ, HOME=str(self.root),
+                   PATH=str(self.bin) + ":" + os.environ["PATH"],
                    DOCKER_TEST_LOG=str(self.log), USER="diivious")
         package = subprocess.run(
-            [str(self.eigrp / "tools/package.sh"), "--local", "diivious-test",
+            [str(self.eigrp / "linux/packaging/package.sh"), "--local", "diivious-test",
              "--platform", "linux/amd64", "--image", "openeigrp:diivious-test",
              "--output", str(output)],
             cwd=self.eigrp, env=env, text=True, capture_output=True, timeout=40)
@@ -219,7 +253,8 @@ class DockerSourceSelectionTest(unittest.TestCase):
     def test_release_ref_cannot_override_its_frr(self):
         result, log = self.build("--build", "1.9.0", "--frr-ref", "refs/heads/main")
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(log, "")
+        # The read-only daemon probe is permitted; no Docker build may occur.
+        self.assertEqual(log, "info\n")
 
     def test_historical_release_reads_pin_from_its_own_script(self):
         # Pre-docker.cfg releases pinned FRR in the tagged shell script.
@@ -245,7 +280,8 @@ class DockerSourceSelectionTest(unittest.TestCase):
         result, log = self.build("--build", "1.11.0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("FRR release tag", result.stderr)
-        self.assertEqual(log, "")
+        # The read-only daemon probe is permitted; no Docker build may occur.
+        self.assertEqual(log, "info\n")
 
 
 if __name__ == "__main__":

@@ -95,7 +95,7 @@ def test_convergence_rejects_invalid_limit_filters(invalid):
 
 def test_live_redistribution_lockout_recovery():
     """The real UUT must withdraw, retire, replay and recover on both routers."""
-    scenario = UUT / "prefix-limit/scenario-redist-lockout-ipv4.yaml"
+    scenario = UUT / "prefix-limit/redist-lockout-ipv4.yaml"
     topology = UUT / "examples/two-router.yaml"
     result = subprocess.run(
         [sys.executable, str(UUT / "run.py"), str(topology), str(scenario)],

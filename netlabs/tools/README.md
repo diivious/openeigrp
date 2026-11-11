@@ -95,7 +95,7 @@ native netlab provisioning and the shared `netlabs/config/eigrp-named.j2`
 template. At least one versioned OpenEIGRP image and the pinned Cisco image
 must exist on StormTrooper. Use `--update` to fetch the latest published
 OpenEIGRP release. The UUT produces JSON PASS/FAIL results and CLI/log
-artifacts in `netlabs/results/` on the development host.
+artifacts in `logs/netlab/` on the development host.
 
 The internal-route UUT separately checks EIGRP-internal IPv4/IPv6 routes
 learned and installed in **both** routers. See `netlabs/uut/COMPATIBILITY.md`

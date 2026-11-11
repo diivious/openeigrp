@@ -3,7 +3,8 @@
 #
 # Validate every commit to master. For feature branches with open master PRs,
 # the PR validates the proposed merge instead of duplicating branch tests.
-# Gate: fast compile/smoke -> CodeQL -> full macOS/Linux UUT.
+# Gate: fast compile/smoke -> CodeQL -> portable macOS/Linux UUT.
+# Docker and Debian architectures are covered by their dedicated workflows.
 # Use CodeQL advanced setup rather than default setup to avoid duplicate scans.
 
 name: EIGRP Core CI
@@ -69,17 +70,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install pinned clang-format 23.1.4
-        uses: mamba-org/setup-micromamba@v3
-        with:
-          environment-name: style
-          create-args: clang-format=23.1.4
-          init-shell: none
-
-      - name: Put pinned clang-format on PATH
-        run: |
-          echo "$MAMBA_ROOT_PREFIX/envs/style/bin" >> "$GITHUB_PATH"
-          "$MAMBA_ROOT_PREFIX/envs/style/bin/clang-format" --version
+      - name: Install style and fast-test dependencies
+        run: python3 -m pip install pytest PyYAML clang-format
 
       - name: Validate changed source style
         shell: bash
@@ -108,11 +100,8 @@ jobs:
           esac
           make check STYLE_CHECK_BASE="$base"
 
-      - name: Install fast-test dependencies
-        run: python3 -m pip install pytest PyYAML
-
       - name: Build portable and Unix sources
-        run: make build
+        run: make portable-build
 
       - name: Run pacing, topology-index, and fresh-uptime smoke tests
         run: |
@@ -153,7 +142,7 @@ jobs:
 
       - name: Build C/C++ for CodeQL extraction
         if: matrix.language == 'c-cpp'
-        run: make build
+        run: make portable-build
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@v4
@@ -183,16 +172,17 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install portable test dependencies
-        run: python3 -m pip install pytest PyYAML
+      - name: Install portable test and style dependencies
+        run: python3 -m pip install pytest PyYAML clang-format
 
-      - name: Run portable/core gate
+      - name: Run complete platform-appropriate regression gate
         shell: bash
         env:
           EIGRP_PYTHON: python3
         run: |
           set -o pipefail
-          make uut 2>&1 | tee make-test.log
+          mkdir -p logs/uut/eigrp/ci
+          make all 2>&1 | tee logs/uut/eigrp/ci/make-all.log
 
       - name: Trace Linux UUT aborts on failure
         if: ${{ failure() && runner.os == 'Linux' }}
@@ -201,7 +191,8 @@ jobs:
           EIGRP_PYTHON: python3
         run: |
           set -o pipefail
-          python3 eigrp/test/uut/trace_linux_abort.py 2>&1 | tee abort-trace.log
+          mkdir -p logs/uut/eigrp/ci
+          python3 eigrp/test/uut/trace_linux_abort.py 2>&1 | tee logs/uut/eigrp/ci/abort-trace.log
 
       - name: Preserve failure diagnostics
         if: failure()
@@ -209,9 +200,7 @@ jobs:
         with:
           name: eigrp-core-${{ matrix.os }}-failure-log
           path: |
-            make-test.log
-            abort-trace.log
-            eigrp/test/uut/logs/
+            logs/
             eigrp/test/uut/abort-trace/*.log
             eigrp/test/uut/abort-trace/*.txt
             eigrp/test/uut/eigrp-uut-node

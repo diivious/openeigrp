@@ -17,9 +17,13 @@ steps:
   # Hide graceful-shutdown traffic so r1 retains the UP neighbor object.
   # Otherwise this exercises ordinary neighbor deletion, not peer restart.
   - fault-add: {name: suppress-goodbye, action: drop, source_uut: r2, destination_uut: r1}
+  # R1 may ACK an in-flight UPDATE while R2 is closing its control socket.
+  # Blackhole only this intentional shutdown window, not the restarted peer.
+  - fault-add: {name: suppress-shutdown-ack, action: drop, source_uut: r1, destination_uut: r2, opcode: ack}
   - stop: r2
   - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 2}
   - fault-remove: suppress-goodbye
+  - fault-remove: suppress-shutdown-ack
   - packet-mark: restarted-peer
   - start: r2
   # A new daemon begins its RTP sequence space at 1 again.

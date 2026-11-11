@@ -49,13 +49,13 @@ orchestration and policy integration remain separate work.
 From the repository root:
 
 ```sh
-make build       # Portable engine and Unix host support
+make portable-build  # Compile portable engine and Unix support
 make uut         # Archive-boundary tests, portable pytest and YAML UUT scenarios
-make all         # Required full pre-merge gate
-make help        # Available commands and selectors
+make all         # Non-Docker build and regression gate
+make pre-commit  # Adds Docker images and package builds/tests
 ```
 
-`make build` creates two **separate** static archives under `libunix/code/`.
+`make portable-build` creates two **separate** static archives under `libunix/code/`.
 The first holds only functionality shared with native Linux; it has no virtual
 packet transport, synthetic interfaces, simulated RIB, or UUT policy symbols.
 The second holds all those UUT-only host callbacks. The portable fallback

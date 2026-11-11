@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "docker.sh"
+SCRIPT = Path(__file__).resolve().parents[2] / "frr/tools/docker.sh"
 TAG = "frr-10.7.1"
 SHA = "f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1"
 

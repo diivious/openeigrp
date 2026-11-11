@@ -285,6 +285,10 @@ cat >"$tmp/client/netlabs/tools/remote/common.sh" <<'SH'
 REMOTE_REPO_ROOT="$LAB_TEST_ROOT"
 REMOTE_HOST=mock-StormTrooper
 remote_transport_prepare() { :; }
+remote_ssh() {
+    [[ "$1" == *"docker info"* ]] || return 99
+    return 0
+}
 remote_new_stage() { printf '/home/netlab-data/runs/upload.mock\n'; }
 remote_stage() { :; }
 remote_install_runner() { :; }
@@ -321,7 +325,7 @@ fi
 wait "$pid"
 grep -F 'PASS: 2R-neighbor' "$tmp/client-out.txt"
 grep -Fq 'Report: ' "$tmp/client-out.txt"
-[[ -f "$tmp/client/netlabs/results/uut-mocktest/run-status.txt" ]]
+[[ -f "$tmp/client/logs/netlab/uut-mocktest/run-status.txt" ]]
 echo 'PASS: remote client streams progress and retrieves reports'
 
 # SSH failures must survive tee and report retrieval without becoming a PASS.

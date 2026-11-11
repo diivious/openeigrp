@@ -411,7 +411,7 @@ netlabs/test/infra/test_remote_runtime.sh
 Only one remote lab/UUT session occupies the current host at a time. The
 shared runner stages the selected scenario, runs `netlab up`, executes the
 driver, collects `report.json` and CLI/router logs, invokes `netlab down`,
-and retrieves an evidence bundle under `netlabs/results/uut-.../`. It records
+and retrieves an evidence bundle under `logs/netlab/uut-.../`. It records
 cleanup separately. A cleanup failure retains the remote session for recovery and must never
 be reported as a passing run. Use `netlabs/tools/remote-uut.sh --abort` to
 cancel a registered live/regression worker or recover an unlocked stale UUT;
