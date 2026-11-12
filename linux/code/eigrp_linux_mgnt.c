@@ -868,7 +868,9 @@ int eigrp_linux_mgnt_start(const char *path, gid_t socket_gid,
 	struct sockaddr_un address = {.sun_family = AF_UNIX};
 	struct stat stat;
 	mode_t old_umask;
+	char socket_handle[64];
 	size_t i;
+	int socket_fd = -1;
 	int error;
 
 	if (!path || path[0] != '/' || strlen(path) >= sizeof(address.sun_path)
@@ -899,6 +901,8 @@ int eigrp_linux_mgnt_start(const char *path, gid_t socket_gid,
 		return -1;
 	}
 	memcpy(address.sun_path, path, strlen(path) + 1);
+	/* Create the socket private. umask is process-wide, so never relax it
+	 * while other daemon threads may create files. */
 	old_umask = umask(0077);
 	error = bind(mgnt.listener, (struct sockaddr *)&address,
 		     sizeof(address));
@@ -906,12 +910,44 @@ int eigrp_linux_mgnt_start(const char *path, gid_t socket_gid,
 	if (error < 0)
 		goto failed;
 	(void)snprintf(mgnt.path, sizeof(mgnt.path), "%s", path);
-	if (lstat(mgnt.path, &stat) != 0)
+	mgnt.device = 0;
+	mgnt.inode = 0;
+
+	/* O_PATH opens the socket inode without following replacement symlinks.
+	 * Subsequent permission changes refer to this inode, not the pathname.
+	 */
+	socket_fd = open(mgnt.path, O_PATH | O_NOFOLLOW | O_CLOEXEC);
+	if (socket_fd < 0 || fstat(socket_fd, &stat) != 0)
 		goto failed;
+	if (!S_ISSOCK(stat.st_mode) || stat.st_uid != geteuid()
+	    || (stat.st_mode & 0777) != 0700) {
+		errno = EACCES;
+		goto failed;
+	}
 	mgnt.device = stat.st_dev;
 	mgnt.inode = stat.st_ino;
-	if ((socket_gid != (gid_t)-1 && chown(path, (uid_t)-1, socket_gid) < 0)
-	    || chmod(path, socket_mode) < 0 || listen(mgnt.listener, 32) < 0)
+	if (socket_gid != (gid_t)-1 && socket_gid != stat.st_gid
+	    && fchownat(socket_fd, "", (uid_t)-1, socket_gid, AT_EMPTY_PATH)
+		       < 0)
+		goto failed;
+	/* On Linux, /proc/self/fd/N is a magic link to the opened inode.
+	 * Unlike chmod(path), it does not re-resolve the socket filename.
+	 * /proc must be available; otherwise startup fails closed. */
+	if (snprintf(socket_handle, sizeof(socket_handle), "/proc/self/fd/%d",
+		     socket_fd)
+		    >= (int)sizeof(socket_handle)
+	    || chmod(socket_handle, socket_mode) != 0)
+		goto failed;
+	if (fstat(socket_fd, &stat) != 0 || stat.st_dev != mgnt.device
+	    || stat.st_ino != mgnt.inode || !S_ISSOCK(stat.st_mode)
+	    || (stat.st_mode & 0777) != socket_mode
+	    || (socket_gid != (gid_t)-1 && stat.st_gid != socket_gid)) {
+		errno = EACCES;
+		goto failed;
+	}
+	close(socket_fd);
+	socket_fd = -1;
+	if (listen(mgnt.listener, 32) < 0)
 		goto failed;
 	if (pipe2(mgnt.wake, O_NONBLOCK | O_CLOEXEC) < 0)
 		goto failed;
@@ -931,6 +967,8 @@ int eigrp_linux_mgnt_start(const char *path, gid_t socket_gid,
 
 failed:
 	error = errno;
+	if (socket_fd >= 0)
+		close(socket_fd);
 	if (mgnt.wake[0] >= 0)
 		close(mgnt.wake[0]);
 	if (mgnt.wake[1] >= 0)

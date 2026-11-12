@@ -262,11 +262,26 @@ int main(int argc, char **argv)
 {
 	int c;
 	gid_t group;
+	mode_t mode = 0660;
+	char *end;
+	unsigned long value;
 
-	if (argc != 2)
+	if (argc < 2 || argc > 4)
 		return 2;
 	group = geteuid() == 0 ? 65534 : getegid();
-	if (eigrp_linux_mgnt_start(argv[1], group, 0660, fixture_execute, NULL)
+	if (argc >= 3) {
+		value = strtoul(argv[2], &end, 8);
+		if (!argv[2][0] || *end || (value != 0600 && value != 0660))
+			return 2;
+		mode = (mode_t)value;
+	}
+	if (argc == 4) {
+		value = strtoul(argv[3], &end, 10);
+		if (!argv[3][0] || *end || value > UINT32_MAX)
+			return 2;
+		group = (gid_t)value;
+	}
+	if (eigrp_linux_mgnt_start(argv[1], group, mode, fixture_execute, NULL)
 	    != 0) {
 		perror("eigrp_linux_mgnt_start");
 		return 1;

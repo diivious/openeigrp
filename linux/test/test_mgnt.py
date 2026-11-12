@@ -315,6 +315,44 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
             path.unlink()
         self.assertEqual(talk(self.path, 1)[1], 0)
 
+    def test_socket_mode_and_group_are_applied_to_created_inode(self):
+        # The regular fixture requests 0660. Root requests a different GID
+        # to exercise descriptor-bound fchownat(AT_EMPTY_PATH).
+        state = self.path.stat()
+        self.assertEqual(state.st_mode & 0o777, 0o660)
+        self.assertEqual(state.st_gid, 65534 if os.geteuid() == 0
+                         else os.getegid())
+
+        # A private socket remains inaccessible to other users and groups.
+        path = Path(self.tmp.name) / "private-control.sock"
+        child = subprocess.Popen([str(self.binary), str(path), "600"],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(child.stdout.readline(), "READY\n")
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(talk(path, 1)[1], 0)
+        finally:
+            if child.poll() is None:
+                child.stdin.write("q\n")
+                child.stdin.flush()
+            output, errors = child.communicate(timeout=5)
+            self.assertEqual(child.returncode, 0, output + errors)
+            self.assertFalse(path.exists())
+
+    def test_socket_group_failure_leaves_no_path(self):
+        if os.geteuid() == 0:
+            self.skipTest("root is permitted to change socket group")
+        path = Path(self.tmp.name) / "unprivileged-group.sock"
+        gid = 65534
+        while gid in os.getgroups() or gid == os.getegid():
+            gid -= 1
+        child = subprocess.run([str(self.binary), str(path), "660", str(gid)],
+                               text=True, capture_output=True, timeout=5)
+        self.assertNotEqual(child.returncode, 0)
+        self.assertFalse(path.exists())
+        self.assertEqual(talk(self.path, 1)[1], 0)
+
     def test_client_limit_and_idle_timeout(self):
         clients = []
         try:
