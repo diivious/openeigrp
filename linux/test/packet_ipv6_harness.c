@@ -120,6 +120,11 @@ static int fake_setsockopt(int fd, int level, int option, const void *value,
 {
 	assert(fd >= 100 && fd < 256 && value && size);
 	option_count++;
+	/* Linux rejects IPV6_V6ONLY on an AF_INET6 raw socket. */
+	if (level == IPPROTO_IPV6 && option == IPV6_V6ONLY) {
+		errno = EINVAL;
+		return -1;
+	}
 	if (option == fail_option && level == IPPROTO_IPV6) {
 		errno = EIO;
 		return -1;

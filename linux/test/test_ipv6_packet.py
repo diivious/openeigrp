@@ -65,6 +65,20 @@ class IPv6PacketTests(unittest.TestCase):
                          executed.stdout + executed.stderr)
         self.assertIn("real IPv6 raw socket", executed.stdout)
 
+    def test_native_ipv6_raw_socket_in_user_namespace(self):
+        if not shutil.which("unshare"):
+            self.skipTest("unshare unavailable")
+        probe = run("unshare", "-Urn", "/bin/true")
+        if probe.returncode:
+            self.skipTest("isolated user/network namespaces unavailable: " +
+                          probe.stderr.strip())
+        executed = run("unshare", "-Urn", str(self.binaries["packet_privilege"]))
+        self.assertEqual(executed.returncode, 0,
+                         executed.stdout + executed.stderr)
+        self.assertIn("real raw socket open/close: PASS", executed.stdout)
+        self.assertIn("real IPv6 raw socket and disabled kernel checksum: PASS",
+                      executed.stdout)
+
     def test_archive_exports_and_portable_boundary(self):
         if not shutil.which("nm"):
             self.skipTest("nm unavailable")

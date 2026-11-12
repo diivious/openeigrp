@@ -52,6 +52,7 @@ steps:
   - link-up: {uut: r3, interface: eth32}
   - validate-neighbor: {uut: r2, neighbor: 'fe80::3', interface: eth23, timeout: 7}
   - validate-neighbor: {uut: r3, neighbor: 'fe80::2', interface: eth32, timeout: 7}
+  - validate-packet: {uut: r3, interface: eth32, opcode: hello, since: recovery, min: 1, timeout: 7, event: sent}
   - validate-packet: {uut: r2, interface: eth23, opcode: update, prefix: '2001:db8:1::/64', since: recovery, min: 1, timeout: 7, event: sent}
   - validate-convergence:
       timeout: 7

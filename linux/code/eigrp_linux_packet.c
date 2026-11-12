@@ -120,10 +120,9 @@ static int eigrp_linux_packet_options6(int fd)
 
 	/* The portable EIGRP checksum does not include an IPv6 pseudoheader.
 	 * Never let IPV6_CHECKSUM overwrite the portable wire checksum. */
-	return setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &enabled,
+	/* AF_INET6 raw sockets cannot accept IPV6_V6ONLY on Linux. */
+	return setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &enabled,
 			  sizeof(enabled))
-			       || setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO,
-					     &enabled, sizeof(enabled))
 			       || setsockopt(fd, IPPROTO_IPV6,
 					     IPV6_RECVHOPLIMIT, &enabled,
 					     sizeof(enabled))
