@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Copyright (C) 2026 Donnie V. Savage
 # Alpine source build of FRR + OpenEIGRP. GitHub or local sources are
-# staged by frr/tools/docker.sh; both follow the same patch/install/build path.
+# staged by frr/tools/docker.sh; both follow the same install/build path.
 ARG ALPINE_VERSION=3.22
 FROM alpine:${ALPINE_VERSION} AS builder
 
@@ -43,11 +43,14 @@ RUN set -eu; \
       test "$SOURCE_MODE" = local; \
     fi
 
-# Deliberately match local development's three separate stages. FRR-wide
-# edits remain in frr/patch/ and fail rather than accepting fuzz or drift.
+# FRR 10.7.1 needs the managed patches. Upstream FRR master includes them
+# since FRRouting/frr#23767; applying the old patches there would conflict.
+# Select by the immutable 10.7.1 commit, not a potentially moving branch name.
 RUN set -eux; \
     cd /src-eigrp; \
-    bash frr/tools/frr.sh --patch --frr-root /src-frr; \
+    if [ "$FRR_SHA" = f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1 ]; then \
+      bash frr/tools/frr.sh --patch --frr-root /src-frr; \
+    fi; \
     bash frr/tools/frr.sh --install --frr-root /src-frr; \
     EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash frr/tools/frr.sh --configure \
       --frr-root /src-frr -- \

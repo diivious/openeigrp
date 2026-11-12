@@ -4,6 +4,7 @@ import importlib.util
 import collections
 import queue
 import threading
+import pytest
 from pathlib import Path
 import socket
 import struct
@@ -92,6 +93,7 @@ def test_synthetic_ack_pacing_is_opt_in(monkeypatch):
     link = scale.SyntheticLink.__new__(scale.SyntheticLink)
     link.stop_event = threading.Event()
     link.ack_jobs = queue.Queue()
+    link.ack_pending = set()
     link.cv = threading.Condition()
     link.held_peers = set()
     link.held_acks = collections.deque()
@@ -117,3 +119,84 @@ def test_synthetic_ack_pacing_is_opt_in(monkeypatch):
     assert scale.checksum(sends[0][0]) == 0
     assert link.sent_acks == 1
     assert delays == [0.001]
+
+
+def test_retransmission_ack_jobs_coalesced_until_sent():
+    link = scale.SyntheticLink(Path("/unused"), "inject", {"10.0.0.2"}, broker=False)
+    for _ in range(10000):
+        link.queue_ack("10.0.0.2", 47)
+    assert link.ack_jobs.qsize() == 1
+    assert link.ack_pending == {("10.0.0.2", 47)}
+    link.queue_ack("10.0.0.2", 48)
+    assert link.ack_jobs.qsize() == 2
+
+
+def test_ack_worker_allows_retransmission_after_prior_ack():
+    link = scale.SyntheticLink(Path("/unused"), "inject", {"10.0.0.2"}, broker=False)
+    sent = []
+
+    def send(packet, peer):
+        sent.append((packet, peer))
+        link.stop_event.set()
+
+    link.transmit = send
+    link.queue_ack("10.0.0.2", 47)
+    link._send_acks()
+    assert not link.ack_pending
+    link.stop_event.clear()
+    link.queue_ack("10.0.0.2", 47)
+    link._send_acks()
+    assert len(sent) == 2
+    assert all(struct.unpack_from("!I", pkt, 12)[0] == 47 for pkt, _ in sent)
+    assert not link.ack_pending
+
+
+def test_ack_queue_overflow_is_immediate_and_reservations_are_restored():
+    link = scale.SyntheticLink(Path("/unused"), "inject", {"10.0.0.2"}, broker=False)
+    link.ack_jobs = queue.Queue(maxsize=1)
+    link.queue_ack("10.0.0.2", 47)
+    with pytest.raises(AssertionError, match="ACK queue overflow"):
+        link.queue_ack("10.0.0.2", 48)
+    assert link.ack_pending == {("10.0.0.2", 47)}
+
+
+def test_held_ack_is_released_once_after_duplicate_retransmissions():
+    link = scale.SyntheticLink(Path("/unused"), "inject", {"10.0.0.2"}, broker=False)
+    link.hold_peer_acks(["10.0.0.2"])
+    link.queue_ack("10.0.0.2", 47)
+    # Stop after one held job, without a real socket or a worker thread.
+    real_get = link.ack_jobs.get
+    def next_job(*args, **kwargs):
+        job = real_get(*args, **kwargs)
+        link.stop_event.set()
+        return job
+    link.ack_jobs.get = next_job
+    link._send_acks()
+    for _ in range(1000):
+        link.queue_ack("10.0.0.2", 47)
+    assert len(link.held_acks) == 1
+    assert link.ack_jobs.qsize() == 0
+    assert link.release_held_acks() == 1
+    assert link.ack_jobs.qsize() == 1
+
+
+def test_duplicate_wire_multicasts_queue_only_one_ack_per_peer(monkeypatch):
+    peers = {f"10.0.0.{n}" for n in range(2, 66)}
+    link = scale.SyntheticLink(Path("/unused"), "inject", peers, broker=True)
+    link.sock = object()
+    frame = scale.wire_frame(scale.PACKET, scale.packet(1, seq=75),
+                             "10.0.0.1", segment="inject", multicast=True)
+    incoming = collections.deque([frame] * 100)
+
+    def receive(sock):
+        if incoming:
+            return incoming.popleft()
+        link.stop_event.set()
+        return None
+
+    monkeypatch.setattr(scale, "recv_frame", receive)
+    link._run()
+    assert link.error is None
+    assert link.multicast_route_updates == 100
+    assert link.ack_jobs.qsize() == len(peers)
+    assert len(link.ack_pending) == len(peers)

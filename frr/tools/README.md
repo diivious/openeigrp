@@ -44,10 +44,13 @@ action that applies the managed FRR-wide patch series. Install, configure,
 build, check, all, and UUT actions only restage the EIGRP source/test payloads
 and never modify FRR-wide source. Patch application itself remains idempotent:
 an already-applied patch is detected with a reverse `git apply --check`, while
-an FRR source conflict stops the patch action for review.
+an FRR source conflict stops the patch action for review. The patch
+series is for FRR `frr-10.7.1` only; the changes are included upstream on
+`master` (FRRouting/frr#23767).
 
 ```sh
 frr/tools/frr.sh --install --frr-root ~/devel/frr
+# For frr-10.7.1 only, not FRR master:
 frr/tools/frr.sh --patch --frr-root ~/devel/frr
 ```
 

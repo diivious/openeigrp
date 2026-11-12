@@ -284,5 +284,95 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertEqual(log, "info\n")
 
 
+class DockerPatchStageTest(unittest.TestCase):
+    """Execute Dockerfile's real integration stage with harmless command doubles."""
+
+    FRR_1071_SHA = "f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1"
+    FRR_MASTER_SHA = "a19ece1b3bba6f48eb2aee47a04b3842423a949e"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="frr-patch-stage-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.eigrp = self.root / "openeigrp"
+        self.frr = self.root / "frr"
+        self.log = self.root / "actions.log"
+        (self.eigrp / "frr/tools").mkdir(parents=True)
+        (self.frr / "tools/etc/frr").mkdir(parents=True)
+        (self.frr / "tools/etc/frr/daemons").write_text("eigrpd=yes\n")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        driver = self.eigrp / "frr/tools/frr.sh"
+        driver.write_text(
+            '#!/bin/sh\n'
+            'printf "frr %s\\n" "$*" >> "$FRR_PATCH_TEST_LOG"\n'
+            'if [ "${REJECT_PATCH:-0}" = 1 ] && [ "$1" = --patch ]; then exit 19; fi\n'
+            'if [ "${REJECT_INSTALL:-0}" = 1 ] && [ "$1" = --install ]; then exit 20; fi\n'
+        )
+        make = bin_dir / "make"
+        make.write_text(
+            '#!/bin/sh\n'
+            'printf "make %s\\n" "$*" >> "$FRR_PATCH_TEST_LOG"\n'
+        )
+        make.chmod(0o755)
+        self.bin_dir = bin_dir
+
+        # Run the same Alpine shell build instruction, with only source/image
+        # paths mapped to temporary directories. No source-text assertion can
+        # substitute for executing the conditional stage.
+        lines = (ROOT / "docker/Dockerfile").read_text().splitlines()
+        start = next(i for i, line in enumerate(lines)
+                     if line.startswith("RUN set -eux;"))
+        end = start + 1
+        while lines[end - 1].rstrip().endswith("\\"):
+            end += 1
+        self.stage = "\n".join(lines[start:end])[4:]
+        self.stage = self.stage.replace("/src-eigrp", str(self.eigrp))
+        self.stage = self.stage.replace("/src-frr", str(self.frr))
+        self.stage = self.stage.replace("/image", str(self.root / "image"))
+
+    def run_stage(self, sha, **extra):
+        env = dict(os.environ, PATH=f"{self.bin_dir}:{os.environ['PATH']}",
+                   FRR_SHA=sha, EIGRP_VERSION="dev", BUILD_JOBS="2",
+                   FRR_PATCH_TEST_LOG=str(self.log), **extra)
+        result = subprocess.run(["/bin/sh", "-c", self.stage],
+                                env=env, text=True, capture_output=True)
+        return result, self.log.read_text() if self.log.exists() else ""
+
+    def test_frr_master_skips_patches_but_stages_and_builds(self):
+        result, actions = self.run_stage(self.FRR_MASTER_SHA)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--patch", actions)
+        self.assertIn("--install", actions)
+        self.assertIn("--configure", actions)
+        self.assertIn("--build", actions)
+        self.assertIn("make -C", actions)
+
+    def test_frr_1071_applies_patches_before_install(self):
+        result, actions = self.run_stage(self.FRR_1071_SHA)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(actions.count("--patch"), 1)
+        self.assertLess(actions.index("--patch"), actions.index("--install"))
+
+    def test_other_frr_revision_does_not_use_1071_patches(self):
+        result, actions = self.run_stage("b" * 40)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--patch", actions)
+        self.assertIn("--install", actions)
+
+    def test_1071_patch_failure_blocks_install(self):
+        result, actions = self.run_stage(self.FRR_1071_SHA, REJECT_PATCH="1")
+        self.assertEqual(result.returncode, 19, result.stderr)
+        self.assertIn("--patch", actions)
+        self.assertNotIn("--install", actions)
+
+    def test_master_install_failure_is_not_masked(self):
+        result, actions = self.run_stage(self.FRR_MASTER_SHA, REJECT_INSTALL="1")
+        self.assertEqual(result.returncode, 20, result.stderr)
+        self.assertNotIn("--patch", actions)
+        self.assertIn("--install", actions)
+        self.assertNotIn("--configure", actions)
+
+
 if __name__ == "__main__":
     unittest.main()

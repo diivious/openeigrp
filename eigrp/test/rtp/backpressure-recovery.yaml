@@ -14,3 +14,12 @@ steps:
   # UPDATEs have arrived. They must not cause either peer to restart.
   - validate-event: {uut: r2, contains: "reason peer restarted", min: 0, max: 0}
   - validate-event: {uut: r3, contains: "reason peer restarted", min: 0, max: 0}
+  # Keep both queues drained across a stable observation window after the
+  # deliberately dropped acknowledgments have been retransmitted.
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.5
+      expect:
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.0.0.3, state: up, reliable_q: 0}
+        - neighbor: {uut: r3, neighbor: 10.0.0.2, state: up, reliable_q: 0}

@@ -88,10 +88,10 @@ check:
 
 uut: portable-build
 	@$(if $(and $(SUITE),$(SCENARIO)),echo 'error: select either SUITE or SCENARIO' >&2; exit 2;,true)
-	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest -q libunix/test/test_archive_boundaries.py docker/test
+	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest -q -x libunix/test/test_archive_boundaries.py docker/test
 ifeq ($(strip $(SCENARIO)),)
 ifeq ($(strip $(SUITE)),)
-	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest eigrp/test
+	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest -x eigrp/test
 	$(MAKE) -C eigrp/test/uut all-scenarios
 else
 	@$(if $(filter $(SUITE),$(UUT_SUITES)),true,echo 'error: unknown UUT SUITE=$(SUITE)' >&2; exit 2)
@@ -108,7 +108,7 @@ scale: portable-build
 ifeq ($(strip $(SUITE)$(CASE)),)
 	@printf '\n%s\n' '=== Quick pacing/backpressure regression ==='
 	$(MAKE) -C eigrp/test/uut eigrp-uut-node
-	$(PYTHON) tools/test-log.py uut/scale -- $(PYTHON) -m pytest -q eigrp/test/packet/pacing.py
+	$(PYTHON) tools/test-log.py uut/scale -- $(PYTHON) -m pytest -q -x eigrp/test/packet/pacing.py
 	$(PYTHON) tools/test-log.py uut/scale -- $(PYTHON) eigrp/test/uut/run.py eigrp/test/rtp/two-router.yaml eigrp/test/rtp/lost-ack.yaml
 	EIGRP_SCALE_PEERS=32 EIGRP_SCALE_MCAST_SLOW_PEERS=8 EIGRP_SCALE_MCAST_ROUTES=64 \
 	EIGRP_SCALE_WATCHDOG_SEC=120 $(PYTHON) tools/test-log.py uut/scale -- $(PYTHON) eigrp/test/scale/stress_extended.py mcast
@@ -122,8 +122,7 @@ else
 endif
 else
 	@case '$(SUITE)' in 100k|stress|auth|all) ;; *) echo 'error: scale SUITE must be 100k, stress, auth or all' >&2; exit 2 ;; esac
-	@failed=0; \
-	case '$(SUITE)' in \
+	@case '$(SUITE)' in \
 	  100k) cases='$(SCALE_VOLUME)' ;; \
 	  stress) cases='$(SCALE_STRESS)' ;; \
 	  auth) cases='$(SCALE_AUTH)' ;; \
@@ -134,9 +133,9 @@ else
 	  if $(MAKE) scale SUITE= CASE="$$item"; then \
 	    printf 'PASS %s\n' "$$item"; \
 	  else \
-	    printf 'FAIL %s\n' "$$item"; failed=1; \
+	    printf 'FAIL %s\n' "$$item" >&2; exit 1; \
 	  fi; \
-	done; exit $$failed
+	done
 endif
 
 # Build both architectures unless ARCH narrows the selection. Images are

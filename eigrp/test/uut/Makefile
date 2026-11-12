@@ -56,57 +56,56 @@ md5-mixed-lan: eigrp-uut-node
 	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml auth-topology/md5-mixed-lan.yaml
 
 md5-security: eigrp-uut-node
-	@status=0; \
+	@set -e; \
 	for scenario in auth-topology/md5-*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml $$scenario || status=$$?; \
-	done; exit $$status
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml $$scenario; \
+	done
 
 basic-core: eigrp-uut-node
-	@status=0; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv6-basic-core.yaml examples/ipv6-basic-core-gate.yaml || status=$$?; exit $$status
+	@set -e; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv4-basic-core.yaml examples/ipv4-basic-core-gate.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py examples/ipv6-basic-core.yaml examples/ipv6-basic-core-gate.yaml
 
 dual-diamond: eigrp-uut-node
 	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py dual-diamond/ipv4-diamond-fs.yaml dual-diamond/feasible-successor.yaml
 
 kite-topology: eigrp-uut-node
-	@status=0; \
+	@set -e; \
 	for scenario in dual-kite/[a-d]-*.yaml dual-kite/query-*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py dual-kite/ipv4-kite.yaml $$scenario || status=$$?; \
-	done; exit $$status
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py dual-kite/ipv4-kite.yaml $$scenario; \
+	done
 
 core-topology: eigrp-uut-node
-	@status=0; \
+	@set -e; \
 	for scenario in core-topology/square*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py core-topology/ipv4-core-square.yaml $$scenario || status=$$?; \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py core-topology/ipv4-core-square.yaml $$scenario; \
 	done; \
 	for scenario in core-topology/cross*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py core-topology/ipv4-core-cross.yaml $$scenario || status=$$?; \
-	done; exit $$status
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py core-topology/ipv4-core-cross.yaml $$scenario; \
+	done
 
 mesh-topology: eigrp-uut-node
-	@status=0; \
+	@set -e; \
 	for scenario in mesh-topology/k6-*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py mesh-topology/ipv4-dense-mesh-k6.yaml $$scenario || status=$$?; \
-	done; exit $$status
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py mesh-topology/ipv4-dense-mesh-k6.yaml $$scenario; \
+	done
 
 active-topology: eigrp-uut-node
-	@status=0; \
+	@set -e; \
 	for scenario in active-topology/sia-*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py active-topology/ipv4-sia-chain.yaml $$scenario || status=$$?; \
-	done; exit $$status
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py active-topology/ipv4-sia-chain.yaml $$scenario; \
+	done
 
 rtp-core: eigrp-uut-node
-	@status=0; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/srtt-rto.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-reliable-packet.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-ack.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-before-eot.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-hold.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/backpressure-recovery.yaml || status=$$?; \
-	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/reliable-multicast-peer-retry.yaml || status=$$?; \
-	exit $$status
+	@set -e; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/srtt-rto.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-reliable-packet.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/lost-ack.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-before-eot.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/two-router.yaml ../rtp/peer-restart-hold.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/backpressure-recovery.yaml; \
+	$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py ../rtp/three-router-shared.yaml ../rtp/reliable-multicast-peer-retry.yaml
 
 all-scenarios: eigrp-uut-node
 	$(PYTHON) run_all.py

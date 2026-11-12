@@ -162,12 +162,15 @@ The supported FRR path is documented in the top-level `README.md` and in
 
 ```sh
 frr/tools/frr.sh --install --frr-root ../frr
+# Only on the older FRR frr-10.7.1 release:
 frr/tools/frr.sh --patch --frr-root ../frr
 frr/tools/frr.sh --build --frr-root ../frr
 ```
 
 `--install` copies `eigrp/code/` plus the adapter files in `code/` into `frr/eigrpd/`.
-`--patch` applies `patch/` onto FRR sources outside that directory.
+`--patch` applies `patch/` onto FRR sources outside that directory. It is
+required only for FRR `frr-10.7.1`; upstream `master` incorporates these
+changes through FRRouting/frr#23767 and must not receive the legacy patches.
 
 ## What not to copy onto a new host
 

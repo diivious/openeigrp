@@ -1,9 +1,10 @@
 # Copyright (C) 2026 Donnie V. Savage
 # EIGRP portable/core CI. The root Makefile owns test orchestration.
 #
-# Validate every commit to master. For feature branches with open master PRs,
-# the PR validates the proposed merge instead of duplicating branch tests.
-# Gate: fast compile/smoke -> CodeQL -> portable macOS/Linux UUT.
+# Run fast compile/style/portable smoke checks on branch pushes and master PRs.
+# After a merge reaches master, run the complete regression on Linux and macOS.
+# Branch pushes already represented by an open master PR are deduplicated.
+# Gate: fast compile/smoke -> CodeQL -> platform smoke or full regression.
 # Docker and Debian architectures are covered by their dedicated workflows.
 # Use CodeQL advanced setup rather than default setup to avoid duplicate scans.
 
@@ -100,8 +101,11 @@ jobs:
           esac
           make check STYLE_CHECK_BASE="$base"
 
-      - name: Build portable and Unix sources
-        run: make portable-build
+      - name: Build native Linux daemon and portable sources
+        run: make linux
+
+      - name: Run native Linux management and IPv6 packet regressions
+        run: python3 -m pytest -q linux/test/test_mgnt.py linux/test/test_ipv6_packet.py
 
       - name: Run pacing, topology-index, and fresh-uptime smoke tests
         run: |
@@ -142,7 +146,7 @@ jobs:
 
       - name: Build C/C++ for CodeQL extraction
         if: matrix.language == 'c-cpp'
-        run: make portable-build
+        run: make linux
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@v4
@@ -175,7 +179,24 @@ jobs:
       - name: Install portable test and style dependencies
         run: python3 -m pip install pytest PyYAML clang-format
 
-      - name: Run complete platform-appropriate regression gate
+      - name: Run branch and PR portable YAML smoke gate
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/master') }}
+        shell: bash
+        env:
+          EIGRP_PYTHON: python3
+        run: |
+          set -euo pipefail
+          make -C eigrp/test/uut eigrp-uut-node
+          for scenario in \
+            examples/ipv4-basic-core-gate.yaml \
+            examples/ipv6-basic-core-gate.yaml \
+            rtp/lost-ack.yaml \
+            dual-diamond/feasible-successor.yaml; do
+            python3 eigrp/test/uut/run_all.py --scenario "$scenario"
+          done
+
+      - name: Run full regression after master merge or manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
         shell: bash
         env:
           EIGRP_PYTHON: python3

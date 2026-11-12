@@ -42,6 +42,7 @@ class MakeTargetsTest(unittest.TestCase):
                 "\t@if [ \"$(FAIL_LINUX)\" = 1 ] && "
                 "[ \"$(CURDIR)\" = \"$(LINUX_CODE)\" ] && "
                 "[ '$@' = all ]; then exit 5; fi\n"
+                "\t@if [ '$@' = \"$(FAIL_SCALE_CASE)\" ]; then exit 7; fi\n"
             )
         linux = self.root / "linux"
         shutil.copy2(ROOT / "linux/Makefile", linux / "Makefile")
@@ -91,7 +92,8 @@ class MakeTargetsTest(unittest.TestCase):
             self.assertIn("PY tools/style-check.py --all", events)
             self.assertTrue(any("run_all" not in e and "all-scenarios" in e
                                 for e in events))
-            self.assertTrue(any("pacing.py" in e for e in events))
+            self.assertTrue(any("-m pytest -q -x eigrp/test/packet/pacing.py" in e
+                                for e in events))
             self.assertTrue(any("linux/test" in e for e in events))
             self.assertFalse(any("netlabs/test" in e for e in events))
             self.assertFalse((self.root / "netlabs").exists())
@@ -99,7 +101,7 @@ class MakeTargetsTest(unittest.TestCase):
                              if "linux/code all" in e)
             idx_style = events.index("PY tools/style-check.py --all")
             idx_uut = next(i for i, e in enumerate(events)
-                           if "-m pytest eigrp/test" in e)
+                           if "-m pytest -x eigrp/test" in e)
             self.assertLess(idx_build, idx_style)
             self.assertLess(idx_style, idx_uut)
 
@@ -193,7 +195,7 @@ class MakeTargetsTest(unittest.TestCase):
             self.assertTrue(any("neighbor_2048.py" in e for e in events))
             self.assertTrue(any("all-scenarios" in e for e in events))
             self.assertFalse(any("netlabs" in e or "frr/test/uut" in e for e in events))
-            self.assertTrue(any("-m pytest -q libunix/test/test_archive_boundaries.py docker/test" in e
+            self.assertTrue(any("-m pytest -q -x libunix/test/test_archive_boundaries.py docker/test" in e
                                 for e in events))
             self.assertEqual(any("linux/test" in e for e in events), host == "Linux")
 
@@ -272,6 +274,15 @@ class MakeTargetsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(expected, events)
         self.assertNotEqual(self.make("check", "SOURCE=invalid")[0].returncode, 0)
+
+    def test_scale_suite_stops_at_first_failure(self):
+        result, events = self.make("scale", "SUITE=stress", "FAIL_SCALE_CASE=mcast")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FAIL mcast", result.stderr)
+        self.assertTrue(any(" withdraw" in event for event in events))
+        self.assertTrue(any(" mcast" in event for event in events))
+        self.assertFalse(any(" linkdown" in event for event in events))
+        self.assertFalse(any(" mixed-tlv" in event for event in events))
 
     def test_scale_selectors(self):
         for selection, needle in ((('scale',), "pacing.py"),

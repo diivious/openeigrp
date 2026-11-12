@@ -199,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
             failures.append((name, log_path))
             print(f"  FAIL{' (TIMEOUT)' if timed_out else ''}: see "
                   f"{log_path.relative_to(PROJECT_ROOT)}", file=sys.stderr)
+            break
         else:
             print("  PASS", flush=True)
 

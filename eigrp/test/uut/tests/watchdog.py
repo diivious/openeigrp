@@ -43,7 +43,7 @@ def test_watchdog_rejects_invalid_timeout(value):
         suite.positive_seconds(value)
 
 
-def test_suite_continues_after_timeout_and_keeps_logs(tmp_path, monkeypatch):
+def test_suite_stops_after_timeout_and_keeps_logs(tmp_path, monkeypatch):
     suite = suite_module()
     monkeypatch.setattr(suite, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(suite, "TEST_ROOT", tmp_path)
@@ -68,15 +68,14 @@ def test_suite_continues_after_timeout_and_keeps_logs(tmp_path, monkeypatch):
 
     monkeypatch.setattr(suite, "execute_scenario", fake_execute)
     assert suite.main(["--scenario-timeout", "4"]) == 1
-    assert len(calls) == 2
+    assert len(calls) == 1
     runs = list((tmp_path / "logs").glob("run-*"))
     assert len(runs) == 1
     failed_log = (runs[0] / "timeout-test__scenario.log").read_text()
     assert "TIMEOUT: scenario exceeded 4s" in failed_log
     assert "partial diagnostic before hang" in failed_log
     assert "exit status: 124" in failed_log
-    passed_log = (runs[0] / "next-test__scenario.log").read_text()
-    assert "exit status: 0" in passed_log
+    assert not (runs[0] / "next-test__scenario.log").exists()
 
     # A second run retains the first run's evidence rather than overwriting it.
     assert suite.main(["--scenario-timeout", "4"]) == 0
@@ -85,3 +84,36 @@ def test_suite_continues_after_timeout_and_keeps_logs(tmp_path, monkeypatch):
     assert (runs[0] / "timeout-test__scenario.log").read_text() == failed_log
     second_run = next(path for path in runs_after if path != runs[0])
     assert "exit status: 0" in (second_run / "timeout-test__scenario.log").read_text()
+
+
+def test_suite_stops_after_nonzero_exit_and_retains_error(tmp_path, monkeypatch):
+    suite = suite_module()
+    monkeypatch.setattr(suite, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(suite, "TEST_ROOT", tmp_path)
+    monkeypatch.setattr(suite, "LOG_ROOT", tmp_path / "logs")
+    paths = []
+    for name in ("first", "failure", "should-not-run"):
+        folder = tmp_path / name
+        folder.mkdir()
+        scenario = folder / "scenario.yaml"
+        scenario.write_text(f"schema: eigrp-uut-test/v1\nname: {name}\n")
+        topology = folder / "topology.yaml"
+        topology.write_text("schema: eigrp-uut-topology/v1\n")
+        paths.append((topology, scenario))
+    monkeypatch.setattr(suite, "discover", lambda: paths)
+    calls = []
+
+    def fake_execute(command, timeout):
+        calls.append(command)
+        return (2, "RTP queue failed to drain\n", False) if len(calls) == 2 else (0, "ok\n", False)
+
+    monkeypatch.setattr(suite, "execute_scenario", fake_execute)
+    assert suite.main([]) == 1
+    assert len(calls) == 2
+    logs = list((tmp_path / "logs").glob("run-*"))
+    assert len(logs) == 1
+    assert "exit status: 0" in (logs[0] / "first__scenario.log").read_text()
+    failing = (logs[0] / "failure__scenario.log").read_text()
+    assert "exit status: 2" in failing
+    assert "RTP queue failed to drain" in failing
+    assert not (logs[0] / "should-not-run__scenario.log").exists()

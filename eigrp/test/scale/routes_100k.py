@@ -197,6 +197,10 @@ class SyntheticLink:
         self.route_wire_count = 0
         self.multicast_route_updates = 0
         self.ack_jobs: queue.Queue[tuple[str, int]] = queue.Queue(maxsize=100000)
+        # A retransmission cannot create another pending ACK for the same RTP
+        # sequence.  Otherwise thousands of peers can saturate the sender's
+        # paced queue with stale duplicate work and starve new acknowledgments.
+        self.ack_pending: set[tuple[str, int]] = set()
         self.ack_thread = None
         self.hello_thread = None
 
@@ -255,8 +259,24 @@ class SyntheticLink:
             pending = list(self.held_acks)
             self.held_acks.clear()
         for job in pending:
-            self.ack_jobs.put(job, timeout=30)
+            # These ACKs were already reserved in ack_pending when held.
+            self.ack_jobs.put_nowait(job)
         return len(pending)
+
+    def queue_ack(self, peer: str, seq: int):
+        job = (peer, seq)
+        with self.cv:
+            if job in self.ack_pending:
+                return
+            self.ack_pending.add(job)
+        try:
+            # Never stop reading the real UUT wire for 30 seconds merely
+            # because the synthetic ACK producer is over capacity.
+            self.ack_jobs.put_nowait(job)
+        except queue.Full as exc:
+            with self.cv:
+                self.ack_pending.discard(job)
+            raise AssertionError("synthetic RTP ACK queue overflow") from exc
 
     def wait_connect(self, timeout=15):
         if not self.connected.wait(timeout):
@@ -280,9 +300,11 @@ class SyntheticLink:
                 peer, seq = self.ack_jobs.get(timeout=0.25)
             except queue.Empty:
                 continue
+            held = False
             try:
                 with self.cv:
                     if peer in self.held_peers:
+                        held = True
                         self.held_acks.append((peer, seq))
                         self.withheld_count += 1
                         self.cv.notify_all()
@@ -295,6 +317,10 @@ class SyntheticLink:
                 if not self.stop_event.is_set():
                     self.error = exc
                 break
+            finally:
+                if not held:
+                    with self.cv:
+                        self.ack_pending.discard((peer, seq))
 
     @staticmethod
     def _excluded(payload: bytes):
@@ -367,12 +393,12 @@ class SyntheticLink:
                     if flags & MULTICAST:
                         recipients = self.peers - (self.seq_exclusions if struct.unpack_from("!I", payload, 4)[0] & 0x2 else set())
                         for peer in recipients:
-                            self.ack_jobs.put((peer, seq), timeout=30)
+                            self.queue_ack(peer, seq)
                         self.seq_exclusions = set()
                     elif recipient in self.peers:
                         # Retransmitted packets must be ACKed again, even if
                         # our previous ACK was lost in the test-side wire.
-                        self.ack_jobs.put((recipient, seq), timeout=30)
+                        self.queue_ack(recipient, seq)
         except Exception as exc:
             if not self.stop_event.is_set():
                 self.error = exc

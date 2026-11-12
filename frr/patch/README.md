@@ -1,7 +1,8 @@
 # FRR integration patches
 
-This directory contains the small set of changes that EIGRP requires outside
-FRR's `eigrpd/` directory.
+This directory contains the changes required outside FRR's `eigrpd/`
+directory for the older `frr-10.7.1` release. FRRouting/frr#23767 merged
+these changes into upstream `master`; do not apply these patches to master.
 
 `frr/tools/frr-install.sh` owns patch installation. `series` defines patch order.
 Each upstream FRR file modified by this project is owned by exactly one managed
