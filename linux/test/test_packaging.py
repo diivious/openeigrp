@@ -65,6 +65,9 @@ class PackagingTests(unittest.TestCase):
         cls.daemon = cls.work / "fixture-openeigrpd"
         run("cc", "-O2", "-Wall", "-Wextra", "-Werror", source,
             "-o", cls.daemon)
+        cls.arch = run("dpkg-architecture", "-qDEB_HOST_ARCH").stdout.strip()
+        assert cls.arch in ("amd64", "arm64"), cls.arch
+        cls.other_arch = "arm64" if cls.arch == "amd64" else "amd64"
         cls.out = cls.work / "dist"
         cls.out.mkdir()
         cls.first = cls.build("0.0.1")
@@ -155,6 +158,8 @@ class PackagingTests(unittest.TestCase):
         info = run("dpkg-deb", "-f", self.first).stdout
         self.assertIn("Package: openeigrpd", info)
         self.assertIn("Version: 0.0.1", info)
+        self.assertIn(f"Architecture: {self.arch}", info)
+        self.assertEqual(self.first.name, f"openeigrpd_0.0.1_{self.arch}.deb")
         self.assertIn("Maintainer: Donnie V. Savage <diivious@hotmail.com>", info)
         self.assertIn("systemd", info)
         self.assertIn("libc6", info)
@@ -168,21 +173,31 @@ class PackagingTests(unittest.TestCase):
         self.assertTrue(os.access(ctrl / "postinst", os.X_OK))
 
     def test_completed_package_verification_rejects_unsafe_artifacts(self):
-        run(VERIFIER, self.first, "0.0.1", "amd64")
-        for version, arch in (("0.0.2", "amd64"), ("0.0.1", "arm64")):
+        run(VERIFIER, self.first, "0.0.1", self.arch)
+        for version, arch, error in (
+                ("0.0.2", self.arch, "wrong package version"),
+                ("0.0.1", self.other_arch, "wrong package architecture")):
             with self.subTest(version=version, arch=arch):
                 result = run(VERIFIER, self.first, version, arch, check=False)
                 self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
         with tempfile.TemporaryDirectory(dir=self.work) as root:
             root = Path(root)
             bad = root / "truncated.deb"
             bad.write_bytes(b"not a Debian package")
-            self.assertNotEqual(run(VERIFIER, bad, "0.0.1", "amd64",
-                                    check=False).returncode, 0)
+            result = run(VERIFIER, bad, "0.0.1", self.arch, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("invalid package metadata", result.stderr)
 
-            for defect in ("missing-cli", "exposed-config", "setuid-daemon",
-                           "missing-conffile", "external-dependency",
-                           "unexpected-file"):
+            defects = {
+                "missing-cli": "missing or unsafe package entry: usr/bin/oectl",
+                "exposed-config": "missing or unsafe package entry: etc/openeigrpd.conf",
+                "setuid-daemon": "missing or unsafe package entry: usr/sbin/openeigrpd",
+                "missing-conffile": "configuration is not a dpkg conffile",
+                "external-dependency": "external routing framework or UUT dependency",
+                "unexpected-file": "unexpected or unsafe package contents",
+            }
+            for defect, error in defects.items():
                 with self.subTest(defect=defect):
                     package_dir = root / "package"
                     if package_dir.exists():
@@ -207,10 +222,11 @@ class PackagingTests(unittest.TestCase):
                     bad = root / (defect + ".deb")
                     run("dpkg-deb", "--build", "--root-owner-group",
                         package_dir, bad)
-                    result = run(VERIFIER, bad, "0.0.1", "amd64",
+                    result = run(VERIFIER, bad, "0.0.1", self.arch,
                                  check=False)
                     self.assertNotEqual(result.returncode, 0,
                                         f"{defect} accepted: {result.stdout}")
+                    self.assertIn(error, result.stderr)
 
     def test_restrictive_umask_creates_traversable_package(self):
         # A 077 administrator umask previously made DEBIAN mode 0700,
@@ -219,7 +235,7 @@ class PackagingTests(unittest.TestCase):
                    f'--daemon "{self.daemon}" --output "{self.out}"')
         result = run("sh", "-c", command)
         package = Path(result.stdout.strip().splitlines()[-1])
-        run(VERIFIER, package, "0.0.9", "amd64")
+        run(VERIFIER, package, "0.0.9", self.arch)
         contents = run("dpkg-deb", "--contents", package).stdout
         self.assertIn("drwxr-xr-x root/root", contents)
 
@@ -232,7 +248,7 @@ class PackagingTests(unittest.TestCase):
         result = run(BUILDER, "--version", "0.0.10", "--daemon",
                      self.daemon, "--output", output)
         archive = Path(result.stdout.strip().splitlines()[-1])
-        run(VERIFIER, archive, "0.0.10", "amd64")
+        run(VERIFIER, archive, "0.0.10", self.arch)
         entries = run("dpkg-deb", "--contents", archive).stdout
         self.assertNotIn("drwxr-s", entries)
 
