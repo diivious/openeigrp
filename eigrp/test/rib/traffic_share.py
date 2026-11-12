@@ -145,7 +145,7 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
         str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
         *(["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"]),
-        "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"),
+        "-I", str(ROOT / "eigrp/code"), str(ROOT / "libunix/code/eigrp_unix_format.c"),
         "-o", str(binary),
     ], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert result.returncode == 0, result.stderr

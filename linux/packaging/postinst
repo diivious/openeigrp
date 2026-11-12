@@ -1,0 +1,21 @@
+#!/bin/sh
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+set -e
+case "$1" in
+    configure)
+        # Service account and observer group must exist before manual start.
+        systemd-sysusers /usr/lib/sysusers.d/openeigrpd.conf
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+            # Never enable or start on first install. Only already-running
+            # services are restarted on upgrades, respecting policy-rc.d.
+            if [ -n "${2:-}" ]; then
+                deb-systemd-invoke try-restart openeigrpd.service || true
+            fi
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+esac
+exit 0

@@ -14,5 +14,5 @@ The source-inspection tests are retained as-is in this reorganization. They are
 not converted into FRR topotests here; framework cleanup can be handled as a
 separate test-design task.
 
-`tools/frr.sh` owns FRR staging/build operations and `tools/frr-uut.sh` owns the
+`frr/tools/frr.sh` owns FRR staging/build operations and `frr/tools/frr-uut.sh` owns the
 FRR UUT workflow.

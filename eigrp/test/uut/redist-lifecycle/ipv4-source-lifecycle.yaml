@@ -1,0 +1,51 @@
+# Portable host->RIB redistribution contract. The real Linux Netlink source
+# observer is exercised separately by linux/test/test_redist.py.
+schema: eigrp-uut-test/v1
+name: ipv4-source-redistribution-subscription-replay-withdrawal
+topology: ../examples/two-router.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 15}
+  # The host source can exist before configuration. No implicit import.
+  - source-route-add: {uut: r1, prefix: '198.51.100.73/32', metric: 20}
+  - validate-route: {uut: r1, prefix: '198.51.100.73/32', table: source, present: true}
+  - validate-route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: false}
+  - redistribute-add: {uut: r1, source: static}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: true}
+        - route: {uut: r1, prefix: '198.51.100.73/32', table: path, present: true}
+  # Duplicate/changed source snapshots must not create a second route owner.
+  - source-route-add: {uut: r1, prefix: '198.51.100.73/32', metric: 30}
+  - validate-route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: true, timeout: 15}
+  - source-route-add: {uut: r1, prefix: '203.0.113.18/32', metric: 10}
+  - validate-route: {uut: r2, prefix: '203.0.113.18/32', table: rib, present: true, timeout: 15}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.73/32'}
+  - validate-convergence:
+      timeout: 18
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: false}
+        - route: {uut: r1, prefix: '198.51.100.73/32', table: topology, present: false}
+        - route: {uut: r2, prefix: '203.0.113.18/32', table: rib, present: true}
+  - redistribute-remove: {uut: r1, source: static}
+  - validate-convergence:
+      timeout: 18
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '203.0.113.18/32', table: rib, present: false}
+        - route: {uut: r1, prefix: '203.0.113.18/32', table: topology, present: false}
+  # New subscription replays existing host snapshot.
+  - redistribute-add: {uut: r1, source: static}
+  - validate-route: {uut: r2, prefix: '203.0.113.18/32', table: rib, present: true, timeout: 15}
+  - source-route-remove: {uut: r1, prefix: '203.0.113.18/32'}
+  - validate-convergence:
+      timeout: 18
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '203.0.113.18/32', table: rib, present: false}
+        - route: {uut: r1, prefix: '203.0.113.18/32', table: topology, present: false}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

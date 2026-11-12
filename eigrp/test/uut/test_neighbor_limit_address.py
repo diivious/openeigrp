@@ -10,7 +10,7 @@ from pathlib import Path
 
 def test_ipv6_neighbor_limit_address_decode():
     uut = Path(__file__).resolve().parent
-    scenario = uut / "prefix-limit-lifecycle/scenario-peer-ipv6-addr-parse.yaml"
+    scenario = uut / "prefix-limit-lifecycle/peer-ipv6-addr-parse.yaml"
     result = subprocess.run(
         [sys.executable, str(uut / "run.py"),
          str(uut / "examples/ipv6-basic-core.yaml"), str(scenario)],

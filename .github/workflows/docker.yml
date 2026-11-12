@@ -11,13 +11,16 @@ on:
     paths:
       - '.github/workflows/docker.yml'
       - 'docker/**'
-      - 'tools/docker*.sh'
-      - 'tools/docker*.py'
-      - 'tools/frr-setup.sh'
+      - 'frr/tools/docker*.sh'
+      - 'frr/tools/docker*.py'
+      - 'frr/tools/frr-setup.sh'
       - 'tools/test/test_frr_release_selection.py'
+      - 'tools/test/test_docker_source_selection.py'
+      - 'tools/test/test_tool_ownership.py'
+      - 'tools/version.sh'
       - 'frr/test/setup/**'
-      - 'tools/frr.sh'
-      - 'tools/frr-install.sh'
+      - 'frr/tools/frr.sh'
+      - 'frr/tools/frr-install.sh'
       - 'eigrp/code/**'
       - 'frr/code/**'
       - 'frr/patch/**'
@@ -51,8 +54,10 @@ jobs:
       - name: Test FRR release selection and checkout safety
         run: |
           python3 -m unittest -q \
-            tools/test/test_frr_release_selection.py \
-            frr/test/setup/test_frr_setup_tag.py
+            tools.test.test_frr_release_selection \
+            tools.test.test_docker_source_selection \
+            tools.test.test_tool_ownership \
+            frr.test.setup.test_frr_setup_tag
       - name: Configure Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Select immutable source refs
@@ -105,9 +110,9 @@ jobs:
           set -euo pipefail
           image="openeigrp-ci:$VERSION-$ARCH"
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            ./tools/docker.sh --build "$VERSION" --platform "$PLATFORM" --image "$image"
+            ./frr/tools/docker.sh --build "$VERSION" --platform "$PLATFORM" --image "$image"
           else
-            ./tools/docker.sh --build "$VERSION" --platform "$PLATFORM" --image "$image" \
+            ./frr/tools/docker.sh --build "$VERSION" --platform "$PLATFORM" --image "$image" \
               --eigrp-ref "$EIGRP_REF"
           fi
       - name: Verify FRR, configuration, adjacency and route exchange
@@ -115,7 +120,7 @@ jobs:
         env:
           VERSION: ${{ steps.source.outputs.version }}
           ARCH: ${{ matrix.arch }}
-        run: ./tools/docker.sh --verify "openeigrp-ci:$VERSION-$ARCH"
+        run: ./frr/tools/docker.sh --verify "openeigrp-ci:$VERSION-$ARCH"
       - name: Save tested release architecture
         if: steps.source.outputs.release == 'yes'
         shell: bash

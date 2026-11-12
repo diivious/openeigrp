@@ -1,0 +1,198 @@
+# FRR Integration Tools
+
+These scripts support the split source layout where portable EIGRP code lives in
+`eigrp/code/`, FRR adapters live in `frr/code/`, and `frr/tools/frr-install.sh` assembles the two
+into the FRR checkout. FRR-specific
+development tooling uses the `frr-` prefix so a future host can provide its own
+parallel driver, such as `bird.sh`.
+
+This file is the operator/developer cookbook for FRR stage, build, and UUT.
+Contribution rules are in `../../CONTRIBUTING.md`. The FRR file map is in
+`../README.md`. A new non-FRR host should not start here; start in
+`../../specs/platform-integration.md`.
+
+## Scripts
+
+```text
+frr.sh          Primary FRR development driver: smoke, install, patch, configure, build, check, UUT, clean.
+frr-named-uut.sh  Live named-mode config/writeback test using sudo vtysh -d eigrpd.
+frr-install.sh  Assemble eigrp/code/ + frr/code/ into FRR, install FRR-native tests, and apply frr/patch/.
+frr-setup.sh    Debian development-machine setup helper.
+frr-uut.sh      Build the FRR UUT, then run EIGRP tests; can drive a remote Linux UUT.
+docker.sh       Build, test, verify and deploy the FRR Docker integration.
+docker-test.sh  Exercise container config and lifecycle.
+docker-verify.sh  Exercise dual-router adjacency and packet flow.
+docker-packet-diagnostic.py  Read-only packet diagnostics during verification.
+```
+
+All script options use GNU-style `--long-option` arguments.
+
+## FRR development workflow
+
+Stage source into FRR through the primary driver:
+
+```sh
+frr/tools/frr.sh --install --frr-root ~/devel/frr
+```
+
+This assembles portable `eigrp/code/` source plus the FRR adapter files in
+`frr/code/` into FRR's single `eigrpd/` directory and stages `frr/test/eigrpd/`. Staging is
+always performed with `--no-patches`.
+
+Patch ownership is explicit. `frr/tools/frr.sh --patch` is the only primary-driver
+action that applies the managed FRR-wide patch series. Install, configure,
+build, check, all, and UUT actions only restage the EIGRP source/test payloads
+and never modify FRR-wide source. Patch application itself remains idempotent:
+an already-applied patch is detected with a reverse `git apply --check`, while
+an FRR source conflict stops the patch action for review. The patch
+series is for FRR `frr-10.7.1` only; the changes are included upstream on
+`master` (FRRouting/frr#23767).
+
+```sh
+frr/tools/frr.sh --install --frr-root ~/devel/frr
+# For frr-10.7.1 only, not FRR master:
+frr/tools/frr.sh --patch --frr-root ~/devel/frr
+```
+
+Run the standalone compile smoke:
+
+```sh
+frr/tools/frr.sh --smoke
+```
+
+Configure and build FRR after staging EIGRP:
+
+```sh
+frr/tools/frr.sh --configure --frr-root ~/devel/frr
+frr/tools/frr.sh --build --frr-root ~/devel/frr
+```
+
+Run the full configure/build/check gate:
+
+```sh
+frr/tools/frr.sh --all --frr-root ~/devel/frr
+```
+
+Stage the current EIGRP source, build, install, restart FRR, and run the live
+named-mode configuration UUT against `eigrpd`:
+
+```sh
+frr/tools/frr.sh --uut --frr-root ~/devel/frr
+```
+
+The live UUT uses `sudo vtysh -d eigrpd -c ...` for every operation. It is
+intentionally staged so configuration/runtime defects are isolated instead of
+being hidden by a large matrix. Stage 1 creates only `router eigrp savage` /
+IPv4 AS 4453 and runs the complete applicable command, mutation, no-form, and
+writeback suite. Only after IPv4/4453 passes does Stage 2 add IPv6 AS 4453 and
+run the applicable IPv6 suite. Stage 3 then adds IPv4/IPv6 AS 6473 to verify
+multiple autonomous-system contexts and `no address-family`. Stage 4 finally
+verifies that `savage` and `SAVAGE` are distinct named processes.
+`frr.sh --uut` does not apply managed FRR patches. Required patch state must
+already be present before the UUT is run. As its first preflight step it prints
+any existing `eigrpd` processes and terminates stale daemon instances (TERM,
+then KILL if required) before staging/building the new UUT. A true defunct
+process entry is reported but does not fail the run because it cannot retain
+daemon sockets or runtime state. The command installs the just-built FRR tree
+and restarts the `frr` systemd service before invoking vtysh so the current
+daemon/build artifacts are exercised. Set `EIGRP_UUT_INTERFACE` when the test
+interface is not `enp0s8`.
+
+## UUT workflow
+
+`frr-uut.sh` is the aggregate/local-or-remote UUT entry point. A UUT test run
+always stages and builds the current EIGRP source before executing the selected
+tests. This staging is performed without patch application. If the build fails,
+tests are not run. The `--all` and `--frr` selections
+run the same live named-mode configuration test used by `frr.sh --uut` before
+any FRR-native pytest payload.
+
+On a Linux machine that is itself the UUT:
+
+```sh
+frr/tools/frr-uut.sh --frr-root ~/devel/frr
+```
+
+From another development host, sync the project to a remote Linux UUT, build
+there, and run the tests there:
+
+```sh
+frr/tools/frr-uut.sh --host uut --frr-root '~/devel/frr'
+```
+
+The quotes around a remote `~/...` path keep the local shell from expanding it
+before the path is sent to the UUT.
+
+The default test set is `--all`. Test subsets are available when needed:
+
+```sh
+frr/tools/frr-uut.sh --packet   --frr-root ~/devel/frr
+frr/tools/frr-uut.sh --portable --frr-root ~/devel/frr
+frr/tools/frr-uut.sh --frr      --frr-root ~/devel/frr
+```
+
+These still build the UUT first. For a source-only portable test without an FRR
+build, use the project test target directly:
+
+```sh
+make uut
+```
+
+To force bootstrap/configure before the UUT build:
+
+```sh
+frr/tools/frr-uut.sh --configure-first --frr-root ~/devel/frr
+```
+
+To build the UUT without executing tests:
+
+```sh
+frr/tools/frr-uut.sh --build-only --frr-root ~/devel/frr
+```
+
+## Local snapshot helper
+
+`backup.sh` is a local snapshot tool for the maintainer. It is not how
+contributions are sent. Send a GitHub pull request. See `../../CONTRIBUTING.md`.
+
+## Local FRR service commands
+
+```sh
+sudo systemctl restart frr
+sudo systemctl status frr
+```
+
+## Handy `vtysh` commands
+
+```sh
+vtysh -c 'show running-config'
+vtysh -c 'configure terminal' -c 'service integrated-vtysh-config' -c 'end' -c 'write memory'
+vtysh -c 'debug eigrp packet hello' -c 'debug eigrp packet update' -c 'debug eigrp transmit ack' -c 'debug eigrp transmit packetize'
+vtysh -c 'configure terminal' -c 'router eigrp 4453' -c 'network 10.0.0.0/8' -c 'network 172.16.0.0/24' -c 'network 192.168.1.0/24'
+```
+
+## Test topology notes
+
+```text
+                         NAT to Host
+                             |
+                          (enp0s3)
+                             |
+RTR1(E1) ---- (enp0s8) FRR (enp0s9) ---- (E2)RTR2
+                             |
+                          (enp0s10)
+```
+
+FRR sample interfaces:
+
+```text
+enp0s3:  N/A
+enp0s8:  10.0.0.250/8
+enp0s9:  172.16.0.250/20
+enp0s10: 192.168.1.250/24
+```
+
+
+## Manual eigrpd UUT startup
+
+For UUT runs, `/etc/frr/daemons` is not changed. `eigrpd` may remain `no`; after the FRR service is restarted, the UUT starts `eigrpd` manually through FRR's installed `frrcommon.sh` daemon helper. This deliberately keeps `eigrpd` outside `watchfrr`, so killing the daemon during development does not cause watchfrr to respawn it.

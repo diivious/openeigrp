@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[3] / 'tools' / 'frr-setup.sh'
+SCRIPT = Path(__file__).resolve().parents[2] / 'tools' / 'frr-setup.sh'
 SHA = 'f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1'
 
 

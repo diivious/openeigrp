@@ -64,7 +64,7 @@ def test_routerid_host_notification_fans_out_as_af_event():
 
 def test_interface_down_is_fanned_out_to_af_eventq():
     interface = (ROOT / "eigrp" / "code" / "eigrp_interface.c").read_text()
-    unix_interface = (ROOT / "unix" / "code" / "eigrp_unix_interface.c").read_text()
+    unix_interface = (ROOT / "libunix" / "code" / "eigrp_uut_interface.c").read_text()
     instance = INSTANCE.read_text()
 
     assert "eigrp_sys_intf_down(" in unix_interface
@@ -112,7 +112,7 @@ def test_old_interface_and_rib_target_names_are_gone():
         "eigrp_rib_source_route_add",
         "eigrp_rib_source_route_remove",
     )
-    roots = (ROOT / "eigrp" / "code", ROOT / "frr" / "code", ROOT / "unix" / "code")
+    roots = (ROOT / "eigrp" / "code", ROOT / "frr" / "code", ROOT / "libunix" / "code")
     source = "\n".join(
         path.read_text()
         for root in roots

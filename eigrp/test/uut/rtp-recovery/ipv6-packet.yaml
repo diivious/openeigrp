@@ -1,0 +1,19 @@
+# Portable IPv6 packet/RTP behavior via virtual wire.
+schema: eigrp-uut-topology/v1
+segments:
+  transit: {}
+routers:
+  r1:
+    asn: 6473
+    router_id: 10.255.0.1
+    interfaces:
+      eth0: {segment: transit, ipv6: 'fe80::1/128'}
+    attached_networks:
+      - {prefix: '2001:db8:1::1/64', interface: lan0}
+  r2:
+    asn: 6473
+    router_id: 10.255.0.2
+    interfaces:
+      eth0: {segment: transit, ipv6: 'fe80::2/128'}
+    attached_networks:
+      - {prefix: '2001:db8:2::1/64', interface: lan0}

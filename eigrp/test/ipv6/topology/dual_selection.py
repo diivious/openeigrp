@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2026 Donnie V. Savage
 #
-# Task 11: IPv6 DUAL successor/feasibility selection while Passive.
+# IPv6 DUAL successor/feasibility selection while Passive.
 
 from pathlib import Path
 import os
@@ -157,7 +157,7 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
             assert(!(b->flags & (EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG |
                                  EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)));
 
-            /* Task 11 must not install/remove IPv6 routes in the host RIB. */
+            /* Must not install/remove IPv6 routes in the host RIB. */
             eigrp_update_routing_table(&eigrp, prefix);
             assert(rib_installs == 0);
             assert(rib_removes == 0);
@@ -178,7 +178,7 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
         str(ROOT / "eigrp" / "code" / "eigrp_list.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_prefix.c"),
-        *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ), "-I", str(ROOT / "eigrp/code"), str(ROOT / "unix/code/eigrp_unix_format.c"), "-o", str(binary),
+        *( ["-Wl,-dead_strip"] if sys.platform == "darwin" else ["-Wl,--gc-sections"] ), "-I", str(ROOT / "eigrp/code"), str(ROOT / "libunix/code/eigrp_unix_format.c"), "-o", str(binary),
     ], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert result.returncode == 0, result.stderr
 
@@ -210,9 +210,9 @@ def test_passive_fd_and_active_freeze_rules_are_preserved():
     ]
     assert "eigrp_topology_route_select(dest)" in flags
 
-    # Task 13 carries the selected IPv6 successor set through the common RIB path.
+    # Carry the selected IPv6 successor set through the common RIB path.
     rib = topology[topology.index("void eigrp_update_routing_table"):
                    topology.index("void eigrp_topology_neighbor_down")]
-    assert "Task 11 stops at IPv6 DUAL/topology selection" not in rib
+    assert "Stops at IPv6 DUAL/topology selection" not in rib
     assert "eigrp_rib_route_add" in rib
     assert "eigrp_topology_southbound_nexthops" in rib

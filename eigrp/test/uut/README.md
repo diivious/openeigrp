@@ -2,8 +2,22 @@
 
 This directory owns orchestration tests for portable `eigrpd` behavior.  Unix is
 only the execution host: each router is an independent process linked with the
-portable EIGRP implementation and the Unix implementation of the public host
-contract.
+portable EIGRP core (`libeigrp-core.a`), common Unix host services
+(`libeigrp_unix.a`), and UUT-only virtual host services (`libeigrp_uut.a`).
+The native Linux daemon must never link the UUT archive.
+
+Scenario directory and `name` values describe **portable protocol behavior**, not
+the host integration that introduced a test.  Interface, packet/RTP, RIB,
+redistribution, filtering and authentication scenarios exercise the portable
+core with synthetic host services.  The `lib-boundary/` scenario additionally
+verifies the portable core/Unix/UUT archive linkage through real neighbor and
+route lifecycle operations.  Native Linux socket, Netlink, configuration and
+policy-provider tests belong in `linux/test/`; a virtual-wire YAML test does
+not establish native Linux interoperability.
+
+Illustrative named-router examples use `eigrprulez` or `eigrprocks`, with
+IPv4 AS 4453 and IPv6 AS 6473. Tests deliberately exercising AS mismatches
+or multiple-AS behavior keep their specific test values.
 
 Two versioned declarative schemas are accepted:
 
@@ -19,7 +33,7 @@ make uut
 
 Every `eigrp-uut-test/v1` document names its topology with the `topology` key. The aggregate runner recursively discovers these scenario documents under `eigrp/test/`; an invalid or missing topology is a gate failure rather than silently dead coverage.
 
-The aggregate runner writes one durable report per scenario under `eigrp/test/uut/logs/<test-case-name>.log`. Each report records the scenario name/path, exact runner command, a repository-root rerun command, exit status, verbose scenario operations, `show eigrp tech-support` state, `show eigrp events` state, complete UUT debug/stderr output, self-describing management records, traffic counters, the complete packet journal since the most recent scenario packet mark, explicit fault-match records, and the final 20 packet events for trailing context. The aggregate run continues after a scenario failure so every scenario receives a report; its final exit status is nonzero when any scenario failed. `make clean` removes generated UUT logs.
+The aggregate runner writes one durable report per executed scenario under `eigrp/test/uut/logs/<test-case-name>.log`. Each report records the scenario name/path, exact runner command, a repository-root rerun command, exit status, verbose scenario operations, `show eigrp tech-support` state, `show eigrp events` state, complete UUT debug/stderr output, self-describing management records, traffic counters, the complete packet journal since the most recent scenario packet mark, explicit fault-match records, and the final 20 packet events for trailing context. The aggregate run stops on the first failed or timed-out scenario, retains the failing scenario report, and exits unsuccessfully. `make clean` removes generated UUT logs.
 
 Run a scenario from the repository root:
 
@@ -246,7 +260,7 @@ and converge Passive, while R3's Hello packets are delivered but never
 accepted as an adjacency and no R3 prefixes enter R1/R2's RIBs.
 
 The Unix shim owns the in-memory keychain provider in
-`unix/code/eigrp_unix_keychain.c` and implements the existing
+`libunix/code/eigrp_unix_keychain.c` and implements the existing
 `eigrp_sys_auth_key_lookup()` southbound contract. The test node only registers
 its configured key with `eigrp_unix_keychain_add()`; neither the key nor an
 authentication override is built into the UUT executable. Unregistered

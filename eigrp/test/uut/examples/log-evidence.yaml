@@ -1,0 +1,17 @@
+# Portable route and neighbor regression used by the centralized UUT log gate.
+schema: eigrp-uut-test/v1
+topology: ipv4-basic-core.yaml
+name: log-evidence
+steps:
+  - start: all
+  - validate-convergence:
+      stable_for: 0.2
+      timeout: 10
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.12.0.2, state: up}
+        - neighbor: {uut: r2, neighbor: 10.23.0.3, state: up}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: topology, active: false, successors: 1}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1}
+  - stop: all

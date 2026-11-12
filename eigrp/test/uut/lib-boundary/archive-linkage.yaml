@@ -1,0 +1,31 @@
+schema: eigrp-uut-test/v1
+topology: ../examples/ipv4-basic-core.yaml
+name: Split Unix and UUT Archives Virtual Wire and RIB Lifecycle
+steps:
+  - start: all
+  - validate-packet: {uut: r1, interface: eth12, opcode: hello, min: 1, timeout: 7, event: sent}
+  - validate-neighbor: {uut: r1, neighbor: 10.12.0.2, interface: eth12, timeout: 7}
+  - validate-neighbor: {uut: r2, neighbor: 10.23.0.3, interface: eth23, timeout: 7}
+  - validate-packet: {uut: r2, opcode: update, min: 1, timeout: 7, event: sent}
+  - validate-convergence:
+      stable_for: 0.2
+      timeout: 7
+      expect:
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 26214400, distance: 90}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, metric: 26214400, distance: 90}
+  - link-down: {uut: r2, interface: eth23}
+  - link-down: {uut: r3, interface: eth32}
+  - validate-convergence:
+      stable_for: 0.2
+      timeout: 7
+      expect:
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.3.0.0/24, table: rib, present: false}
+  - link-up: {uut: r2, interface: eth23}
+  - link-up: {uut: r3, interface: eth32}
+  - validate-convergence:
+      stable_for: 0.2
+      timeout: 7
+      expect:
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, metric: 26214400, distance: 90}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, metric: 26214400, distance: 90}

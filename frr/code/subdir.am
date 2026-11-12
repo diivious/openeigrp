@@ -14,6 +14,7 @@ eigrpd_eigrpd_SOURCES = \
 	eigrpd/eigrp_checksum.c \
 	eigrpd/eigrp_frr_classic.c \
 	eigrpd/eigrp_frr_named.c \
+	eigrpd/eigrp_frr_version.c \
 	eigrpd/eigrp_debug.c \
 	eigrpd/eigrp_frr_console.c \
 	eigrpd/eigrp_vty.c \
@@ -72,6 +73,7 @@ eigrpdheader_HEADERS = \
 	eigrpd/eigrp_cli.h \
 	eigrpd/eigrp_mgnt.h \
 	eigrpd/eigrp_rib.h \
+	eigrpd/eigrp_integration_version.h \
 	eigrpd/eigrp_sys.h \
 	# end
 
@@ -86,6 +88,7 @@ noinst_HEADERS += \
 	eigrpd/eigrp_checksum.h \
 	eigrpd/eigrp_frr_classic.h \
 	eigrpd/eigrp_frr_named.h \
+	eigrpd/eigrp_frr_version.h \
 	eigrpd/eigrp_const.h \
 	eigrpd/eigrp_debug.h \
 	eigrpd/eigrp_frr_console.h \

@@ -278,7 +278,8 @@ context=os.getenv('MOCK_CONTEXT','local')
 idfile=base/('remote.id' if context=='remote' else 'local.id')
 identity=idfile.read_text().strip()
 with (base/'client-events').open('a') as log: log.write(context+' '+repr(args)+'\\n')
-if args[:2]==['image','inspect']:
+if args[:1]==['info']: pass
+elif args[:2]==['image','inspect']:
  if not identity: sys.exit(1)
  if '{{.Os}}/{{.Architecture}}' in args: print('linux/amd64')
  else: print(identity)
@@ -330,7 +331,7 @@ remote_fetch_report() {
                 saves = [e for e in events if "['save', 'openeigrp:diivious-test']" in e]
                 self.assertEqual(len(saves), expected_saves)
                 self.assertEqual((temp/'remote.id').read_text(), value)
-                self.assertTrue((root/'netlabs/results/uut-test1/result.json').exists())
+                self.assertTrue((root/'logs/netlab/uut-test1/result.json').exists())
                 if index == 1:
                     self.assertIn('transfer skipped', proc.stdout)
             remote_report = temp/'netlab-data/results/uut-archived'
@@ -341,7 +342,7 @@ remote_fetch_report() {
             self.assertEqual(purge.returncode, 0, purge.stderr + purge.stdout)
             self.assertEqual((temp/'remote.id').read_text(), '')
             self.assertEqual((temp/'local.id').read_text(), '')
-            self.assertFalse((root/'netlabs/results/uut-test1').exists())
+            self.assertFalse((root/'logs/netlab/uut-test1').exists())
             self.assertFalse(remote_report.exists())
 
 

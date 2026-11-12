@@ -35,6 +35,7 @@
 #include "eigrp_sys.h"
 #include "eigrp_structs.h"
 #include "eigrp_frr_named.h"
+#include "eigrp_frr_version.h"
 #include "eigrp_interface.h"
 #include "eigrp_neighbor.h"
 #include "eigrp_eventlog.h"
@@ -5095,6 +5096,40 @@ DEFPY(show_eigrp_tech_support, show_eigrp_tech_support_cmd,
 
 	vty_out(vty, "EIGRP features:\n\n");
 	vty_out(vty, "  release              : %s\n", capabilities.release);
+	{
+		eigrp_integration_version_t version;
+
+		eigrp_frr_version_read(&version);
+		vty_out(vty, "  integration          : %s\n",
+			version.integration);
+		vty_out(vty, "  integration-version  : %s\n",
+			version.integration_version);
+		vty_out(vty, "  framework            : %s %s\n",
+			version.framework, version.framework_version);
+		if (version.operating_system[0])
+			vty_out(vty, "  operating-system     : %s\n",
+				version.operating_system);
+		if (version.operating_system_version[0])
+			vty_out(vty, "  os-version           : %s\n",
+				version.operating_system_version);
+		if (version.kernel_version[0])
+			vty_out(vty, "  kernel-version       : %s\n",
+				version.kernel_version);
+		if (version.distribution[0]) {
+			vty_out(vty, "  distribution         : %s",
+				version.distribution);
+			if (version.distribution_version[0])
+				vty_out(vty, " %s",
+					version.distribution_version);
+			if (version.distribution_codename[0])
+				vty_out(vty, " (%s)",
+					version.distribution_codename);
+			vty_out(vty, "\n");
+		}
+		if (version.architecture[0])
+			vty_out(vty, "  architecture         : %s\n",
+				version.architecture);
+	}
 	vty_out(vty,
 		"  transport            : TLV 1.0, TLV 2.0, Wide Metrics\n");
 	vty_out(vty, "  bfd                  : %s\n",

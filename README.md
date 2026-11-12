@@ -1,10 +1,23 @@
 # OpenEIGRP
 
-[![OpenEIGRP Core CI](https://github.com/diivious/eigrp/actions/workflows/core.yml/badge.svg?branch=master)](https://github.com/diivious/eigrp/actions/workflows/core.yml?query=branch%3Amaster)
+[![OpenEIGRP Core CI](https://github.com/diivious/openeigrp/actions/workflows/core.yml/badge.svg?branch=master)](https://github.com/diivious/openeigrp/actions/workflows/core.yml?query=branch%3Amaster)
 
-OpenEIGRP is a portable implementation of the Enhanced Interior Gateway Routing Protocol defined by RFC 7868. OpenEIGRP is the project name; EIGRP remains the protocol name used by the wire protocol, CLI, data structures, and source APIs.
+OpenEIGRP is a portable implementation of Cisco's Enhanced Interior Gateway Routing Protocol (EIGRP). OpenEIGRP is the project name; EIGRP remains the protocol name used by the wire protocol, CLI, data structures, and source APIs.
 
-RFC 7868 is the primary protocol reference for this implementation. Project design decisions are made to remain consistent with that behavior, while FRR, Unix, BIRD, and other routing stacks are treated as host and integration environments rather than sources of protocol semantics.
+For interoperability, verified Cisco packets and decodes are authoritative for on-wire formats; observed Cisco behavior informs protocol semantics. [RFC 7868](https://www.rfc-editor.org/rfc/rfc7868.html) is the reference where consistent with that evidence. Host integrations implement operating-system and routing-stack services, not protocol decisions. See the [Cisco/RFC errata and evidence policy](eigrp/specs/cisco-errata.md).
+
+## Try it
+
+To explore the code, no routing stack checkout, root privileges, or network lab is required:
+
+```sh
+git clone https://github.com/diivious/openeigrp.git
+cd openeigrp
+make portable-build          # build portable core and shared Unix support
+make uut SUITE=ipv4-basic-core  # run a small portable EIGRP scenario suite
+```
+
+On Linux, `make linux` also builds the native `openeigrpd` and `oectl` tools; starting a real routing daemon requires additional permissions and configuration. See the [quickstart](specs/quickstart.md) for prerequisites and your first contribution. The default `make` runs the full developer gate, while `make uut` runs portable unit tests and YAML scenarios.
 
 ## Architecture and code overview
 
@@ -15,7 +28,7 @@ RFC 7868 is the primary protocol reference for this implementation. Project desi
 +----------------------------+------------------------------+
                              |
 +----------------------------v------------------------------+
-| Host adapter (FRR / Unix / BIRD / other)                  |
+| Host integration / adapter                                |
 | Normalization, management, and host-service implementation|
 +----------------------------+------------------------------+
                              |
@@ -26,19 +39,22 @@ RFC 7868 is the primary protocol reference for this implementation. Project desi
 ```
 
 **Architectural rule:** equivalent normalized inputs must yield the same EIGRP protocol decisions regardless of host. The portable core owns protocol behavior; adapters implement operating-system and routing-stack services through EIGRP-owned interfaces.
-Portable APIs use EIGRP-owned types and structured results. FRR, BIRD, and Unix-specific objects remain in their respective adapters. The public integration contracts include `eigrp.h`, `eigrp_cli.h`, `eigrp_mgnt.h`, `eigrp_rib.h`, and `eigrp_sys.h` under `eigrp/code/`. See [architecture](specs/architecture.md), [platform integration](specs/platform-integration.md), and [public API](specs/public-api.md).
+Portable APIs use EIGRP-owned types and structured results. Host-specific objects remain inside their integrations. The public integration contracts include `eigrp.h`, `eigrp_cli.h`, `eigrp_mgnt.h`, `eigrp_rib.h`, and `eigrp_sys.h` under `eigrp/code/`. See [architecture](specs/architecture.md), [platform integration](specs/platform-integration.md), and [public API](specs/public-api.md).
+
+![Portable core and host-integration architecture](specs/images/project-architecture.svg)
+
+![Public API boundaries and call directions](specs/images/public-api-directions.svg)
 
 ## Start here by role
 
 | Role | Read first | Then |
 |---|---|---|
-| Contributor | `CONTRIBUTING.md` | `specs/architecture.md`, `specs/code-conventions.md` |
-| Operator / CLI user | `specs/EIGRP-Config-Guide.md` | `tools/README.md`, `docker/README.md` |
-| Platform integrator | `specs/platform-integration.md`, `specs/public-api.md` | public headers under `eigrp/code/` and the platform README |
-| Portable protocol developer | `specs/architecture.md` | `eigrp/specs/dual.md`, `eigrp/specs/route-selection-spec.md`, `eigrp/specs/rtp.md`, `specs/rfc7868.md` |
-| FRR adapter developer | `frr/README.md`, `frr/patch/README.md` | `specs/platform-integration.md`, `specs/EIGRP-Config-Guide.md` |
-| Unix host developer | `unix/README.md`, `unix/specs/integration.md` | `specs/public-api.md` |
-| BIRD/BSD adapter developer | `bird/README.md` | `specs/platform-integration.md`, `specs/public-api.md` |
+| Curious developer | [Quickstart](specs/quickstart.md) | [Developer guide](specs/developer-guide.md) |
+| Contributor | [Contributing](CONTRIBUTING.md) | [Style guide](specs/code-conventions.md), [testing guide](specs/testing.md) |
+| Operator / CLI user | [Integration compatibility](specs/compatibility.md) | [Linux](linux/README.md), [FRR](frr/README.md), or [Docker](docker/README.md) |
+| Platform integrator | [Integration contract](specs/platform-integration.md) | [Public API](specs/public-api.md) and the integration's own README |
+| Portable protocol developer | [Core design](eigrp/specs/README.md) | [DUAL](eigrp/specs/dual.md), [route selection](eigrp/specs/route-selection.md), [RTP](eigrp/specs/rtp.md) |
+| Tester | [Testing guide](specs/testing.md) | [Portable UUT](eigrp/test/uut/README.md), [Netlab interoperability](netlabs/README.md) |
 
 ## Quick Start
 
@@ -70,34 +86,41 @@ The Docker package uses Alpine Linux and FRR with OpenEIGRP. For local/GitHub bu
 From the repository root:
 
 ```sh
-make
+make portable-build
 ```
 
-The root build compiles the portable EIGRP core and Unix host support without requiring an FRR checkout, BIRD checkout, VM, root privileges, or host VLAN configuration.
+The lightweight portable build compiles the portable EIGRP core and Unix host support without requiring an FRR checkout, BIRD checkout, VM, root privileges, or host VLAN configuration.
 
 ### Build, test and pre-merge qualification
 
 From the repository root:
 
 ```sh
-make                        # Build portable EIGRP and Unix support (default)
+make portable-build         # Build portable EIGRP and shared Unix support
 make check                  # Changed-file style check + checker unit tests
 make check SOURCE=all       # Full-tree style check + checker unit tests
+
 make uut                    # All portable pytest and YAML UUT scenarios
 make uut SUITE=rtp-core     # Named scenario group
-make uut SCENARIO=prefix-limit-lifecycle/scenario-peer-timers-ipv6.yaml
+make uut SCENARIO=prefix-limit-lifecycle/peer-timers-ipv6.yaml
+
 make scale                  # Quick pacing/backpressure qualification
 make scale SUITE=100k       # Heavy scale qualification when needed
+
+make all                   # Full developer gate (including all scale suites)
+make pre-commit            # Also qualify FRR Docker and Debian packages
 ```
 
-**Run `make all` before opening a pull request for merge.** It runs `build`,
-`check SOURCE=all`, `uut`, then the quick `scale` gate in that order. It stops
-at the first failure. `make` alone remains a build only. Full scale suites are
-explicit, not part of `make all`.
+**Run `make all` before opening a pull request for merge.** It builds the
+platform, checks the complete source tree, executes portable UUT, runs the
+quick and full scale suites, and runs native Linux tests on Linux hosts. It
+stops at the first failure. Plain `make` invokes this same developer gate.
+`make pre-commit` additionally builds both FRR Docker images and both Debian
+packages and runs package-lifecycle tests.
 
-`make help` lists the short command interface and selectors. GitHub Actions
-runs its build, style and portable UUT gates on Linux and macOS; the local
-pre-merge `make all` also runs the quick scale qualification.
+See the root `Makefile` for targets and selectors. GitHub Actions runs
+build, style and portable UUT gates on Linux and macOS; the local `make all`
+also performs scale and platform-specific qualification.
 
 For Docker development:
 
@@ -117,10 +140,8 @@ See [Docker development](docker/README.md) for source selection and advanced
 
 ### Cisco EIGRP / OpenEIGRP capability matrix
 
-The following comparison presents the supplied Alpha 144 feature assessment. **Yes** indicates supported capability, **Partial** indicates incomplete coverage, and **No** indicates unavailable functionality. These are feature-status declarations, not a claim of completed production certification or identical host support. Platform-specific deployment readiness must be assessed separately.
+This is the project-wide Cisco EIGRP / OpenEIGRP feature assessment, updated for the `linux-support` branch. **Yes** indicates an implemented capability, **Partial** indicates incomplete coverage or a host-dependent subset, and **No** means it is not currently implemented. It is **not** a claim that every integration exposes every capability, or that live Cisco interoperability and production deployment have been certified. In particular, native Linux supports a deliberately smaller configuration and redistribution surface; see the [integration matrix](specs/compatibility.md) and the Linux limitations below.
 
-| Feature | Cisco EIGRP | OpenEIGRP | Notes |
-|:--|:--:|:--:|:--|
 <details>
 <summary><strong>Address Families</strong></summary>
 
@@ -131,7 +152,7 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | IPv4/IPv6 named mode | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Multiple autonomous systems | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Multiple named instances | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| VRF / VRF-Lite | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> |  |
+| VRF / VRF-Lite | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Native Linux configuration currently accepts only the default VRF |
 
 </details>
 
@@ -176,7 +197,7 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | Maximum hops | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Administrative distance | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Loop-Free Alternate (LFA FRR) | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #c62828; font-weight: 700;">No</span> | Planned |
-| Add-Path | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #c62828; font-weight: 700;">No</span> | Under consideration |
+| Add-Path | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #c62828; font-weight: 700;">No</span> | Not implemented; under consideration |
 
 </details>
 
@@ -190,13 +211,13 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | Route redistribution | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Redistribute connected | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Redistribute static | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Redistribute OSPF | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Redistribute BGP | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Redistribute RIP / IS-IS | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
+| Redistribute OSPF | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Host-dependent; native Linux currently supports only connected and static redistribution |
+| Redistribute BGP | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Host-dependent; native Linux currently supports only connected and static redistribution |
+| Redistribute RIP / IS-IS | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Host-dependent; native Linux currently supports only connected and static redistribution |
 | Redistribution route maps | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Default metric | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | External route tagging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Route tag filtering | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Route-tag filtering (match tag) and modification (set tag) need to be implemented |
+| Route tag filtering | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Native Linux has route-map `match tag`, but no route-map `set` actions; other host capabilities vary |
 | Default route advertisement | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 
 </details>
@@ -223,7 +244,7 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | Distribute lists | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Prefix lists | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Access lists | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Route maps | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
+| Route maps | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Native Linux offers restricted first-match policy; route-map `set` actions are unsupported |
 | Offset lists | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Per-interface filtering | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Inbound / outbound filtering | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
@@ -258,7 +279,7 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | Feature | Cisco EIGRP | OpenEIGRP | Notes |
 |:--|:--:|:--:|:--|
 | MD5 authentication | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| HMAC-SHA-256 authentication | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | The digest primitives and packet integration already exist,  tbd is type-7 support, and interoperability tests |
+| HMAC-SHA-256 authentication | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Partial core support; native Linux configuration rejects HMAC-SHA-256 and encoded type-7 keys |
 | Key chains | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Key rollover | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Runtime selection not fully established |
 
@@ -301,7 +322,7 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | Classic IPv4 configuration | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Named-mode configuration | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | IPv6 named-mode configuration | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Configuration writeback | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
+| Configuration writeback | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Integration-specific; native Linux loads configuration on startup and has no interactive writeback |
 | Show interfaces | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Show neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | Show topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
@@ -310,8 +331,8 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 | Debug packet / neighbor / DUAL | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | minimal logs |
 | Event logging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | DUAL state transition logging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Clear neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Clear topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
+| Clear neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `oectl` command on native Linux |
+| Clear topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `oectl` command on native Linux |
 | Clear event logs | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | SNMP EIGRP MIB | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Conditional on host SNMP |
 
@@ -321,7 +342,17 @@ The following comparison presents the supplied Alpha 144 feature assessment. **Y
 
 The portable core implements EIGRP protocol state and decisions, including DUAL, topology and metric selection, neighbor management, reliable transport, packet encoding, and IPv4/IPv6 addressing. Classic IPv4 and named-mode configuration use portable feature targets. EIGRP Stub runtime behavior is intentionally outside project scope.
 
-FRR integration and the standalone Unix host are present. The `bird/` tree currently defines an integration boundary rather than a working BIRD runtime. The feature matrix must not be interpreted as proof that every capability is operational on every host.
+The portable core provides protocol decisions independently of its host. Native Linux and FRR have real integration code. Shared Unix services and the virtual-wire UUT are a development/test environment, **not** a production host. The BIRD integration is deferred; OpenWrt is planned, not available.
+
+| Integration | Current availability | What you can do today |
+|---|---|---|
+| [Native Linux](linux/README.md) | Daemon, control client, raw IPv4/IPv6 packet transports, Netlink RIB, `.deb` packaging implemented | Run `openeigrpd` with named-mode default-VRF configuration; verify target-system privileges, systemd lifecycle, and live interoperability separately |
+| [FRR](frr/README.md) | Integration code and FRR-based Docker workflow present | Build against the selected FRR checkout and use its integration-specific CLI and management surface |
+| [Unix UUT](libunix/README.md) | Test-only integration | Develop and run deterministic protocol scenarios without live network privileges |
+| [BIRD](bird/README.md) | Deferred | No deployable adapter |
+| OpenWrt | Planned | No deployable integration on this branch |
+
+For per-host feature constraints, see [Integration compatibility](specs/compatibility.md).
 
 ### Qualification and deployment readiness
 
@@ -344,11 +375,18 @@ eigrp/
     code/          BIRD/BSD adapter area
     specs/         BIRD/BSD integration specifications
     test/          BIRD/BSD-native test area
-  unix/
-    code/          Standalone Unix host implementation
+  libunix/
+    code/          Shared Unix services and test-only UUT host
     specs/         Unix-host integration specification
     test/          Unix-host tests
-  specs/           Repository-wide architecture, public API, and operator contracts
+  linux/
+    code/          Native Linux daemon, CLI, and host services
+    man/           Installed daemon, configuration, and CLI manuals
+    packaging/     Debian and systemd packaging
+    specs/         Linux integration design
+    test/          Native Linux tests
+  netlabs/         Cisco interoperability and packet evidence
+  specs/           Repository-wide developer and integration contracts
   docker/          Alpine FRR/OpenEIGRP image, container startup, and deployment guide
   tools/           Build, staging, patch, UUT, and packaging helpers
   CONTRIBUTING.md Contribution, style, AI, and test rules
@@ -361,8 +399,10 @@ eigrp/
 | [`eigrp/code/`](eigrp/code/) | Portable protocol implementation and public EIGRP APIs |
 | [`eigrp/specs/`](eigrp/specs/) | DUAL, route selection, RTP, and other protocol-module designs |
 | [`frr/`](frr/README.md) | FRR routing-stack adapter and integration |
-| [`unix/`](unix/README.md) | Standalone Unix host and portable qualification |
-| [`bird/`](bird/README.md) | BIRD/BSD integration area |
+| [`libunix/`](libunix/README.md) | Shared Unix services and portable UUT qualification |
+| [`linux/`](linux/README.md) | Native Linux daemon, control application, and Debian packages |
+| [`bird/`](bird/README.md) | Deferred BIRD integration area |
+| [`netlabs/`](netlabs/README.md) | Cisco interoperability tests and captured packet evidence |
 | [`specs/`](specs/) | Cross-platform architecture, integration, and configuration contracts |
 | [`tools/`](tools/README.md) | Build, staging, and test orchestration |
 | [`docker/`](docker/README.md) | Multi-architecture container build, testing, deployment, and GHCR release publication |
@@ -403,14 +443,19 @@ See `specs/code-conventions.md` before adding or renaming public symbols.
 
 Repository-wide contracts live under `specs/`; portable protocol internals live under `eigrp/specs/`.
 
+- `specs/quickstart.md` — clone, build, and run a first test.
+- `specs/developer-guide.md` — deeper build, debugging, and development workflow.
+- `specs/testing.md` — portable UUT, Netlab, and integration test workflow.
 - `specs/architecture.md` — ownership and portability boundaries.
-- `specs/code-conventions.md` — naming and source conventions.
+- `specs/code-conventions.md` — naming and source conventions, with style-check/style-fix.
 - `specs/platform-integration.md` — host integration contract.
 - `specs/public-api.md` — host-neutral callable API and data structures.
-- `specs/EIGRP-Config-Guide.md` — configuration and operational command contract.
-- `specs/rfc7868.md` — RFC authority and project interpretation rules.
+- `specs/compatibility.md` — differences in host integration coverage.
+- `specs/EIGRP-Config-Guide.md` — portable configuration/operation semantics; available syntax varies by host.
+- `specs/rfc7868.md` — RFC reference and evidence hierarchy.
+- `eigrp/specs/cisco-errata.md` — tracked Cisco/RFC differences and evidence.
 - `eigrp/specs/dual.md` — DUAL state-machine design.
-- `eigrp/specs/route-selection-spec.md` — topology path ordering and successor selection.
+- `eigrp/specs/route-selection.md` — topology path ordering and successor selection.
 - `eigrp/specs/rtp.md` — packetization and reliable transport design.
 
 ## Contribution rules
@@ -419,7 +464,7 @@ Preserve existing copyright, SPDX, and author history. New files use the copyrig
 
 Do not add alias wrappers, duplicate old/new paths, compatibility layers, or host-specific protocol logic without an approved architectural reason.
 
-See `CONTRIBUTING.md` for contribution workflow, AI use, style, test requirements, and diff hygiene.
+See [Contributing](CONTRIBUTING.md) for the contribution workflow and [Developer guide](specs/developer-guide.md) for debugging, style and test details.
 
 ## Security
 

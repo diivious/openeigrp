@@ -6,7 +6,7 @@ import struct
 import sys
 from pathlib import Path
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[4]/"unix"/"test"))
+sys.path.insert(0,str(Path(__file__).resolve().parents[4]/"libunix"/"test"))
 from eigrp_wire import _route_prefixes, _packet_meta
 
 

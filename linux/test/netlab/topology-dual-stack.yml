@@ -1,0 +1,19 @@
+# Manual Cisco IPv4 and IPv6 EIGRP concurrency/interoperability fixture.
+# Same physical transit segment; independent per-AF runtime sockets.
+name: eigrp88dual
+provider: libvirt
+nodes:
+  ios:
+    device: iosv
+    module: [eigrp]
+    eigrp.as: 4453  # IPv4; configure IPv6 AS 6473 separately
+  uut:
+    device: linux
+    module: []
+links:
+  - ios:
+      ipv4: '10.88.0.1/24'
+      ipv6: '2001:db8:88::1/64'
+    uut:
+      ipv4: '10.88.0.2/24'
+      ipv6: '2001:db8:88::2/64'

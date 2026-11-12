@@ -180,8 +180,15 @@ recover_evidence() {
     return "$rc"
 }
 
+check_docker() {
+    command -v docker >/dev/null 2>&1 || fail 'Docker CLI unavailable on Netlab appliance'
+    docker info >/dev/null 2>&1 || \
+        fail 'Docker daemon unavailable on Netlab appliance; start Docker Engine and verify docker info'
+}
+
 run_lab() {
     local stage="$1" id="$2" work
+    check_docker
     assert_free
     validate_stage "$stage"
     [[ "$id" =~ ^[0-9]{3}$ ]] || fail 'Invalid lab number'
@@ -208,6 +215,7 @@ run_lab() {
 run_uut() {
     local stage="$1" name="$2" group="${3:-}" work driver report rc clean_rc image_rc capture_rc
     local -a steps
+    check_docker
     assert_free
     validate_stage "$stage"
     [[ "$name" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || fail 'Invalid scenario name (requires 2R-6R)'
@@ -428,9 +436,9 @@ PYRESULT
 
 run_image_update() {
     local stage="$1" rc=0
+    check_docker
     assert_free
     validate_stage "$stage"
-    command -v docker >/dev/null || fail 'Docker unavailable'
     "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
         "$stage/netlabs/tools/remote/images.py" update || rc=$?
     rm -rf -- "$stage"

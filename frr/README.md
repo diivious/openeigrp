@@ -161,13 +161,16 @@ The supported FRR path is documented in the top-level `README.md` and in
 `tools/README.md`:
 
 ```sh
-tools/frr.sh --install --frr-root ../frr
-tools/frr.sh --patch --frr-root ../frr
-tools/frr.sh --build --frr-root ../frr
+frr/tools/frr.sh --install --frr-root ../frr
+# Only on the older FRR frr-10.7.1 release:
+frr/tools/frr.sh --patch --frr-root ../frr
+frr/tools/frr.sh --build --frr-root ../frr
 ```
 
 `--install` copies `eigrp/code/` plus the adapter files in `code/` into `frr/eigrpd/`.
-`--patch` applies `patch/` onto FRR sources outside that directory.
+`--patch` applies `patch/` onto FRR sources outside that directory. It is
+required only for FRR `frr-10.7.1`; upstream `master` incorporates these
+changes through FRRouting/frr#23767 and must not receive the legacy patches.
 
 ## What not to copy onto a new host
 
@@ -191,8 +194,8 @@ change. Do not reach into `prefix_descriptor` or packet objects from host code.
 FRR-native daemon tests live in `test/eigrpd/` and are staged to `frr/tests/eigrpd/`; actual topotests live in `test/topotests/` and stage to `frr/tests/topotests/`.
 See `test/README.md`.
 
-Live named-mode config/writeback is driven by `tools/frr.sh --uut` and
-`tools/frr-uut.sh`.
+Live named-mode config/writeback is driven by `frr/tools/frr.sh --uut` and
+`frr/tools/frr-uut.sh`.
 
 ## Debugging
 

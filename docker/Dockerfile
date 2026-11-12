@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Copyright (C) 2026 Donnie V. Savage
 # Alpine source build of FRR + OpenEIGRP. GitHub or local sources are
-# staged by tools/docker.sh; both follow the same patch/install/build path.
+# staged by frr/tools/docker.sh; both follow the same install/build path.
 ARG ALPINE_VERSION=3.22
 FROM alpine:${ALPINE_VERSION} AS builder
 
@@ -27,14 +27,14 @@ ARG FRR_SHA
 ARG EIGRP_VERSION
 ARG BUILD_JOBS=4
 
-# Both modes receive immutable, staged source contexts from tools/docker.sh.
+# Both modes receive immutable, staged source contexts from frr/tools/docker.sh.
 # Local contexts include the developer's working edits and a Git checkout for
 # EIGRP's release injector; remote contexts are fetched from both GitHub repos.
 COPY --from=eigrp-source / /src-eigrp/
 COPY --from=frr-source / /src-frr/
 ARG SOURCE_MODE=build
 RUN set -eu; \
-    test -f /src-eigrp/tools/frr.sh; \
+    test -f /src-eigrp/frr/tools/frr.sh; \
     test -f /src-frr/bootstrap.sh; \
     test "$(git -C /src-eigrp rev-parse HEAD)" = "$EIGRP_SHA"; \
     if [ "$SOURCE_MODE" = build ]; then \
@@ -43,17 +43,20 @@ RUN set -eu; \
       test "$SOURCE_MODE" = local; \
     fi
 
-# Deliberately match local development's three separate stages. FRR-wide
-# edits remain in frr/patch/ and fail rather than accepting fuzz or drift.
+# FRR 10.7.1 needs the managed patches. Upstream FRR master includes them
+# since FRRouting/frr#23767; applying the old patches there would conflict.
+# Select by the immutable 10.7.1 commit, not a potentially moving branch name.
 RUN set -eux; \
     cd /src-eigrp; \
-    bash tools/frr.sh --patch --frr-root /src-frr; \
-    bash tools/frr.sh --install --frr-root /src-frr; \
-    EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash tools/frr.sh --configure \
+    if [ "$FRR_SHA" = f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1 ]; then \
+      bash frr/tools/frr.sh --patch --frr-root /src-frr; \
+    fi; \
+    bash frr/tools/frr.sh --install --frr-root /src-frr; \
+    EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash frr/tools/frr.sh --configure \
       --frr-root /src-frr -- \
       --prefix=/usr --libdir=/usr/lib --enable-vtysh --enable-pcre2posix \
       --disable-doc --disable-doc-html; \
-    EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash tools/frr.sh --build \
+    EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash frr/tools/frr.sh --build \
       --frr-root /src-frr --jobs "$BUILD_JOBS"; \
     make -C /src-frr DESTDIR=/image install; \
     install -d /image/etc/frr; \

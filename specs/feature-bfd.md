@@ -205,7 +205,7 @@ OpenEIGRP follows the EIGRP named-mode model used by current Cisco software.
 BFD is an address-family interface property:
 
 ```text
-router eigrp savage
+router eigrp eigrprocks
  address-family ipv4 autonomous-system 4453
   af-interface GigabitEthernet0/0
    bfd
@@ -214,7 +214,7 @@ router eigrp savage
 The default address-family interface can enable BFD for every participating interface:
 
 ```text
-router eigrp savage
+router eigrp eigrprocks
  address-family ipv4 autonomous-system 4453
   af-interface default
    bfd
@@ -855,7 +855,7 @@ The tests therefore follow the same lifecycle a production router experiences.
 The first tests exercise:
 
 ```text
-router eigrp savage
+router eigrp eigrprocks
  address-family ipv4 autonomous-system 4453
   af-interface default
    bfd

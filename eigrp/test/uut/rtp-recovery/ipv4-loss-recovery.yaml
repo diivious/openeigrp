@@ -1,0 +1,46 @@
+# Portable EIGRP/RTP regression. Packet transport remains virtual wire;
+# crafted IPv4 raw socket frames are tested in linux/test/test_packet.py.
+schema: eigrp-uut-test/v1
+name: ipv4-rtp-update-loss-recovery
+topology: ipv4-packet.yaml
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 14
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - checkpoint: initially-converged
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: down}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: down}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  # Drop one UPDATE during re-adjacency. RTP must recover and drain.
+  - fault-add: {name: drop-first-update, action: drop, source_uut: r1, destination_uut: r2, opcode: update, count: 1}
+  - packet-mark: rejoin-after-loss
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-fault: {name: drop-first-update, hits: 1, timeout: 12}
+  - validate-convergence:
+      timeout: 25
+      stable_for: 0.4
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - validate-packet: {uut: r1, opcode: update, event: dropped, since: rejoin-after-loss, min: 1, timeout: 3}
+  - validate-packet: {uut: r1, opcode: update, event: delivered, since: rejoin-after-loss, min: 1, timeout: 3}
+  - checkpoint: retransmitted-and-converged
+  - stop: all

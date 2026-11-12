@@ -9,7 +9,7 @@ OpenEIGRP implementation into a routing platform.
 
 It is intentionally host-neutral. FRR-specific integration belongs under
 `frr/`; BIRD/BSD-specific integration belongs under `bird/`; standalone Unix
-host integration belongs under `unix/`.
+host integration belongs under `libunix/`.
 
 The concrete FRR implementation, including packet, event, interface, RIB,
 redistribution, policy, and configuration call flows, is specified in
@@ -17,7 +17,7 @@ redistribution, policy, and configuration call flows, is specified in
 
 The standalone macOS/Linux implementation, including runtime scheduling,
 interface/RIB host models, virtual-wire packet I/O, logical segments, and Unix
-core/shim call flows, is specified in `unix/specs/integration.md`.
+core/shim call flows, is specified in `libunix/specs/integration.md`.
 
 A platform integrator should be able to understand the required boundary from
 this document and the public headers without learning private DUAL, topology,
@@ -468,6 +468,6 @@ Use:
 
 - `frr/README.md` and `frr/specs/` for FRR-specific mapping;
 - `bird/README.md` and `bird/specs/` for BIRD/BSD-specific mapping;
-- `unix/README.md` and `unix/specs/integration.md` for the standalone Unix host;
+- `libunix/README.md` and `libunix/specs/integration.md` for the standalone Unix host;
 - `specs/EIGRP-Config-Guide.md` for the user-visible EIGRP semantic command
   surface that host front ends should represent.

@@ -25,7 +25,7 @@ def test_query_only_lifecycle(tmp_path):
            str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
            *(str(CODE / name) for name in sources),
            '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections',
-           str(ROOT / 'unix/code/eigrp_unix_format.c'), '-o', str(binary)]
+           str(ROOT / 'libunix/code/eigrp_unix_format.c'), '-o', str(binary)]
     build = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
     assert build.returncode == 0, build.stderr
     run = subprocess.run([str(binary)], cwd=ROOT, text=True, capture_output=True)

@@ -8,7 +8,10 @@ FRR_ADAPTER_ROOT := $(PROJECT_ROOT)/frr/code
 FRR_SOURCE_ROOT ?= ../../../frr
 BUILD := obj
 STAGE := $(BUILD)/eigrpd
-LOGS := logs
+# Capture compiler diagnostics as test evidence; objects remain in obj/.
+LOG_PARENT := $(PROJECT_ROOT)/logs/frr/build
+# Per-invocation nonce ensures log files never collide across concurrent runs.
+LOGS := $(LOG_PARENT)/run-$(shell date -u +%Y%m%dT%H%M%SZ)-$(shell od -An -N6 -tx1 /dev/urandom | tr -d ' [:space:]')
 
 COMMON_CFLAGS := \
 	-std=gnu11 \
@@ -29,15 +32,17 @@ COMMON_CFLAGS := \
 	-I$(FRR_SOURCE_ROOT) \
 	-DEIGRP_STANDALONE_BUILD
 
-# Match the FRR install projection: common eigrpd/ first, then top-level frr/
-# daemon adapter files overlaid into the same eigrpd directory.
 ALL_SOURCES = $(filter-out \
 	$(STAGE)/%_clippy.c \
 	$(STAGE)/eigrp_dump.c \
 	$(STAGE)/eigrp_log.c, \
 	$(sort $(wildcard $(STAGE)/*.c)))
 SMOKE_SOURCES = $(ALL_SOURCES)
+LINK_BUILD := $(BUILD)/link
+LINK_GUARD := $(BUILD)/eigrpd-link-guard.o
+OBJECT_CFLAGS := $(filter-out -fsyntax-only,$(COMMON_CFLAGS)) -Wno-error -Wno-unused-variable -c
 
+.PHONY: all stage smoke all-sources link-guard cli list clean distclean
 all: all-sources link-guard
 
 stage:
@@ -46,24 +51,17 @@ stage:
 	@cp -a $(EIGRPD_ROOT)/. $(STAGE)/
 	@find $(FRR_ADAPTER_ROOT) -maxdepth 1 -type f -exec cp -p {} $(STAGE)/ \;
 
-smoke: stage $(LOGS)
+smoke: stage
+	@mkdir -p $(LOGS)
 	@set -e; \
 	for src in $(SMOKE_SOURCES); do \
 	  echo "CC $$src"; \
 	  $(CC) $(COMMON_CFLAGS) $$src >$(LOGS)/$$(basename $$src).log 2>&1 || { cat $(LOGS)/$$(basename $$src).log; exit 1; }; \
 	done
 
-
-# Compile the staged projection to real objects and perform a relocatable link.
-# Unlike -fsyntax-only, this catches duplicate global symbols created when a
-# portable implementation and an FRR adapter accidentally export the same API.
-LINK_BUILD := $(BUILD)/link
-LINK_GUARD := $(BUILD)/eigrpd-link-guard.o
-OBJECT_CFLAGS := $(filter-out -fsyntax-only,$(COMMON_CFLAGS)) -Wno-error -Wno-unused-variable -c
-
-link-guard: stage $(LOGS)
+link-guard: stage
 	@rm -rf $(LINK_BUILD) $(LINK_GUARD)
-	@mkdir -p $(LINK_BUILD)
+	@mkdir -p $(LINK_BUILD) $(LOGS)
 	@set -e; objs=""; \
 	for src in $(ALL_SOURCES); do \
 	  obj="$(LINK_BUILD)/$$(basename "$${src%.c}").o"; \
@@ -74,7 +72,8 @@ link-guard: stage $(LOGS)
 	echo "LD -r $(LINK_GUARD)"; \
 	$(CC) -r -o $(LINK_GUARD) $$objs >$(LOGS)/link-guard.log 2>&1 || { cat $(LOGS)/link-guard.log; exit 1; }
 
-all-sources: stage $(LOGS)
+all-sources: stage
+	@mkdir -p $(LOGS)
 	@set -e; \
 	for src in $(ALL_SOURCES); do \
 	  echo "CC $$src"; \
@@ -82,14 +81,11 @@ all-sources: stage $(LOGS)
 	done
 
 cli: smoke
-
 list: stage
 	@printf '%s\n' $(SMOKE_SOURCES)
 
-$(LOGS):
-	@mkdir -p $(LOGS)
-
 clean:
-	rm -rf $(LOGS) $(BUILD)
+	rm -rf $(BUILD)
 
-.PHONY: all stage smoke all-sources link-guard cli list clean
+distclean: clean
+	rm -rf $(LOG_PARENT)

@@ -386,7 +386,7 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
     import importlib.util
     import pathlib
     # sys is imported at module scope
-    wire_dir=ROOT / "unix" / "test"
+    wire_dir=ROOT / "libunix" / "test"
     sys.path.insert(0,str(wire_dir))
     try:
         from eigrp_wire import _route_prefixes

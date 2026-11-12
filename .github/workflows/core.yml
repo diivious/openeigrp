@@ -1,9 +1,11 @@
 # Copyright (C) 2026 Donnie V. Savage
 # EIGRP portable/core CI. The root Makefile owns test orchestration.
 #
-# Validate every commit to master. For feature branches with open master PRs,
-# the PR validates the proposed merge instead of duplicating branch tests.
-# Gate: fast compile/smoke -> CodeQL -> full macOS/Linux UUT.
+# Run fast compile/style/portable smoke checks on branch pushes and master PRs.
+# After a merge reaches master, run the complete regression on Linux and macOS.
+# Branch pushes already represented by an open master PR are deduplicated.
+# Gate: fast compile/smoke -> CodeQL -> platform smoke or full regression.
+# Docker and Debian architectures are covered by their dedicated workflows.
 # Use CodeQL advanced setup rather than default setup to avoid duplicate scans.
 
 name: EIGRP Core CI
@@ -69,17 +71,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install pinned clang-format 23.1.4
-        uses: mamba-org/setup-micromamba@v3
-        with:
-          environment-name: style
-          create-args: clang-format=23.1.4
-          init-shell: none
-
-      - name: Put pinned clang-format on PATH
-        run: |
-          echo "$MAMBA_ROOT_PREFIX/envs/style/bin" >> "$GITHUB_PATH"
-          "$MAMBA_ROOT_PREFIX/envs/style/bin/clang-format" --version
+      - name: Install style and fast-test dependencies
+        run: python3 -m pip install pytest PyYAML clang-format
 
       - name: Validate changed source style
         shell: bash
@@ -108,11 +101,11 @@ jobs:
           esac
           make check STYLE_CHECK_BASE="$base"
 
-      - name: Install fast-test dependencies
-        run: python3 -m pip install pytest PyYAML
+      - name: Build native Linux daemon and portable sources
+        run: make linux
 
-      - name: Build portable and Unix sources
-        run: make build
+      - name: Run native Linux management and IPv6 packet regressions
+        run: python3 -m pytest -q linux/test/test_mgnt.py linux/test/test_ipv6_packet.py
 
       - name: Run pacing, topology-index, and fresh-uptime smoke tests
         run: |
@@ -153,7 +146,7 @@ jobs:
 
       - name: Build C/C++ for CodeQL extraction
         if: matrix.language == 'c-cpp'
-        run: make build
+        run: make linux
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@v4
@@ -183,16 +176,34 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install portable test dependencies
-        run: python3 -m pip install pytest PyYAML
+      - name: Install portable test and style dependencies
+        run: python3 -m pip install pytest PyYAML clang-format
 
-      - name: Run portable/core gate
+      - name: Run branch and PR portable YAML smoke gate
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/master') }}
+        shell: bash
+        env:
+          EIGRP_PYTHON: python3
+        run: |
+          set -euo pipefail
+          make -C eigrp/test/uut eigrp-uut-node
+          for scenario in \
+            examples/ipv4-basic-core-gate.yaml \
+            examples/ipv6-basic-core-gate.yaml \
+            rtp/lost-ack.yaml \
+            dual-diamond/feasible-successor.yaml; do
+            python3 eigrp/test/uut/run_all.py --scenario "$scenario"
+          done
+
+      - name: Run full regression after master merge or manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
         shell: bash
         env:
           EIGRP_PYTHON: python3
         run: |
           set -o pipefail
-          make uut 2>&1 | tee make-test.log
+          mkdir -p logs/uut/eigrp/ci
+          make all 2>&1 | tee logs/uut/eigrp/ci/make-all.log
 
       - name: Trace Linux UUT aborts on failure
         if: ${{ failure() && runner.os == 'Linux' }}
@@ -201,7 +212,8 @@ jobs:
           EIGRP_PYTHON: python3
         run: |
           set -o pipefail
-          python3 eigrp/test/uut/trace_linux_abort.py 2>&1 | tee abort-trace.log
+          mkdir -p logs/uut/eigrp/ci
+          python3 eigrp/test/uut/trace_linux_abort.py 2>&1 | tee logs/uut/eigrp/ci/abort-trace.log
 
       - name: Preserve failure diagnostics
         if: failure()
@@ -209,9 +221,7 @@ jobs:
         with:
           name: eigrp-core-${{ matrix.os }}-failure-log
           path: |
-            make-test.log
-            abort-trace.log
-            eigrp/test/uut/logs/
+            logs/
             eigrp/test/uut/abort-trace/*.log
             eigrp/test/uut/abort-trace/*.txt
             eigrp/test/uut/eigrp-uut-node

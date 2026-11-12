@@ -190,7 +190,7 @@ extern void eigrp_nbr_delete(eigrp_nbr_t *neigh);
 bool eigrp_nbr_limit_state_update(eigrp_nbr_t *nbr,
 				  eigrp_nbr_limit_state_t state);
 void eigrp_nbr_limit_release(eigrp_nbr_t *nbr);
-/* Task 2 timer engine.  Task 3 invokes this when a hard limit is crossed.
+/* Timer engine invokes this when a hard limit is crossed.
  * Per-peer timer options inherit from neighbor-all, then process settings. */
 /* Mark prefix-limit DOWN without retiring descriptors used by this packet. */
 bool eigrp_nbr_limit_mark_down(eigrp_nbr_t *nbr,

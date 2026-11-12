@@ -77,7 +77,7 @@ The required ownership boundary is:
 ```
 
 The shim may translate representation and lifecycle. It must not make protocol
-decisions that should be identical on FRR, BIRD/BSD, Unix, or another host.
+decisions that should be identical on FRR, BSD, Unix, or another host.
 
 ![FRR integration call flow](images/frr-call-flow.svg)
 
@@ -863,7 +863,7 @@ Before accepting a change under `frr/`, verify:
 - On the reverse direction, which portable API requests the host service?
 - Does the shim translate representation only, or has protocol policy leaked
   into FRR?
-- Could the same core operation work unchanged with BIRD/BSD using a different
+- Could the same core operation work unchanged with BSD using a different
   shim?
 - Are FRR YANG/VTY/Zebra/event/socket types absent from portable public APIs?
 - Does error handling preserve the structured EIGRP result rather than hiding

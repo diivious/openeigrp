@@ -1,0 +1,24 @@
+{
+  "name": "source formatter selection UUT",
+  "description": "Run the actual style-fix command in temporary Git repositories and verify selected file contents",
+  "cases": [
+    {
+      "name": "default-changed",
+      "args": [],
+      "changed_first": "BADFMT",
+      "unchanged": "BADFMT"
+    },
+    {
+      "name": "explicit-changed",
+      "args": ["--changed"],
+      "changed_first": "BADFMT",
+      "unchanged": "BADFMT"
+    },
+    {
+      "name": "all",
+      "args": ["--all"],
+      "changed_first": "GOODFMT",
+      "unchanged": "GOODFMT"
+    }
+  ]
+}

@@ -8,7 +8,7 @@ This document defines naming and source-organization conventions shared across
 the OpenEIGRP repository.
 
 It is intentionally about code navigation and public vocabulary. Protocol
-algorithms belong in `eigrp/specs/`; FRR- or BIRD-specific coding rules belong
+algorithms belong in `eigrp/specs/`; FRR- or Linux-specific coding rules belong
 with those integrations.
 
 The project name is **OpenEIGRP**. Existing protocol/API identifiers continue
@@ -60,7 +60,7 @@ Do not derive portable names from:
 
 - Cisco CLI hierarchy;
 - FRR YANG paths;
-- BIRD configuration grammar;
+- Linux configuration grammar;
 - host process names;
 - transient parser implementation details.
 
@@ -243,7 +243,7 @@ into portable APIs.
 Examples of host-native terms that stay in adapters include:
 
 - FRR `struct interface`, VTY, YANG, Zebra, event/thread objects;
-- BIRD protocol/config/channel/table/event-loop objects;
+- Linux protocol/config/channel/table/event-loop objects;
 - operating-system socket structures beyond the normalized system boundary.
 
 Callback names should state the event or iteration contract, not the host that
@@ -265,7 +265,7 @@ results remain navigable.
 Portable semantic APIs return OpenEIGRP-owned structured result codes where the
 caller must distinguish outcomes.
 
-Do not export FRR/BIRD error codes through a portable API.
+Do not export intergrations specific error codes through a portable API.
 
 Do not collapse materially different outcomes into a boolean when callers need
 to distinguish invalid input, absence, unsupported capability, or an internal
@@ -400,10 +400,11 @@ Run `make check` before committing. This runs the style checker over the
 Git index, working tree and untracked files, followed by the checker's own
 executable regression tests. It never changes source, the index, or history.
 
-Run `make check SOURCE=all` for a full-tree audit. **Run `make all` before
-opening a pull request for merge**: build, full-tree style check and checker
-tests, all portable UUTs, then quick scale. A failing stage must not be
-reported as success.
+Run `make check SOURCE=all` for a full-tree audit. **Run `make pre-commit` before
+committing or opening a pull request**: `make all` (build, full-tree style
+checks, portable UUTs, quick and extended scale) followed by both Docker
+architectures, both Debian packages, and package lifecycle UUTs. A failing
+stage must not be reported as success.
 
 CI uses the same changed-file checker with `STYLE_CHECK_BASE` selecting the
 committed comparison revision: `make check STYLE_CHECK_BASE=<git-revision>`.

@@ -11,7 +11,7 @@ TOPOLOGY_SCHEMA="eigrp-uut-topology/v1"; TEST_SCHEMA="eigrp-uut-test/v1"
 HDR=struct.Struct("!BBBBIHHHH16s16s"); REGISTER=1; PACKET=2; MULTICAST=1
 OPCODES={1:"update",2:"request",3:"query",4:"reply",5:"hello",6:"ipxsap",7:"probe",8:"ack",10:"sia-query",11:"sia-reply"}
 ROOT=Path(__file__).resolve().parents[3]; NODE=Path(__file__).with_name("eigrp-uut-node")
-sys.path.insert(0,str(ROOT/"unix"/"test"))
+sys.path.insert(0,str(ROOT/"libunix"/"test"))
 from eigrp_wire import Broker
 sys.path.insert(0, str(Path(__file__).parent))
 from timing import Poller, MonotonicClock, ManualClock
@@ -184,7 +184,7 @@ STEP_FIELDS = {
     "process-limit-clear": {"uut"}, "process-limit-expire": {"uut"}, "process-limit-reset-expire": {"uut"}, "process-limit-stale": {"uut"}, "process-limit-age": {"uut"}, "validate-process-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "penalty_min", "penalty_max", "penalty_after_age", "timeout"},
     "redist-limit-clear": {"uut"}, "redist-limit-expire": {"uut"}, "validate-redist-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "timeout"},
     "source-route-add": {"uut", "prefix", "metric"}, "source-route-remove": {"uut", "prefix"},
-    "redistribute-add": {"uut", "source"}, "redistribute-remove": {"uut", "source"},
+    "redistribute-add": {"uut", "source", "seed"}, "redistribute-remove": {"uut", "source"},
     "redistribute-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "default-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "wait": {"seconds"}, "fault-add": {"name", "action", "source_uut", "destination_uut",
@@ -361,6 +361,8 @@ def validate_scenario(s):
                     "validate-event":("uut","contains"),
                     "validate-log":("uut","contains")}.get(op,())
             if any(k not in arg for k in needed): raise SpecError(f"{where}: missing required fields {needed}")
+            if op == "redistribute-add" and "seed" in arg and type(arg["seed"]) is not bool:
+                raise SpecError(f"{where}: seed must be boolean")
             if op in ("redistribute-metric", "default-metric"):
                 if "reset" in arg and type(arg["reset"]) is not bool:
                     raise SpecError(f"{where}: reset must be boolean")
@@ -585,8 +587,11 @@ class Node:
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: source route change failed: {result}")
 
-    def redistribute_change(self, source, add):
-        result = self.cmd(f"REDIST-{'ON' if add else 'OFF'} {source}", timeout=10)
+    def redistribute_change(self, source, add, seed=True):
+        command = f"REDIST-{'ON' if add else 'OFF'} {source}"
+        if add and not seed:
+            command += " unseeded"
+        result = self.cmd(command, timeout=10)
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: redistribution change failed: {result}")
 
@@ -846,7 +851,12 @@ class Runner:
                     raise
         elif op=="stop":
             names=list(self.nodes) if arg in (None,"all") else ([arg] if isinstance(arg,str) else arg.get("uuts",list(self.nodes)))
-            for n in names: self.nodes[n].stop()
+            for n in names:
+                self.nodes[n].stop()
+                if (self.broker and hasattr(self.broker, "wait_node_closed")
+                        and not self.broker.stop_event.is_set()):
+                    if not self.broker.wait_node_closed(n):
+                        raise RuntimeError(f"{n}: wire endpoint remained registered after stop")
         elif op in ("link-up","link-down"):
             self.nodes[arg["uut"]].link(op=="link-up",arg["interface"])
         elif op in ("links-up","links-down"):
@@ -927,7 +937,7 @@ class Runner:
                 prefix, op=="source-route-add", int(arg.get("metric", 1)))
         elif op in ("redistribute-add", "redistribute-remove"):
             self.nodes[arg["uut"]].redistribute_change(
-                arg["source"], op=="redistribute-add")
+                arg["source"], op=="redistribute-add", arg.get("seed", True))
         elif op in ("redistribute-metric", "default-metric"):
             self.nodes[arg["uut"]].metric_config_change(
                 op, arg)

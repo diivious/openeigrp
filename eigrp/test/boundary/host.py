@@ -36,7 +36,7 @@ def test_eigrp_owned_threads_start_and_stop_logging_context():
     log_header = (PORTABLE / "eigrp_log.h").read_text()
     daemon = (PORTABLE / "eigrp.c").read_text()
     packet = (PORTABLE / "eigrp_packet.c").read_text()
-    unix_runtime = (ROOT / "unix" / "code" / "eigrp_unix_sys.c").read_text()
+    unix_runtime = (ROOT / "libunix" / "code" / "eigrp_unix_sys.c").read_text()
 
     assert "void eigrp_log_start(void);" in log_header
     assert "void eigrp_log_stop(void);" in log_header

@@ -22,16 +22,16 @@ __pycache__/
 .dirstamp
 .libs/
 
-# Test / UUT generated output
+# All generated test result evidence, independent of file extension
+/logs/
+# Historical output, removed by explicit migration rather than ignored as source
 *.log
 *.logs
 *.dSYM/
+eigrp/test/uut/eigrp-uut-node
 
-# FRR test build output
+# FRR/generated daemon artifacts when staged inside FRR
 /frr/test/build/obj/
-/frr/test/build/logs/
-
-# FRR/generated daemon artifacts when this tree is staged inside FRR
 eigrpd/.deps/
 eigrpd/.dirstamp
 eigrpd/.libs/
@@ -39,6 +39,11 @@ eigrpd/eigrpd
 eigrpd/eigrpd.conf
 eigrpd/eigrpd.xref
 
-eigrp/test/uut/eigrp-uut-node
-unix/code/eigrp-wire
+# Linux/generated daemon artifacts
+*.deb
+
+# unix lib
+libunix/code/eigrp-wire
+
+# netlabs config
 netlabs/remote-lab.cfg

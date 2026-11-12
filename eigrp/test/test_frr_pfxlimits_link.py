@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE = ROOT / "eigrp" / "code"
-UNIX = ROOT / "unix" / "code"
+UNIX = ROOT / "libunix" / "code"
 MANIFEST = ROOT / "frr" / "code" / "subdir.am"
 
 
@@ -23,7 +23,7 @@ def test_frr_prefix_limit_link(tmp_path):
 
     # Unix supplies the external EIGRP services for this standalone link test.
     unix = sorted(p for p in UNIX.glob("*.c") if p.name not in (
-        "eigrp_unix_config.c", "eigrp_unix_wire_broker.c"))
+        "eigrp_unix_config.c", "eigrp_uut_wire_broker.c"))
     harness = tmp_path / "pfxlimits_link.c"
     harness.write_text("""\
 #include <stddef.h>

@@ -1,0 +1,20 @@
+#!/bin/sh
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+set -e
+case "$1" in
+    remove|deconfigure)
+        # Stop before files are removed; do not stop on in-place upgrade.
+        if [ -d /run/systemd/system ]; then
+            deb-systemd-invoke stop openeigrpd.service || true
+        fi
+        # Clear administrator-created enablement links on removal, even on
+        # systems not currently booted under systemd. Not during upgrades.
+        if [ "$1" = remove ]; then
+            systemctl --no-reload disable openeigrpd.service >/dev/null 2>&1 || true
+        fi
+        ;;
+    upgrade|failed-upgrade)
+        ;;
+esac
+exit 0

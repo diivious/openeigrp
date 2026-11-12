@@ -137,8 +137,9 @@ if DOCKER_FAIL=1 bash "$runner" uut-start "$tmp/state/runs/upload.2" 2R-case >"$
     echo 'FAIL: Docker inspection failure accepted' >&2
     exit 1
 fi
-grep -Fq 'Cannot verify orphaned' "$tmp/docker-fail.log"
-echo 'PASS: arbitrary topology orphan and docker inspection error block new runs'
+grep -Fq 'Docker daemon unavailable on Netlab appliance' "$tmp/docker-fail.log"
+[[ ! -f "$tmp/state/session/session" ]]
+echo 'PASS: arbitrary topology orphan and Docker daemon errors block new runs'
 
 # Image selection failure is BLOCKED, not an interoperability PASS.
 if SELECT_FAIL=1 bash "$runner" uut-start "$tmp/state/runs/upload.2" 2R-case >"$tmp/image-fail.log" 2>&1; then

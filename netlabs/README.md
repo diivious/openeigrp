@@ -12,7 +12,7 @@ protocol semantics. [RFC 7868](https://www.rfc-editor.org/rfc/rfc7868.html)
 is the reference where consistent with Cisco, alongside the OpenEIGRP design
 contracts in [`../eigrp/specs/rtp.md`](../eigrp/specs/rtp.md),
 [`../eigrp/specs/dual.md`](../eigrp/specs/dual.md), and
-[`../eigrp/specs/route-selection-spec.md`](../eigrp/specs/route-selection-spec.md).
+[`../eigrp/specs/route-selection.md`](../eigrp/specs/route-selection.md).
 When Cisco evidence is ambiguous or implementations differ, record the
 observation and leave the protocol decision to the project owner.
 Distinguish specification requirements, observations, and test assumptions. Do not treat an FRR/BIRD behavior as EIGRP protocol authority.
@@ -411,7 +411,7 @@ netlabs/test/infra/test_remote_runtime.sh
 Only one remote lab/UUT session occupies the current host at a time. The
 shared runner stages the selected scenario, runs `netlab up`, executes the
 driver, collects `report.json` and CLI/router logs, invokes `netlab down`,
-and retrieves an evidence bundle under `netlabs/results/uut-.../`. It records
+and retrieves an evidence bundle under `logs/netlab/uut-.../`. It records
 cleanup separately. A cleanup failure retains the remote session for recovery and must never
 be reported as a passing run. Use `netlabs/tools/remote-uut.sh --abort` to
 cancel a registered live/regression worker or recover an unlocked stale UUT;
@@ -432,7 +432,7 @@ without implementing the corresponding assertions.
   acknowledgment, reliable transport, retry/CR, and lifecycle invariants.
 - [`eigrp/specs/dual.md`](../eigrp/specs/dual.md): feasibility,
   ACTIVE/PASSIVE, QUERY/REPLY, state freeze, and SIA invariants.
-- [`eigrp/specs/route-selection-spec.md`](../eigrp/specs/route-selection-spec.md):
+- [`eigrp/specs/route-selection.md`](../eigrp/specs/route-selection.md):
   internal/external preference, successor/feasible successor, variance,
   and maximum-paths behavior.
 - [`netlabs/uut/README.md`](uut/README.md): existing live-scenario naming

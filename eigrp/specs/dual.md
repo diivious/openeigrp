@@ -15,7 +15,10 @@ It does not define host integration, CLI syntax, RIB APIs, packet framing, TLV
 encoding, or RTP retransmission mechanics. Those belong to the repository-wide
 integration specs or `eigrp/specs/rtp.md`.
 
-Protocol behavior follows RFC 7868 and explicit OpenEIGRP design decisions.
+Verified Cisco on-wire evidence is authoritative for packet formats; observed
+Cisco behavior supports semantics. RFC 7868 is the reference where consistent
+with that evidence. See [Cisco/RFC errata](cisco-errata.md) for the authority
+order and decision record.
 
 ## 2. DUAL topology objects
 
@@ -65,7 +68,7 @@ A path may be loop free without satisfying FC, but DUAL does not adopt it as a
 successor without the required diffusing computation.
 
 Route ordering among internal/external paths is defined in
-`route-selection-spec.md`.
+`route-selection.md`.
 
 ## 4. Passive state
 
@@ -272,7 +275,7 @@ DUAL decides when path selection may be committed. Route-selection code decides
 which eligible path(s) are preferred under internal/external ordering, metric,
 variance, and maximum-path rules.
 
-`route-selection-spec.md` owns those ordering rules.
+`route-selection.md` owns those ordering rules.
 
 No route-selection helper may bypass Active-state freezing by committing a new
 successor while the destination is still Active.
@@ -345,7 +348,7 @@ eigrp_timer.c
 
 Supporting metric and route-selection code remains portable under `eigrp/code/`.
 
-No FRR, BIRD, Unix host, CLI, or RIB adapter may implement a second DUAL state
+No host integration, CLI, or RIB adapter may implement a second DUAL state
 machine.
 
 ## 21. DUAL correctness checklist

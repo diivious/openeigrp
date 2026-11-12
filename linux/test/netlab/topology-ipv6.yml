@@ -1,0 +1,22 @@
+# Manual Cisco IPv6 EIGRP interoperability fixture.
+# Linux node must run the future native openeigrpd executable.
+name: eigrp88v6
+provider: libvirt
+addressing:
+  router_id:
+    ipv4: 10.255.88.0/24
+nodes:
+  ios:
+    device: iosv
+    module: [eigrp]
+    eigrp.as: 6473
+  uut:
+    device: linux
+    module: []
+links:
+  - ios:
+      ipv4: false
+      ipv6: '2001:db8:88::1/64'
+    uut:
+      ipv4: false
+      ipv6: '2001:db8:88::2/64'

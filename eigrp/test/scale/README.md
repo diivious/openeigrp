@@ -1,8 +1,9 @@
 # Portable EIGRP scale qualification
 
-`make scale` runs the complete `make uut` gate first, then the portable scale
-scenarios. `make scale` runs the quick pacing/backpressure qualification; use `make scale SUITE=100k`, `SUITE=stress`, or `CASE=name` for heavier cases.
-Both targets are available in `make help`.
+`make scale` runs the quick pacing/backpressure qualification independently of
+`make uut`. Use `make scale SUITE=100k`, `SUITE=stress`, or `CASE=name` for
+heavier cases. `make all` runs `uut`, the quick scale gate, and all
+extended scale suites.
 
 ## neighbor_2048.py
 

@@ -93,10 +93,15 @@ find "$backup_dir" \
 
 find "$backup_dir" -type f \
     \( -name .DS_Store -o -name .dirstamp -o -name '*.pyc' -o \
-       -name '*.o' -o -name '*.lo' -o -name '*.la' -o -name '*~' \) \
+       -name '*.o' -o -name '*.a' -o -name '*.lo' -o -name '*.la' -o -name '*~' \) \
     -delete
 
-rm -rf "$backup_dir/frr/test/build/obj" "$backup_dir/frr/test/build/logs"
+rm -rf -- "$backup_dir/logs" "$backup_dir/frr/test/build/obj" \
+    "$backup_dir/frr/test/build/logs"
+rm -f -- "$backup_dir/eigrp/test/uut/eigrp-uut-node" \
+    "$backup_dir/libunix/code/eigrp-wire" \
+    "$backup_dir/linux/code/openeigrpd" "$backup_dir/linux/code/oectl" \
+    "$backup_dir/linux/code/openeigrpd-config"
 
 # Write a complete archive alongside its final destination before replacing
 # the old archive. Any failed zip leaves the previous backup intact.

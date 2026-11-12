@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "docker.sh"
+SCRIPT = Path(__file__).resolve().parents[2] / "frr/tools/docker.sh"
 TAG = "frr-10.7.1"
 SHA = "f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1"
 
@@ -24,6 +24,10 @@ class DockerReleaseSelectionTest(unittest.TestCase):
         self.bin.mkdir()
         self.source = SCRIPT.read_text().split('[[ $# -gt 0 ]] || { usage;', 1)[0]
         self.assertIn("load_frr_config()", self.source)
+        (self.root / "tools").mkdir()
+        helper = self.root / "tools/version.sh"
+        helper.write_text("#!/bin/sh\nprintf '1.10.0\\n'\n")
+        helper.chmod(0o755)
         self.config = self.root / "docker.cfg"
         self.config.write_text(
             "FRR_REPO=https://github.com/FRRouting/frr.git\n"
@@ -50,7 +54,8 @@ class DockerReleaseSelectionTest(unittest.TestCase):
 
     def execute(self, command):
         env = dict(os.environ, PATH=str(self.bin) + ":" + os.environ.get("PATH", ""))
-        return subprocess.run(["bash", "-c", self.source + "\n" + command],
+        return subprocess.run(["bash", "-c", self.source + "\n" +
+                               f"root='{self.root}'\n" + command],
                               cwd=self.root, env=env, text=True, capture_output=True)
 
     def test_configuration_selects_official_frr_tag_and_sha(self):

@@ -1,9 +1,10 @@
 # FRR integration patches
 
-This directory contains the small set of changes that EIGRP requires outside
-FRR's `eigrpd/` directory.
+This directory contains the changes required outside FRR's `eigrpd/`
+directory for the older `frr-10.7.1` release. FRRouting/frr#23767 merged
+these changes into upstream `master`; do not apply these patches to master.
 
-`tools/frr-install.sh` owns patch installation. `series` defines patch order.
+`frr/tools/frr-install.sh` owns patch installation. `series` defines patch order.
 Each upstream FRR file modified by this project is owned by exactly one managed
 patch. A patch is applied from the FRR repository root with `git apply` and is
 handled idempotently:
@@ -34,7 +35,7 @@ Current integration patches:
   had a generic numeric process instance.
 
 The YANG source is authoritative. After patch installation,
-`tools/frr-install.sh` validates the expected grammar/schema shape and removes
+`frr/tools/frr-install.sh` validates the expected grammar/schema shape and removes
 FRR's generated `yang/frr-eigrpd.yang.c`; the FRR build regenerates that file
 from the patched YANG source. More than one named-mode schema node is treated
 as source drift and fails rather than being repaired by applying an overlapping

@@ -67,7 +67,7 @@ summary reporting, not local PyYAML/Jinja2 or Linux tools. Shell tests named
 Use descriptive permanent filenames, not milestones or project-phase names.
 
 Each remote scenario saves its ordinary report and structured `result.json`.
-Batch runs add `netlabs/results/batch-<selection>-<date>-<suffix>.json`,
+Batch runs add `logs/netlab/batch-<selection>-<date>-<suffix>.json`,
 with per-test status and report references. A regression failure does not hide
 subsequent independent regression results, but **blocks all live cases** in
 that batch. Regression logs and `regressions.json` are retrieved as a separate
@@ -90,5 +90,5 @@ Source tests live only in `netlabs/test/`. Network fault injection lives in
 `netlabs/common/network_fault.py`; use its `.fault.json` state files so failed
 restoration is detectable before teardown. Earlier uncommitted copies in
 `netlabs/tests/` and `netlabs/uut/tests/` should be removed when applying a
-complete-file overlay. Generated reports remain local under `netlabs/results/`;
-`make clean` deletes them without deleting scenario definitions or `.gitignore`.
+complete-file overlay. Generated reports remain local under `logs/netlab/`;
+`make clean` and `make distclean` do not touch personal Netlab results. Remove them explicitly with `netlabs/tools/remote-uut.sh --purge` when appropriate.

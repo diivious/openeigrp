@@ -10,7 +10,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "docker.sh"
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "frr/tools/docker.sh"
 
 
 class DockerSourceSelectionTest(unittest.TestCase):
@@ -23,6 +24,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.eigrp.mkdir()
         self.frr.mkdir()
         self.git(self.eigrp, "init", "-q")
+        self.git(self.eigrp, "branch", "-M", "master")
         self.git(self.frr, "init", "-q")
         for repo in (self.eigrp, self.frr):
             self.git(repo, "config", "user.name", "Release Test")
@@ -49,6 +51,20 @@ class DockerSourceSelectionTest(unittest.TestCase):
         docker.write_text(
             "#!/bin/bash\n"
             "printf '%s\\n' \"$*\" >> \"$DOCKER_TEST_LOG\"\n"
+            "if [[ ${1:-} == run ]]; then\n"
+            "  version=; arch=; stage=\n"
+            "  for arg in \"$@\"; do\n"
+            "    case \"$arg\" in\n"
+            "      PACKAGE_VERSION=*) version=${arg#PACKAGE_VERSION=} ;;\n"
+            "      PACKAGE_ARCH=*) arch=${arg#PACKAGE_ARCH=} ;;\n"
+            "      type=bind,source=*,target=/out) stage=${arg#*source=}; stage=${stage%,target=/out} ;;\n"
+            "    esac\n"
+            "  done\n"
+            "  if [[ -n $version && -n $arch && -n $stage ]]; then\n"
+            "    printf 'fixture' > \"$stage/openeigrpd_${version}_${arch}.deb\"\n"
+            "  fi\n"
+            "  exit 0\n"
+            "fi\n"
             "for arg in \"$@\"; do\n"
             "  case \"$arg\" in\n"
             "    eigrp-source=*)\n"
@@ -81,8 +97,18 @@ class DockerSourceSelectionTest(unittest.TestCase):
 
         (self.eigrp / "docker").mkdir()
         (self.eigrp / "tools").mkdir()
-        (self.eigrp / "tools/frr.sh").write_text("#!/bin/sh\n")
-        (self.eigrp / "tools/docker.sh").write_bytes(SCRIPT.read_bytes())
+        (self.eigrp / "frr/tools").mkdir(parents=True)
+        # The Docker source probe must exercise the integration-owned path.
+        (self.eigrp / "frr/tools/frr.sh").write_text("#!/bin/sh\n")
+        (self.eigrp / "frr/tools/docker.sh").write_bytes(SCRIPT.read_bytes())
+        (self.eigrp / "tools/version.sh").write_bytes(
+            (ROOT / "tools/version.sh").read_bytes())
+        (self.eigrp / "tools/version.sh").chmod(0o755)
+        (self.eigrp / "linux/packaging").mkdir(parents=True)
+        for relative in ("linux/packaging/package.sh", "linux/packaging/build-packages.sh"):
+            target = self.eigrp / relative
+            target.write_bytes((ROOT / relative).read_bytes())
+            target.chmod(0o755)
         (self.eigrp / "docker/Dockerfile").write_text("ARG ALPINE_VERSION=3.21\nRUN echo TAGGED_OLD\n")
         self.write_config("frr-10.7.1", self.frr_old_sha)
         self.commit(self.eigrp)
@@ -93,6 +119,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.git(self.eigrp, "tag", "-a", "rel-1.10.0", "-m", "new")
         (self.eigrp / "docker/Dockerfile").write_text("RUN echo WORKING_BRANCH\n")
         self.commit(self.eigrp)
+        self.git(self.eigrp, "remote", "add", "origin", str(self.eigrp))
 
     @staticmethod
     def git(repo, *args):
@@ -109,10 +136,13 @@ class DockerSourceSelectionTest(unittest.TestCase):
             f"FRR_TAG={tag}\nFRR_SHA={sha}\n"
         )
 
-    def build(self, mode, *args):
-        env = dict(os.environ, PATH=str(self.bin) + ":" + os.environ["PATH"],
+    def build(self, mode, *args, script=None):
+        # Keep source selection independent of the developer's FRR checkout.
+        env = dict(os.environ, HOME=str(self.root),
+                   PATH=str(self.bin) + ":" + os.environ["PATH"],
                    DOCKER_TEST_LOG=str(self.log))
-        result = subprocess.run(["bash", str(SCRIPT), mode, *args], cwd=self.eigrp,
+        result = subprocess.run(["bash", str(script or self.eigrp / "frr/tools/docker.sh"), mode, *args],
+                                cwd=self.eigrp,
                                 env=env, text=True, capture_output=True, timeout=40)
         log = self.log.read_text() if self.log.exists() else ""
         return result, log
@@ -145,11 +175,86 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertIn("WORKING_BRANCH", log)
         self.assertIn("EIGRP_UNCOMMITTED", log)
         self.assertIn("FRR_UNCOMMITTED", log)
+        self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
+        self.assertIn("Image:     openeigrp:dev-test", result.stdout)
+
+    def test_local_build_uses_pinned_frr_without_checkout(self):
+        # No candidate checkout: the builder must use the FRR commit pinned
+        # by the current working OpenEIGRP tree, not a mutable branch.
+        (self.frr / "bootstrap.sh").unlink()
+        (self.eigrp / "local-edit").write_text("EIGRP_UNCOMMITTED\n")
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Using pinned FRR frr-10.7.2", result.stderr)
+        self.assertIn("WORKING_BRANCH", log)
+        self.assertIn("EIGRP_UNCOMMITTED", log)
+        self.assertIn("FRR_NEW", log)
+        self.assertNotIn("FRR_OLD", log)
+
+    def test_local_pin_mismatch_stops_before_docker(self):
+        (self.frr / "bootstrap.sh").unlink()
+        self.write_config("frr-10.7.2", "0" * 40)
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FRR pin changed", result.stderr)
+        self.assertNotIn("buildx build", log)
+
+    def test_explicit_missing_frr_checkout_is_error(self):
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.root / "missing"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("local FRR checkout not found", result.stderr)
+        self.assertNotIn("buildx build", log)
+
+    def test_default_local_version_uses_user_test_suffix(self):
+        result, log = self.build("--local", "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.frr))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-", log)
+        self.assertIn("-test", log)
+
+    def test_remote_development_build_uses_shared_version(self):
+        result, log = self.build("--build", "dev-test", "--eigrp-ref",
+                                 "refs/heads/master")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
+        self.assertIn("Image:     ghcr.io/diivious/openeigrp-frr:dev-test", result.stdout)
+
+    def test_unmerged_higher_tag_not_selected_locally(self):
+        self.git(self.eigrp, "checkout", "-qb", "experiment")
+        (self.eigrp / "experiment").write_text("new\n")
+        self.commit(self.eigrp)
+        self.git(self.eigrp, "tag", "rel-9.0.0")
+        result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.frr))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-dev-test", log)
+
+    def test_docker_and_debian_embed_the_same_version(self):
+        result, log = self.build("--local", "diivious-test",
+                                 "--eigrp-root", str(self.eigrp),
+                                 "--frr-root", str(self.frr),
+                                 "--image", "openeigrp:diivious-test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EIGRP_VERSION=1.10.0-diivious-test", log)
+        output = self.root / "dist"
+        env = dict(os.environ, HOME=str(self.root),
+                   PATH=str(self.bin) + ":" + os.environ["PATH"],
+                   DOCKER_TEST_LOG=str(self.log), USER="diivious")
+        package = subprocess.run(
+            [str(self.eigrp / "linux/packaging/package.sh"), "--local", "diivious-test",
+             "--platform", "linux/amd64", "--image", "openeigrp:diivious-test",
+             "--output", str(output)],
+            cwd=self.eigrp, env=env, text=True, capture_output=True, timeout=40)
+        self.assertEqual(package.returncode, 0, package.stderr)
+        self.assertTrue((output / "openeigrpd_1.10.0-diivious-test_amd64.deb").exists())
+        self.assertIn("PACKAGE_VERSION=1.10.0-diivious-test", self.log.read_text())
 
     def test_release_ref_cannot_override_its_frr(self):
         result, log = self.build("--build", "1.9.0", "--frr-ref", "refs/heads/main")
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(log, "")
+        # The read-only daemon probe is permitted; no Docker build may occur.
+        self.assertEqual(log, "info\n")
 
     def test_historical_release_reads_pin_from_its_own_script(self):
         # Pre-docker.cfg releases pinned FRR in the tagged shell script.
@@ -161,7 +266,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         )
         self.commit(self.eigrp)
         self.git(self.eigrp, "tag", "rel-1.8.0")
-        result, log = self.build("--build", "1.8.0")
+        result, log = self.build("--build", "1.8.0", script=SCRIPT)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("historical FRR pin", result.stderr)
         self.assertIn("FRR_OLD", log)
@@ -175,7 +280,98 @@ class DockerSourceSelectionTest(unittest.TestCase):
         result, log = self.build("--build", "1.11.0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("FRR release tag", result.stderr)
-        self.assertEqual(log, "")
+        # The read-only daemon probe is permitted; no Docker build may occur.
+        self.assertEqual(log, "info\n")
+
+
+class DockerPatchStageTest(unittest.TestCase):
+    """Execute Dockerfile's real integration stage with harmless command doubles."""
+
+    FRR_1071_SHA = "f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1"
+    FRR_MASTER_SHA = "a19ece1b3bba6f48eb2aee47a04b3842423a949e"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="frr-patch-stage-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.eigrp = self.root / "openeigrp"
+        self.frr = self.root / "frr"
+        self.log = self.root / "actions.log"
+        (self.eigrp / "frr/tools").mkdir(parents=True)
+        (self.frr / "tools/etc/frr").mkdir(parents=True)
+        (self.frr / "tools/etc/frr/daemons").write_text("eigrpd=yes\n")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        driver = self.eigrp / "frr/tools/frr.sh"
+        driver.write_text(
+            '#!/bin/sh\n'
+            'printf "frr %s\\n" "$*" >> "$FRR_PATCH_TEST_LOG"\n'
+            'if [ "${REJECT_PATCH:-0}" = 1 ] && [ "$1" = --patch ]; then exit 19; fi\n'
+            'if [ "${REJECT_INSTALL:-0}" = 1 ] && [ "$1" = --install ]; then exit 20; fi\n'
+        )
+        make = bin_dir / "make"
+        make.write_text(
+            '#!/bin/sh\n'
+            'printf "make %s\\n" "$*" >> "$FRR_PATCH_TEST_LOG"\n'
+        )
+        make.chmod(0o755)
+        self.bin_dir = bin_dir
+
+        # Run the same Alpine shell build instruction, with only source/image
+        # paths mapped to temporary directories. No source-text assertion can
+        # substitute for executing the conditional stage.
+        lines = (ROOT / "docker/Dockerfile").read_text().splitlines()
+        start = next(i for i, line in enumerate(lines)
+                     if line.startswith("RUN set -eux;"))
+        end = start + 1
+        while lines[end - 1].rstrip().endswith("\\"):
+            end += 1
+        self.stage = "\n".join(lines[start:end])[4:]
+        self.stage = self.stage.replace("/src-eigrp", str(self.eigrp))
+        self.stage = self.stage.replace("/src-frr", str(self.frr))
+        self.stage = self.stage.replace("/image", str(self.root / "image"))
+
+    def run_stage(self, sha, **extra):
+        env = dict(os.environ, PATH=f"{self.bin_dir}:{os.environ['PATH']}",
+                   FRR_SHA=sha, EIGRP_VERSION="dev", BUILD_JOBS="2",
+                   FRR_PATCH_TEST_LOG=str(self.log), **extra)
+        result = subprocess.run(["/bin/sh", "-c", self.stage],
+                                env=env, text=True, capture_output=True)
+        return result, self.log.read_text() if self.log.exists() else ""
+
+    def test_frr_master_skips_patches_but_stages_and_builds(self):
+        result, actions = self.run_stage(self.FRR_MASTER_SHA)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--patch", actions)
+        self.assertIn("--install", actions)
+        self.assertIn("--configure", actions)
+        self.assertIn("--build", actions)
+        self.assertIn("make -C", actions)
+
+    def test_frr_1071_applies_patches_before_install(self):
+        result, actions = self.run_stage(self.FRR_1071_SHA)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(actions.count("--patch"), 1)
+        self.assertLess(actions.index("--patch"), actions.index("--install"))
+
+    def test_other_frr_revision_does_not_use_1071_patches(self):
+        result, actions = self.run_stage("b" * 40)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--patch", actions)
+        self.assertIn("--install", actions)
+
+    def test_1071_patch_failure_blocks_install(self):
+        result, actions = self.run_stage(self.FRR_1071_SHA, REJECT_PATCH="1")
+        self.assertEqual(result.returncode, 19, result.stderr)
+        self.assertIn("--patch", actions)
+        self.assertNotIn("--install", actions)
+
+    def test_master_install_failure_is_not_masked(self):
+        result, actions = self.run_stage(self.FRR_MASTER_SHA, REJECT_INSTALL="1")
+        self.assertEqual(result.returncode, 20, result.stderr)
+        self.assertNotIn("--patch", actions)
+        self.assertIn("--install", actions)
+        self.assertNotIn("--configure", actions)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ def test_host_formatting_contract(tmp_path):
     # Docker daemon links eigrp_frr.c through eigrpd_eigrpd_SOURCES.
     mocks = ROOT / "frr/test/build/include"
     sources = (
-        ("unix", "unix/code/eigrp_unix_format.c", []),
+        ("libunix", "libunix/code/eigrp_unix_format.c", []),
         ("frr", "frr/code/eigrp_frr.c", [
             "-D", "EIGRP_STANDALONE_BUILD",
             "-Wno-unused-variable", "-I", str(mocks),

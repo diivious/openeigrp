@@ -1,0 +1,165 @@
+.Dd November 11, 2026
+.Dt OECTL 8
+.Os
+.Sh NAME
+.Nm oectl
+.Nd inspect and administer a native OpenEIGRP daemon
+.Sh SYNOPSIS
+.Nm
+.Op Ar options
+.Cm show
+.Ar view
+.Nm
+.Op Ar options
+.Cm clear events
+.Nm
+.Op Ar options
+.Cm version
+.Nm
+.Cm help
+.Sh DESCRIPTION
+.Nm
+is a noninteractive client for
+.Xr openeigrpd 8 .
+It sends versioned, bounded requests to the local Unix management socket.
+It never reads private EIGRP topology objects or the Linux kernel route
+table directly.
+Most commands report the daemon's current operational state;
+.Cm clear events
+is the only supported mutating command.
+.Sh COMMANDS
+.Bl -tag -width Ds
+.It Cm show capabilities
+Report portable release and available protocol capabilities.
+.It Cm show protocols
+List configured EIGRP instances and runtime status.
+.It Cm show neighbors
+Report neighbor state, hold time, queues, retransmissions and uptime.
+.It Cm show interfaces
+Report interface EIGRP settings and operational counters.
+.It Cm show topology
+Report DUAL prefix and path state.
+.It Cm show routes
+Report successors and feasible paths from the portable topology view.
+This is
+.Em not
+a dump of the Linux kernel RIB.
+.It Cm show statistics
+Report portable traffic counters.
+.Cm show traffic
+is an alias.
+.It Cm show events
+Report event-log summary and entries.
+.It Cm show diagnostics
+Report feature capabilities, debug state and timer records.
+.It Cm show tech-support
+Collect the local version, daemon capabilities, protocol list and
+available scoped read-only views.
+.Cm tech-support
+is an alias.
+The unscoped form includes running default-VRF instances.
+.It Cm clear events
+Clear the event log for one running instance.
+Requires root or the daemon startup UID.
+.It Cm version
+Show local integration release, OS, distribution, kernel, architecture
+and IPC protocol version without connecting to a daemon.
+.It Cm show version
+Show local version information and query daemon capabilities.
+.It Cm help
+Print command usage.
+.El
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl s Ar path , Fl -socket Ar path
+Unix management socket; default
+.Pa /run/openeigrpd/control.sock .
+.It Fl a Ar asn , Fl -asn Ar asn
+EIGRP autonomous system number from 1 to 65535.
+.It Fl 4
+Select IPv4.
+.It Fl 6
+Select IPv6.
+.It Fl -afi Ar 4|6
+Select IPv4 or IPv6 using an explicit family number.
+.It Fl -vrf-id Ar number
+Numeric runtime VRF ID; default 0.
+A nondefault VRF requires explicit ASN and AFI as well.
+.It Fl -json
+Output newline-delimited JSON records; this is not a single JSON array.
+.It Fl h , Fl -help
+Print usage.
+.It Fl -version
+Print local version information and exit.
+.El
+.Sh INSTANCE SELECTION
+A scoped command can omit ASN and AFI only when there is exactly one
+running default-VRF address-family instance to select.
+Otherwise use
+.Fl -asn
+and
+.Fl -afi
+or
+.Fl 4
+or
+.Fl 6 .
+The protocol list exposes VRF names, not the numeric IDs needed to select
+nondefault VRFs; supply
+.Fl -asn ,
+.Fl -afi
+and
+.Fl -vrf-id
+together for these instances.
+The current native configuration only accepts the default VRF.
+.Sh EXAMPLES
+Query an IPv4 AS and obtain machine-readable routes:
+.Bd -literal -offset indent
+oectl show neighbors --asn 4453 --afi 4
+oectl show routes --asn 4453 --afi 4 --json
+.Ed
+.Pp
+Query an IPv6 AS and collect diagnostics:
+.Bd -literal -offset indent
+oectl show interfaces --asn 6473 --afi 6
+oectl show diagnostics --asn 6473 --afi 6
+oectl show tech-support
+.Ed
+.Pp
+Clear only the selected instance's event history:
+.Bd -literal -offset indent
+sudo oectl clear events --asn 4453 --afi 4
+.Ed
+.Sh OUTPUT
+Human-readable mode formats the daemon state into headings and view-specific
+fields; JSON mode passes newline-delimited JSON records for consumers that
+process one record at a time.
+Tech-support JSON also includes local integration and scope records.
+The daemon returns no stable cross-page snapshot; routing changes may alter
+subsequent pages.
+.Sh SECURITY
+The control socket is normally mode 0660, with read-only access via the
+.Sy openeigrpctl
+group.
+The daemon checks peer credentials and permits
+.Cm clear events
+only to root or its startup UID, regardless of socket group membership.
+No interactive configuration, reload, neighbor reset or topology clearing
+operation is exposed.
+.Sh LIMITATIONS
+IPC version 1 pages contain at most 32 records and 16 KiB; page offsets
+are bounded at 8192.
+A large topology may therefore produce a pagination error instead of a
+complete output.
+Nondefault VRF numeric IDs cannot be discovered from the protocol list.
+.Sh EXIT STATUS
+.Bl -tag -width Ds
+.It 0
+Success.
+.It 1
+Daemon, socket, authorization, instance selection, or protocol failure.
+.It 2
+Invalid command line or unsupported command.
+.El
+.Sh SEE ALSO
+.Xr openeigrpd 8 ,
+.Xr openeigrpd.conf 5

@@ -21,7 +21,7 @@ lost-ACK and 32-peer multicast recovery gate. Select heavier tests with
 | `make scale SUITE=100k` | 2,048 peers and all five route-volume tests |
 | `make scale SUITE=stress` | Withdraw, multicast, linkdown, mixed-TLV and churn |
 | `make scale SUITE=auth` | MD5-authenticated route flooding |
-| `make scale SUITE=all` | All heavy suites, collecting failures |
+| `make scale SUITE=all` | All heavy suites, stop at the first failure |
 | `make scale CASE=peers` | Establish 2,048 neighbors |
 | `make scale CASE=internal` / `external` | 100K route injection |
 | `make scale CASE=line` / `kite` | 100K mixed-route propagation |
@@ -46,8 +46,8 @@ expecting an UPDATE from a shared-LAN peer to be reflected onto the same
 interface. It checks newly transmitted classic and multiprotocol TLVs after
 the route injection, not merely the neighbor capability flags.
 
-Every suite continues through its constituent tests after a failure, reports
-PASS/FAIL for each, and exits unsuccessfully if any test failed. Tests execute
+Every suite stops at its first failed test, reports FAIL for that test,
+and exits unsuccessfully. Earlier successful cases remain logged. Tests execute
 sequentially to avoid competing for RAM. `make scale` is deliberately the
 quick TRANSMIT pacing/backpressure gate and does not run the full `make uut`.
 

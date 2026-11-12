@@ -21,9 +21,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 OUT = HERE / "abort-trace"
 SCENARIOS = (
-    "prefix-limit/scenario-neighbor-enforce-ipv6.yaml",
-    "prefix-limit-lifecycle/scenario-peer-ipv6-suspend-release.yaml",
-    "prefix-limit-lifecycle/scenario-peer-timers-ipv6.yaml",
+    "prefix-limit/neighbor-enforce-ipv6.yaml",
+    "prefix-limit-lifecycle/peer-ipv6-suspend-release.yaml",
+    "prefix-limit-lifecycle/peer-timers-ipv6.yaml",
 )
 CFLAGS = (
     "-O2 -g -std=c11 -D_POSIX_C_SOURCE=200809L -pthread "

@@ -1,0 +1,4 @@
+# Copyright (C) 2026 Donnie V. Savage
+# No home directory or interactive shell. Never reuse the UID after removal.
+g openeigrpctl - -
+u openeigrp - "OpenEIGRP routing daemon" /nonexistent /usr/sbin/nologin

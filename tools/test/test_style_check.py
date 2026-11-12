@@ -100,12 +100,12 @@ class StyleCheckTest(unittest.TestCase):
         self.assertEqual(self.run_check().returncode, 0)
 
     def test_untracked_unsafe_api_and_full_tree(self):
-        self.file("unix/code/check.c", "void f(void) { strcpy(a, b); }\n")
-        self.assert_fails_with("[untracked] unix/code/check.c:1: strcpy()")
-        self.git("add", "unix/code/check.c")
+        self.file("libunix/code/check.c", "void f(void) { strcpy(a, b); }\n")
+        self.assert_fails_with("[untracked] libunix/code/check.c:1: strcpy()")
+        self.git("add", "libunix/code/check.c")
         self.git("commit", "-qm", "Legacy issue")
         self.assertEqual(self.run_check().returncode, 0)
-        self.assert_fails_with("[tree] unix/code/check.c:1: strcpy()", "--all")
+        self.assert_fails_with("[tree] libunix/code/check.c:1: strcpy()", "--all")
 
     def test_base_checks_committed_range(self):
         old = self.git("rev-parse", "HEAD").decode().strip()

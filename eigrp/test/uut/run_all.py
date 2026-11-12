@@ -11,6 +11,8 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -21,7 +23,8 @@ HERE = Path(__file__).resolve().parent
 TEST_ROOT = HERE.parent
 PROJECT_ROOT = TEST_ROOT.parent.parent
 RUNNER = HERE / "run.py"
-LOG_ROOT = HERE / "logs"
+LOG_ROOT = PROJECT_ROOT / "logs" / "uut" / "eigrp"
+DEFAULT_SCENARIO_TIMEOUT = 180.0
 
 
 def document(path: Path) -> dict:
@@ -50,8 +53,7 @@ def discover() -> list[tuple[Path, Path]]:
         if not topology.is_file():
             errors.append(f"{path}: topology does not exist: {topology_name}")
             continue
-        top_data = document(topology)
-        if top_data.get("schema") != TOPOLOGY_SCHEMA:
+        if document(topology).get("schema") != TOPOLOGY_SCHEMA:
             errors.append(f"{path}: {topology_name} is not an EIGRP UUT topology")
             continue
         scenarios.append((topology, path.resolve()))
@@ -77,13 +79,6 @@ def display_arg(path: Path) -> str:
         return str(path)
 
 
-
-# 180 seconds is a watchdog, not the convergence oracle: YAML steps retain
-# their own stricter timeouts. Override for slower CI hosts with
-# EIGRP_UUT_SCENARIO_TIMEOUT or --scenario-timeout.
-DEFAULT_SCENARIO_TIMEOUT = 180.0
-
-
 def positive_seconds(value: str) -> float:
     try:
         seconds = float(value)
@@ -95,11 +90,7 @@ def positive_seconds(value: str) -> float:
 
 
 def execute_scenario(command: list[str], timeout: float) -> tuple[int, str, bool]:
-    """Bound a scenario *and its children*; retain stdout on timeout.
-
-    Each scenario has its own POSIX session so a stalled runner and its UUT
-    children can be terminated together without disturbing the suite launcher.
-    """
+    """Bound each scenario and its children, retaining output after timeouts."""
     proc = subprocess.Popen(command, cwd=PROJECT_ROOT, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             start_new_session=True)
@@ -107,14 +98,9 @@ def execute_scenario(command: list[str], timeout: float) -> tuple[int, str, bool
         output, _ = proc.communicate(timeout=timeout)
         return proc.returncode, output, False
     except subprocess.TimeoutExpired as exc:
-        # TimeoutExpired.stdout may contain bytes even with text=True. Save
-        # this partial output explicitly: a second communicate() after SIGTERM
-        # is not guaranteed to return it on every Python/platform version.
         partial = exc.stdout or b""
         if isinstance(partial, bytes):
             partial = partial.decode("utf-8", errors="replace")
-        # Terminate the entire UUT process group, not just its Python parent.
-        # communicate() after a timeout retains the output already received.
         try:
             os.killpg(proc.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -129,9 +115,6 @@ def execute_scenario(command: list[str], timeout: float) -> tuple[int, str, bool
             try:
                 output, _ = proc.communicate(timeout=5)
             except subprocess.TimeoutExpired as last:
-                # An independently reparented child can retain stdout open
-                # after the runner is killed. Keep any buffered diagnostics
-                # and advance to the next scenario instead of hanging here.
                 output = last.stdout or b""
                 if proc.stdout:
                     proc.stdout.close()
@@ -151,7 +134,8 @@ def main(argv: list[str] | None = None) -> int:
                         default=os.environ.get("EIGRP_UUT_SCENARIO_TIMEOUT", str(DEFAULT_SCENARIO_TIMEOUT)),
                         help="wall-clock watchdog for each scenario (seconds, default: 180; "
                              "env: EIGRP_UUT_SCENARIO_TIMEOUT)")
-    parser.add_argument("--scenario", metavar="PATH", help="run only the named YAML scenario; resolve its topology from the scenario")
+    parser.add_argument("--scenario", metavar="PATH",
+                        help="run only this YAML scenario; infer its topology")
     args = parser.parse_args(argv)
     try:
         timeout = positive_seconds(str(args.scenario_timeout))
@@ -176,18 +160,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     LOG_ROOT.mkdir(parents=True, exist_ok=True)
-    if not args.scenario:
-        for old_log in LOG_ROOT.glob("*.log"):
-            old_log.unlink()
-
+    run_dir = Path(tempfile.mkdtemp(
+        prefix=datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ-"),
+        dir=LOG_ROOT))
     print(f"YAML UUT scenarios discovered: {len(scenarios)}")
+    print(f"YAML UUT results: {run_dir.relative_to(PROJECT_ROOT)}")
     failures: list[tuple[str, Path]] = []
     for index, (topology, scenario) in enumerate(scenarios, 1):
         name = scenario_name(scenario)
-        log_path = LOG_ROOT / f"{name}.log"
         rel_scenario = scenario.relative_to(PROJECT_ROOT)
+        # The relative path, not merely the YAML name, prevents same-name cases
+        # from overwriting each other within one run.
+        identifier = "__".join(scenario.relative_to(TEST_ROOT).with_suffix("").parts)
+        log_path = run_dir / f"{identifier}.log"
         command = [sys.executable, str(RUNNER), str(topology), str(scenario), "--verbose", "--report"]
-        display_command = [sys.executable, display_arg(RUNNER), display_arg(topology), display_arg(scenario), "--verbose", "--report"]
+        display_command = [sys.executable, display_arg(RUNNER), display_arg(topology),
+                           display_arg(scenario), "--verbose", "--report"]
         print(f"[{index}/{len(scenarios)}] {rel_scenario} -> {log_path.relative_to(PROJECT_ROOT)}", flush=True)
         try:
             returncode, output, timed_out = execute_scenario(command, timeout)
@@ -197,12 +185,12 @@ def main(argv: list[str] | None = None) -> int:
             log.write(f"test case: {name}\n")
             log.write(f"scenario: {rel_scenario}\n")
             log.write(f"command: {shlex.join(display_command)}\n")
-            rerun = ["./tools/python", display_arg(RUNNER), display_arg(topology), display_arg(scenario), "--verbose", "--report"]
+            rerun = ["./tools/python", display_arg(RUNNER), display_arg(topology),
+                     display_arg(scenario), "--verbose", "--report"]
             log.write(f"rerun: {shlex.join(rerun)}\n")
             log.write(f"exit status: {returncode}\n")
             if timed_out:
-                log.write(f"TIMEOUT: scenario exceeded {timeout:g}s; "
-                          "terminated UUT process group\n")
+                log.write(f"TIMEOUT: scenario exceeded {timeout:g}s; terminated UUT process group\n")
             log.write("\n===== runner/debug output =====\n")
             log.write(output or "")
             if output and not output.endswith("\n"):
@@ -211,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
             failures.append((name, log_path))
             print(f"  FAIL{' (TIMEOUT)' if timed_out else ''}: see "
                   f"{log_path.relative_to(PROJECT_ROOT)}", file=sys.stderr)
+            break
         else:
             print("  PASS", flush=True)
 
