@@ -949,13 +949,17 @@ failed:
 void eigrp_linux_mgnt_stop(void)
 {
 	uint8_t marker = MGNT_STOP_MARKER;
+	ssize_t written;
 
 	pthread_mutex_lock(&mgnt_lock);
 	if (!mgnt.running) {
 		pthread_mutex_unlock(&mgnt_lock);
 		return;
 	}
-	(void)write(mgnt.wake[1], &marker, 1);
+	/* A full nonblocking wake pipe is already readable by the poll loop. */
+	do {
+		written = write(mgnt.wake[1], &marker, sizeof(marker));
+	} while (written < 0 && errno == EINTR);
 	pthread_join(mgnt.thread, NULL);
 	close(mgnt.wake[0]);
 	close(mgnt.wake[1]);

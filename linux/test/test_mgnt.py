@@ -70,6 +70,7 @@ class LinuxManagementTests(unittest.TestCase):
         cls.binary = Path(cls.tmp.name) / "mgnt-fixture"
         built = subprocess.run([
             os.environ.get("CC", "cc"), "-std=c11", "-D_GNU_SOURCE",
+            "-D_FORTIFY_SOURCE=2", "-O2",
             "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
             "-I", str(ROOT / "eigrp" / "code"), "-I", str(CODE),
             str(TEST / "mgnt_fixture.c"), str(CODE / "eigrp_linux_mgnt.c"),
@@ -252,6 +253,26 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True)
         self.assertEqual(self.proc.stdout.readline(), "READY\n")
+
+    def test_shutdown_with_partial_client_and_socket_reuse(self):
+        # The management poll loop must wake and retire outstanding clients
+        # even when a client has only sent part of a request header.
+        for _ in range(3):
+            with socket.socket(socket.AF_UNIX) as pending:
+                pending.connect(str(self.path))
+                pending.sendall(frame(3, SELECTOR)[:5])
+                self.proc.stdin.write("q\n")
+                self.proc.stdin.flush()
+                out, err = self.proc.communicate(timeout=5)
+                self.assertEqual(self.proc.returncode, 0, out + err)
+                self.assertIn("STOPPED", out)
+                self.assertFalse(self.path.exists())
+            self.proc = subprocess.Popen([str(self.binary), str(self.path)],
+                                         stdin=subprocess.PIPE,
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, text=True)
+            self.assertEqual(self.proc.stdout.readline(), "READY\n")
+            self.assertEqual(talk(self.path, 1)[1], 0)
 
     def test_archive_boundary(self):
         built = subprocess.run(["make", "-C", str(CODE),
