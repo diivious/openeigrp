@@ -25,12 +25,11 @@ usage: $script_name [action] [options] [-- configure-args]
 
 actions:
   --smoke              Run the standalone compile-smoke harness only.
-  --install            Assemble/stage EIGRP source and FRR tests without patching.
-  --patch              Apply only the managed FRR patches from frr/patch/.
-  --configure          Stage EIGRP without patching, then bootstrap/configure FRR.
-  --build              Stage EIGRP without patching, then run make. Default.
-  --check              Stage EIGRP without patching, then run make check.
-  --all                Stage EIGRP without patching, configure, build, and check.
+  --install            Validate upstream FRR and stage EIGRP source/tests.
+  --configure          Validate/stage EIGRP, then bootstrap/configure FRR.
+  --build              Validate/stage EIGRP, then run make. Default.
+  --check              Validate/stage EIGRP, then run make check.
+  --all                Validate/stage EIGRP, configure, build, and check.
   --uut                Stage, build/install/restart, then run UUT.
   --clean              Run make clean in FRR.
 
@@ -45,7 +44,6 @@ Only one action may be specified. Arguments after -- are passed to FRR configure
 examples:
   frr/tools/frr.sh --smoke
   frr/tools/frr.sh --install --frr-root ~/devel/frr
-  frr/tools/frr.sh --patch --frr-root ~/devel/frr
   frr/tools/frr.sh --configure --frr-root ~/devel/frr
   frr/tools/frr.sh --build --jobs 8
   frr/tools/frr.sh --all -- --enable-snmp
@@ -133,14 +131,8 @@ run_make() {
 }
 
 stage_eigrp() {
-	# Staging may refresh the projected EIGRP daemon/test trees, but it must
-	# never modify FRR-wide source. Managed patches are applied only by
-	# the explicit --patch action.
-	"$script_dir/frr-install.sh" --frr-root "$frr_root" --no-patches
-}
-
-patch_frr() {
-	"$script_dir/frr-install.sh" --frr-root "$frr_root" --no-eigrpd --no-tests
+	# Upstream FRR provides the EIGRP YANG and vtysh integration.
+	"$script_dir/frr-install.sh" --frr-root "$frr_root"
 }
 
 cleanup_stale_eigrpd_uut() {
@@ -365,10 +357,6 @@ while [[ "$#" -gt 0 ]]; do
 			set_action install
 			shift
 			;;
-		--patch)
-			set_action patch
-			shift
-			;;
 		--configure)
 			set_action configure
 			shift
@@ -458,9 +446,6 @@ fi
 case "$action" in
 	install)
 		stage_eigrp
-		;;
-	patch)
-		patch_frr
 		;;
 	configure)
 		stage_eigrp

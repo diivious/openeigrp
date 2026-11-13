@@ -1,0 +1,28 @@
+schema: docker-frr-schema-uut/v1
+# Execute the actual Docker build-stage script with the native FRR schema
+# validator. No historical patch files or patch fixtures are needed.
+cases:
+  - name: native-master-source
+    source: native
+    result: build
+  - name: stale-generated-yang
+    source: stale-embed
+    result: build
+  - name: no-named-process
+    source: missing-named
+    result: schema-error
+  - name: wrong-address-family-key
+    source: wrong-af-key
+    result: schema-error
+  - name: malformed-redistribution-identity
+    source: invalid-redistribution
+    result: schema-error
+  - name: missing-router-command
+    source: missing-vty-router
+    result: vty-error
+  - name: missing-vty-submode-reentry
+    source: missing-vty-reentry
+    result: vty-error
+  - name: downstream-install-failure
+    source: native
+    result: install-error

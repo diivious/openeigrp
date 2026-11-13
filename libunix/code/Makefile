@@ -32,7 +32,15 @@ eigrp_unix_config.o: eigrp_unix_config.c eigrp_unix_config.h eigrp_unix_config_p
 eigrp_unix_config_apply.o: eigrp_unix_config_apply.c eigrp_unix_config_private.h eigrp_unix_keychain.h ../../eigrp/code/eigrp_cli.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-eigrp_unix_sys.o: eigrp_unix_sys.c eigrp_unix.h ../../eigrp/code/eigrp_sys.h
+# Refresh the shared identity even when this integration is built directly.
+.PHONY: version-header
+version-header:
+	$(MAKE) -C ../../eigrp/code
+
+../../eigrp/code/eigrp_build_version.h: | version-header
+	@test -f "$@"
+
+eigrp_unix_sys.o: eigrp_unix_sys.c eigrp_unix.h ../../eigrp/code/eigrp_sys.h ../../eigrp/code/eigrp_build_version.h | version-header
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 eigrp_unix_format.o: eigrp_unix_format.c ../../eigrp/code/eigrp_sys.h

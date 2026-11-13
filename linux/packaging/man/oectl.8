@@ -53,8 +53,9 @@ Report event-log summary and entries.
 .It Cm show diagnostics
 Report feature capabilities, debug state and timer records.
 .It Cm show tech-support
-Collect the local version, daemon capabilities, protocol list and
-available scoped read-only views.
+Collect the same client, host, and portable version sections as
+.Cm show version ,
+followed by the protocol list and available scoped read-only views.
 .Cm tech-support
 is an alias.
 The unscoped form includes running default-VRF instances.
@@ -65,7 +66,11 @@ Requires root or the daemon startup UID.
 Show local integration release, OS, distribution, kernel, architecture
 and IPC protocol version without connecting to a daemon.
 .It Cm show version
-Show local version information and query daemon capabilities.
+Show client and host versions and an aligned portable component inventory.
+Component status is read from the daemon, not inferred from the client binary.
+The local
+.Cm version
+command does not require a running daemon.
 .It Cm help
 Print command usage.
 .El

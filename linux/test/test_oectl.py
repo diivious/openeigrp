@@ -34,13 +34,17 @@ class ControlTests(unittest.TestCase):
                  "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
                  "-I", str(ROOT / "eigrp" / "code"), "-I", str(CODE)]
         for binary, sources in (
-            (cls.client, [CODE / "oectl.c"]),
-            (cls.fixture, [TEST / "mgnt_fixture.c", CODE / "eigrp_linux_mgnt.c"]),
+            (cls.client, [CODE / "oectl.c", CODE / "eigrp_linux_version.c"]),
+            (cls.fixture, [TEST / "mgnt_fixture.c", CODE / "eigrp_linux_mgnt.c",
+                           CODE / "eigrp_linux_version.c"]),
         ):
             done = subprocess.run([*flags, *map(str, sources), "-o", str(binary)],
                                   text=True, capture_output=True)
             if done.returncode:
                 raise AssertionError(done.stdout + done.stderr)
+        cls.release = json.loads(subprocess.run(
+            [str(cls.client), "--json", "version"],
+            check=True, capture_output=True, text=True).stdout)["build"]
 
     @classmethod
     def tearDownClass(cls):
@@ -109,7 +113,7 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(version.returncode, 0, version.stderr)
         data = json.loads(version.stdout)
         self.assertEqual(data["kind"], "integration")
-        self.assertEqual(data["ipc"], 1)
+        self.assertEqual(data["ipc"], 2)
         self.assertIn("kernel", data)
         self.assertIn("distribution", data)
 
@@ -138,9 +142,29 @@ class ControlTests(unittest.TestCase):
 
     def test_cli_grammar_and_scope_errors(self):
         self.assertEqual(self.ctl("help").returncode, 0)
-        self.assertIn("Management IPC: 1", self.ctl("version").stdout)
+        local = self.ctl("version")
+        self.assertIn("OpenEIGRP Client:\n", local.stdout)
+        self.assertIn("  Management IPC       : 2", local.stdout)
+        self.assertIn("Host Version:\n", local.stdout)
+        self.assertNotIn("OpenEIGRP Version:", local.stdout)
         self.assertEqual(self.ctl("--version").returncode, 0)
-        self.assertIn("release=test", self.ctl("show", "version").stdout)
+        detailed = self.ctl("show", "version")
+        self.assertEqual(detailed.returncode, 0, detailed.stderr)
+        self.assertIn("OpenEIGRP Version:\n", detailed.stdout)
+        self.assertIn('openeigrp            : test"fixture', detailed.stdout)
+        self.assertIn("ipv4-af              : Supported", detailed.stdout)
+        self.assertIn("bfd                  : Not Supported", detailed.stdout)
+        self.assertIn("evn                  : Not Supported", detailed.stdout)
+        self.assertNotIn("Daemon identity:", detailed.stdout)
+        self.assertNotIn("capability: release=", detailed.stdout)
+        self.assertEqual(detailed.stdout.count("OpenEIGRP Version:"), 1)
+        # Human view and JSON retain the same underlying daemon capabilities.
+        detailed_json = self.ctl("show", "version", "--json")
+        self.assertEqual(detailed_json.returncode, 0, detailed_json.stderr)
+        records = [json.loads(line) for line in detailed_json.stdout.splitlines()]
+        self.assertEqual([r["kind"] for r in records],
+                         ["integration", "identity", "capability"])
+        self.assertEqual(records[-1]["release"], 'test"fixture')
         for argv, marker in (
             (("show",), "unsupported command"),
             (("show", "neighbor"), "unsupported command"),
@@ -163,7 +187,11 @@ class ControlTests(unittest.TestCase):
     def test_tech_support_covers_readonly_views(self):
         result = self.ctl("show", "tech-support")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for text in ("Integration: Native Linux EIGRP", "=== Capabilities ===",
+        for text in ("OpenEIGRP Client:", "Host Version:",
+                     "  Integration          : Native Linux EIGRP",
+                     "OpenEIGRP Version:",
+                     "  ipv4-af              : Supported",
+                     "  evn                  : Not Supported",
                      "=== Protocols ===", "=== neighbors (AS 4453",
                      "=== interfaces (AS 4453", "=== topology (AS 4453",
                      "=== routes (AS 4453", "=== statistics (AS 4453",
@@ -171,12 +199,34 @@ class ControlTests(unittest.TestCase):
                      "198.51.100.48/32", "event: number="):
             self.assertIn(text, result.stdout)
         self.assertEqual(result.stdout.count("198.51.100.48/32"), 4)
+        self.assertNotIn("=== Capabilities ===", result.stdout)
+        self.assertNotIn("=== Daemon identity ===", result.stdout)
+        self.assertEqual(result.stdout.count("OpenEIGRP Version:"), 1)
         result = self.ctl("show", "tech-support", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(all(isinstance(json.loads(x), dict)
                             for x in result.stdout.splitlines()))
+        records = [json.loads(line) for line in result.stdout.splitlines()]
+        identities = [item for item in records if item.get("kind") == "identity"]
+        self.assertEqual(len(identities), 1)
+        daemon = identities[0]
+        self.assertEqual(daemon["daemon"], "openeigrpd")
+        self.assertEqual(daemon["release"],
+                         json.loads(self.ctl("--json", "version").stdout)["build"])
+        self.assertEqual(daemon["integration"], "Native Linux EIGRP")
+        self.assertEqual(daemon["os"], "Linux")
+        for key in ("kernel", "architecture", "distribution",
+                    "distribution_version", "distribution_codename"):
+            self.assertIn(key, daemon)
+        capabilities = [item for item in records if item.get("kind") == "capability"]
+        self.assertTrue(capabilities)
+        # The fixture deliberately returns a distinct portable capability
+        # release so the client does not silently overwrite daemon records.
+        self.assertEqual(capabilities[0]["release"], 'test"fixture')
+        for feature in ("ipv4", "ipv6", "tlv1", "tlv2", "wide_metrics",
+                        "bfd", "snmp", "manet", "mtr", "evn"):
+            self.assertIn(feature, capabilities[0])
         self.assertIn('"kind":"timer"', result.stdout)
-        self.assertIn('"kind":"capability"', result.stdout)
         self.assertIn('"kind":"scope","asn":4453,"afi":4', result.stdout)
         result = self.ctl("tech-support", "-a", "4453", "-4")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -190,6 +240,47 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(denied.returncode, 1)
         self.assertIn("permission denied", denied.stderr)
         self.assertIn("count=1", self.ctl("show", "events").stdout)
+
+    def test_mismatched_build_is_blocked_but_local_version_remains_available(self):
+        alternate = Path(self.tmp.name) / "oectl-alternate"
+        # Compile a genuine second OpenEIGRP build identity rather than
+        # overriding the canonical generated header on the command line.
+        (Path(self.tmp.name) / "eigrp_features.h").write_text(
+            (ROOT / "eigrp/code/eigrp_features.h").read_text())
+        generated = subprocess.run([
+            sys.executable, str(ROOT / "tools/gen-version.py"),
+            "--version", "0.9.9", "--output",
+            str(Path(self.tmp.name) / "eigrp_build_version.h"),
+        ], capture_output=True, text=True)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        built = subprocess.run([
+            os.environ.get("CC", "cc"), "-std=c11", "-D_GNU_SOURCE",
+            "-Wall", "-Wextra", "-Werror",
+            "-I", self.tmp.name, "-I", str(ROOT / "eigrp/code"),
+            "-I", str(CODE),
+            str(CODE / "oectl.c"), str(CODE / "eigrp_linux_version.c"),
+            "-o", str(alternate),
+        ], capture_output=True, text=True)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        def invoke(*args):
+            return subprocess.run([str(alternate), "--socket", str(self.path),
+                                   *args], capture_output=True, text=True)
+        refused = invoke("show", "capabilities")
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("incompatible", refused.stderr)
+        self.assertNotIn("kind=capability", refused.stdout)
+        version = invoke("--version")
+        self.assertEqual(version.returncode, 0)
+        self.assertIn("Integration build    : 0.9.9", version.stdout)
+        self.assertEqual(self.ctl("show", "capabilities").returncode, 0)
+
+    def test_version_option_order(self):
+        earlier = self.ctl("--json", "--version")
+        later = self.ctl("--version", "--json")
+        self.assertEqual(earlier.returncode, 0, earlier.stderr)
+        self.assertEqual(later.returncode, 0, later.stderr)
+        self.assertEqual(json.loads(earlier.stdout), json.loads(later.stdout))
+        self.assertEqual(json.loads(earlier.stdout)["ipc"], 2)
 
     def test_unavailable_restart_and_concurrent_clients(self):
         self.stop()
@@ -239,7 +330,24 @@ class InvalidReplyTests(unittest.TestCase):
                     sock.listen(1)
                     ready.set()
                     with sock.accept()[0] as conn:
-                        conn.recv(32)
+                        # Every client now identifies before operational IPC.
+                        pending = 16 + 128
+                        while pending:
+                            received = conn.recv(pending)
+                            if not received:
+                                raise OSError("missing identity exchange")
+                            pending -= len(received)
+                        identity = (json.dumps({"kind": "identity",
+                                                "release": self.release},
+                                               separators=(",", ":")) + "\n").encode()
+                        conn.sendall(struct.pack(HEADER, MAGIC, 2, 11, 0, 0,
+                                                 len(identity)) + identity)
+                        pending = 16
+                        while pending:
+                            received = conn.recv(pending)
+                            if not received:
+                                raise OSError("missing operation")
+                            pending -= len(received)
                         conn.sendall(header + body)
             except OSError as ex:
                 errors.append(ex)
@@ -253,13 +361,13 @@ class InvalidReplyTests(unittest.TestCase):
     def test_invalid_headers_and_payloads(self):
         for header, body, expected in (
             (struct.pack(HEADER, 0, 1, 1, 0, 0, 0), b"", "incompatible"),
-            (struct.pack(HEADER, MAGIC, 2, 1, 0, 0, 0), b"", "incompatible"),
-            (struct.pack(HEADER, MAGIC, 1, 2, 0, 0, 0), b"", "incompatible"),
-            (struct.pack(HEADER, MAGIC, 1, 1, 0, 0, 16385), b"", "malformed"),
-            (struct.pack(HEADER, MAGIC, 1, 1, 0, 2, 0), b"", "malformed"),
-            (struct.pack(HEADER, MAGIC, 1, 1, 0, 0, 3), b"BAD", "JSON-lines"),
-            (struct.pack(HEADER, MAGIC, 1, 1, 0, 1, 0), b"", "pagination"),
-            (struct.pack(HEADER, MAGIC, 1, 1, 5, 0, 0), b"", "unsupported"),
+            (struct.pack(HEADER, MAGIC, 1, 1, 0, 0, 0), b"", "incompatible"),
+            (struct.pack(HEADER, MAGIC, 2, 2, 0, 0, 0), b"", "incompatible"),
+            (struct.pack(HEADER, MAGIC, 2, 1, 0, 0, 16385), b"", "malformed"),
+            (struct.pack(HEADER, MAGIC, 2, 1, 0, 2, 0), b"", "malformed"),
+            (struct.pack(HEADER, MAGIC, 2, 1, 0, 0, 3), b"BAD", "JSON-lines"),
+            (struct.pack(HEADER, MAGIC, 2, 1, 0, 1, 0), b"", "pagination"),
+            (struct.pack(HEADER, MAGIC, 2, 1, 5, 0, 0), b"", "unsupported"),
         ):
             with self.subTest(expected=expected):
                 thread, errors = self.mock(header, body)
@@ -275,7 +383,7 @@ class InvalidReplyTests(unittest.TestCase):
                 b'"afi":4,"asn":4453,"vrf":"default"}\n'
                 b'{"kind":"protocol","instance":"two","runtime":true,'
                 b'"afi":6,"asn":4453,"vrf":"default"}\n')
-        header = struct.pack(HEADER, MAGIC, 1, 2, 0, 0, len(body))
+        header = struct.pack(HEADER, MAGIC, 2, 2, 0, 0, len(body))
         thread, errors = self.mock(header, body)
         result = self.ctl("show", "neighbors")
         self.assertEqual(result.returncode, 1)
@@ -284,7 +392,7 @@ class InvalidReplyTests(unittest.TestCase):
         self.assertFalse(errors)
 
     def test_disconnect_mid_reply(self):
-        thread, _ = self.mock(struct.pack(HEADER, MAGIC, 1, 1, 0, 0, 16), b"abc")
+        thread, _ = self.mock(struct.pack(HEADER, MAGIC, 2, 1, 0, 0, 16), b"abc")
         result = self.ctl("show", "capabilities")
         self.assertEqual(result.returncode, 1)
         self.assertIn("connection lost", result.stderr)

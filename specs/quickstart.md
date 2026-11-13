@@ -24,23 +24,21 @@ cd openeigrp
 ## 2. Build
 
 ```sh
-make portable-build
+make
 ```
 
-The lightweight target builds `eigrp/code/` (portable protocol) and
-`libunix/code/` (shared Unix services). Plain `make` runs the full developer
-qualification gate; use `make portable-build` for a first compile. On Linux, `make linux` additionally builds
-`linux/code/openeigrpd`, `linux/code/oectl` and `openeigrpd-config`.
+`make` compiles `eigrp/code/` and `libunix/code/` and validates style.
+On Linux it also builds the native `openeigrpd`, `oectl` and
+`openeigrpd-config` executables. Docker is not required.
 
 ## 3. Run a small test
 
 ```sh
-make check
 make uut SCENARIO=examples/two-router-neighbor-route.yaml
 ```
 
-`make check` uses the project's Python launcher (`tools/python`), checks style
-and runs its own test programs. The example YAML scenario executes the core
+`make all` adds fast executable tests, the complete portable YAML UUT suite,
+quick scale tests and Docker image/package compilation. The example YAML scenario executes the core
 against the synthetic Unix UUT transport. It does **not** install routes in
 the kernel or establish a Cisco adjacency.
 

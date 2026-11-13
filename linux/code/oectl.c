@@ -22,13 +22,7 @@
 #include "eigrp_features.h"
 #include "eigrp_integration_version.h"
 #include "eigrp_linux_mgnt.h"
-
-#ifndef EIGRP_LINUX_INTEGRATION_RELEASE
-#define EIGRP_LINUX_INTEGRATION_RELEASE EIGRP_RELEASE
-#endif
-#ifndef EIGRP_OS_RELEASE_PATH
-#define EIGRP_OS_RELEASE_PATH "/etc/os-release"
-#endif
+#include "eigrp_linux_version.h"
 
 #define OECTL_SOCKET "/run/openeigrpd/control.sock"
 #define OECTL_TIMEOUT_MS 3000
@@ -91,7 +85,7 @@ static const char *status_name(uint16_t status)
 	case EIGRP_LINUX_MGNT_INVALID:
 		return "invalid request";
 	case EIGRP_LINUX_MGNT_VERSION_UNSUPPORTED:
-		return "incompatible management protocol version";
+		return "incompatible client/daemon version or management protocol";
 	case EIGRP_LINUX_MGNT_DENIED:
 		return "permission denied (daemon administrator required)";
 	case EIGRP_LINUX_MGNT_NOT_FOUND:
@@ -268,16 +262,23 @@ static int exchange(int fd, uint16_t op, const struct scope *scope,
 		    uint32_t offset, char *response, size_t *length, bool *more)
 {
 	uint8_t request[EIGRP_LINUX_MGNT_HEADER_SIZE
-			+ EIGRP_LINUX_MGNT_SELECTOR_SIZE] = {0};
+			+ EIGRP_LINUX_MGNT_IDENTITY_SIZE] = {0};
 	uint8_t header[EIGRP_LINUX_MGNT_HEADER_SIZE];
-	uint32_t size = scope ? EIGRP_LINUX_MGNT_SELECTOR_SIZE : 0;
+	uint32_t size = op == EIGRP_LINUX_MGNT_IDENTITY
+				? EIGRP_LINUX_MGNT_IDENTITY_SIZE
+				: (scope ? EIGRP_LINUX_MGNT_SELECTOR_SIZE : 0);
 	uint16_t status, flags;
 
 	put32(request, EIGRP_LINUX_MGNT_MAGIC);
 	put16(request + 4, EIGRP_LINUX_MGNT_VERSION);
 	put16(request + 6, op);
 	put32(request + 12, size);
-	if (scope) {
+	if (op == EIGRP_LINUX_MGNT_IDENTITY) {
+		if (strlen(EIGRP_RELEASE) >= EIGRP_LINUX_MGNT_IDENTITY_SIZE)
+			return -1;
+		memcpy(request + EIGRP_LINUX_MGNT_HEADER_SIZE, EIGRP_RELEASE,
+		       strlen(EIGRP_RELEASE));
+	} else if (scope) {
 		put16(request + 16, scope->afi);
 		put16(request + 18, scope->asn);
 		put32(request + 20, scope->vrf);
@@ -464,6 +465,29 @@ static const char *field(const struct record *rec, const char *key)
 	return "";
 }
 
+static int identify(int fd, struct record *record, char *response, size_t *size)
+{
+	bool more;
+
+	if (exchange(fd, EIGRP_LINUX_MGNT_IDENTITY, NULL, 0, response, size,
+		     &more)
+	    != 0) {
+		fprintf(stderr,
+			"oectl: client build %s cannot manage this daemon\n",
+			EIGRP_RELEASE);
+		return -1;
+	}
+	if (more || !*size || response[*size - 1] != '\n'
+	    || parse_record(response, *size - 1, record) != 0
+	    || strcmp(field(record, "kind"), "identity") != 0
+	    || strcmp(field(record, "release"), EIGRP_RELEASE) != 0) {
+		fprintf(stderr,
+			"oectl: invalid or mismatched daemon identity\n");
+		return -1;
+	}
+	return 0;
+}
+
 static void print_record(const struct record *rec)
 {
 	const char *kind = field(rec, "kind");
@@ -558,6 +582,21 @@ static int query(const struct options *opts, uint16_t op,
 	fd = connect_daemon(opts->socket);
 	if (fd < 0)
 		return -1;
+	{
+		struct record identity;
+		size_t identity_size;
+
+		if (identify(fd, &identity, page, &identity_size) != 0)
+			goto done;
+		if (op == EIGRP_LINUX_MGNT_IDENTITY) {
+			if (opts->json)
+				(void)fwrite(page, 1, identity_size, stdout);
+			else
+				print_record(&identity);
+			rc = 0;
+			goto done;
+		}
+	}
 	do {
 		if (exchange(fd, op, scope, offset, page, &size, &more) != 0)
 			goto done;
@@ -647,63 +686,6 @@ static int select_scope(const struct options *opts, struct scope *selected)
 	return 0;
 }
 
-static void os_release(eigrp_integration_version_t *version)
-{
-	FILE *file = fopen(EIGRP_OS_RELEASE_PATH, "r");
-	char line[512];
-
-	if (!file)
-		return;
-	while (fgets(line, sizeof(line), file)) {
-		struct {
-			const char *key;
-			char *value;
-			size_t size;
-		} fields[] = {{"NAME", version->distribution,
-			       sizeof(version->distribution)},
-			      {"VERSION_ID", version->distribution_version,
-			       sizeof(version->distribution_version)},
-			      {"VERSION_CODENAME",
-			       version->distribution_codename,
-			       sizeof(version->distribution_codename)}};
-		char *start;
-		size_t length, i;
-
-		length = strlen(line);
-		if (length && line[length - 1] != '\n' && !feof(file)) {
-			int c;
-			while ((c = fgetc(file)) != '\n' && c != EOF)
-				;
-			continue;
-		}
-		for (i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
-			length = strlen(fields[i].key);
-			if (strncmp(line, fields[i].key, length) != 0
-			    || line[length] != '=')
-				continue;
-			start = line + length + 1;
-			length = strcspn(start, "\r\n");
-			start[length] = '\0';
-			if (length >= 2 && (start[0] == '"' || start[0] == '\'')
-			    && start[length - 1] == start[0]) {
-				start[length - 1] = '\0';
-				start++;
-			}
-			(void)snprintf(fields[i].value, fields[i].size, "%s",
-				       start);
-			break;
-		}
-	}
-	fclose(file);
-}
-
-static void copy_string(char *dst, size_t size, const char *src)
-{
-	size_t n = strnlen(src, size - 1);
-	memcpy(dst, src, n);
-	dst[n] = '\0';
-}
-
 static void print_json_string(const char *value)
 {
 	const unsigned char *p = (const unsigned char *)value;
@@ -722,24 +704,14 @@ static void print_json_string(const char *value)
 
 static void print_version(bool json)
 {
-	eigrp_integration_version_t version = {
-		.integration = "Native Linux EIGRP",
-		.integration_version = EIGRP_LINUX_INTEGRATION_RELEASE,
-	};
-	struct utsname host;
+	eigrp_integration_version_t version;
 
-	if (uname(&host) == 0) {
-		copy_string(version.operating_system,
-			    sizeof(version.operating_system), host.sysname);
-		copy_string(version.kernel_version,
-			    sizeof(version.kernel_version), host.release);
-		copy_string(version.architecture, sizeof(version.architecture),
-			    host.machine);
-	}
-	os_release(&version);
+	eigrp_linux_version_read(&version);
 	if (json) {
-		/* This record is local, not a daemon capability response. */
-		fputs("{\"kind\":\"integration\",\"name\":", stdout);
+		/* The local record remains independent of daemon availability.
+		 */
+		fputs("{\"kind\":\"integration\",\"client\":\"oectl\",\"name\":",
+		      stdout);
 		print_json_string(version.integration);
 		fputs(",\"build\":", stdout);
 		print_json_string(version.integration_version);
@@ -758,16 +730,23 @@ static void print_version(bool json)
 		printf(",\"ipc\":%u}\n", EIGRP_LINUX_MGNT_VERSION);
 		return;
 	}
-	printf("Integration: %s\nIntegration build: %s\n", version.integration,
-	       version.integration_version);
-	printf("OS: %s  Kernel: %s  Architecture: %s\n",
+	printf("OpenEIGRP Client:\n"
+	       "  Version              : %s\n"
+	       "  Management IPC       : %u\n\n",
+	       EIGRP_RELEASE, EIGRP_LINUX_MGNT_VERSION);
+	printf("Host Version:\n"
+	       "  Integration          : %s\n"
+	       "  Integration build    : %s\n"
+	       "  OS                   : %s\n"
+	       "  Kernel               : %s\n"
+	       "  Architecture         : %s\n",
+	       version.integration, version.integration_version,
 	       version.operating_system, version.kernel_version,
 	       version.architecture);
 	if (version.distribution[0])
-		printf("Distribution: %s %s %s\n", version.distribution,
-		       version.distribution_version,
+		printf("  Distribution         : %s %s %s\n",
+		       version.distribution, version.distribution_version,
 		       version.distribution_codename);
-	printf("Management IPC: %u\n", EIGRP_LINUX_MGNT_VERSION);
 }
 
 struct view {
@@ -788,6 +767,66 @@ static const struct view views[] = {
 	{"diagnostics", EIGRP_LINUX_MGNT_DIAGNOSTICS},
 };
 
+/* Human-readable component inventory, sourced only from daemon status. */
+static const char *capability_state(const struct record *rec, const char *key)
+{
+	const char *value = field(rec, key);
+
+	if (strcmp(value, "true") == 0)
+		return "Supported";
+	if (strcmp(value, "false") == 0)
+		return "Not Supported";
+	return "Unknown";
+}
+
+static int version_capability(const struct record *rec, void *arg)
+{
+	static const struct {
+		const char *name;
+		const char *key;
+		const char *description;
+	} components[] = {
+		{"ipv4-af", "ipv4", "IPv4 Routing Protocol Support"},
+		{"ipv6-af", "ipv6", "IPv6 Routing Protocol Support"},
+		{"tlv1", "tlv1", "Classic Metrics and TLV Support"},
+		{"tlv2", "tlv2", "Wide Metrics TLV Support"},
+		{"wide-metrics", "wide_metrics", "Wide Metrics Support"},
+		{"bfd", "bfd", "BFD Integration"},
+		{"snmp", "snmp", "SNMP Agent Support"},
+		{"manet", "manet", "MANET Support"},
+		{"mtr", "mtr", "Multi-Topology Routing Support"},
+		{"evn", "evn", "Easy Virtual Network Support"},
+	};
+	size_t i;
+
+	(void)arg;
+	if (strcmp(field(rec, "kind"), "capability") != 0)
+		return -1;
+	printf("  %-21s: %-17s : %s\n", "openeigrp", field(rec, "release"),
+	       "Portable EIGRP Release");
+	for (i = 0; i < sizeof(components) / sizeof(components[0]); ++i)
+		printf("  %-21s: %-17s : %s\n", components[i].name,
+		       capability_state(rec, components[i].key),
+		       components[i].description);
+	return 0;
+}
+
+/* Share the exact same version layout between version and tech-support. */
+static int show_version(const struct options *opts)
+{
+	print_version(opts->json);
+	if (opts->json) {
+		if (query(opts, EIGRP_LINUX_MGNT_IDENTITY, NULL, NULL, NULL)
+		    != 0)
+			return -1;
+		return query(opts, EIGRP_LINUX_MGNT_CAPABILITIES, NULL, NULL,
+			     NULL);
+	}
+	puts("\nOpenEIGRP Version:");
+	return query(opts, EIGRP_LINUX_MGNT_CAPABILITIES, NULL,
+		     version_capability, NULL);
+}
+
 static int tech_support(const struct options *opts)
 {
 	struct scopes list = {.opts = opts};
@@ -796,10 +835,7 @@ static int tech_support(const struct options *opts)
 
 	if (!opts->json)
 		puts("=== OpenEIGRP tech-support ===");
-	print_version(opts->json);
-	if (!opts->json)
-		puts("\n=== Capabilities ===");
-	if (query(opts, EIGRP_LINUX_MGNT_CAPABILITIES, NULL, NULL, NULL) != 0)
+	if (show_version(opts) != 0)
 		return 1;
 	if (!opts->json)
 		puts("\n=== Protocols ===");
@@ -847,6 +883,7 @@ int main(int argc, char **argv)
 	size_t words = 0, i;
 	uint16_t op = 0;
 	bool scoped;
+	bool version_requested = false;
 	int result;
 
 	for (i = 1; i < (size_t)argc; i++) {
@@ -856,8 +893,9 @@ int main(int argc, char **argv)
 			return 0;
 		}
 		if (strcmp(arg, "--version") == 0) {
-			print_version(opts.json);
-			return 0;
+			/* Parse all options before choosing output format. */
+			version_requested = true;
+			continue;
 		}
 		if (strcmp(arg, "--json") == 0) {
 			opts.json = true;
@@ -919,6 +957,15 @@ int main(int argc, char **argv)
 		}
 		command[words++] = arg;
 	}
+	if (version_requested) {
+		if (words != 0) {
+			fprintf(stderr,
+				"oectl: --version does not take a command\n");
+			return 2;
+		}
+		print_version(opts.json);
+		return 0;
+	}
 	if (words == 1 && strcmp(command[0], "help") == 0) {
 		usage(stdout);
 		return 0;
@@ -933,13 +980,7 @@ int main(int argc, char **argv)
 		return tech_support(&opts);
 	if (words == 2 && strcmp(command[0], "show") == 0
 	    && strcmp(command[1], "version") == 0) {
-		print_version(opts.json);
-		if (!opts.json)
-			puts("Daemon capabilities:");
-		return query(&opts, EIGRP_LINUX_MGNT_CAPABILITIES, NULL, NULL,
-			     NULL) == 0
-			       ? 0
-			       : 1;
+		return show_version(&opts) == 0 ? 0 : 1;
 	}
 	if (words == 2 && strcmp(command[0], "clear") == 0
 	    && strcmp(command[1], "events") == 0) {

@@ -27,12 +27,14 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 daemon="$root/linux/code/openeigrpd"
 output="$root/dist"
 version=
+build_version=
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --version|--daemon|--output)
+        --version|--daemon|--output|--build-version)
             [ "$#" -ge 2 ] || fail "missing value for $1"
             case "$1" in
                 --version) version=$2 ;;
+                --build-version) build_version=$2 ;;
                 --daemon) daemon=$2 ;;
                 --output) output=$2 ;;
             esac
@@ -57,6 +59,12 @@ if ! dpkg --compare-versions "$version" eq "$version" >/dev/null 2>&1; then
     fail 'invalid Debian package version'
 fi
 [ -f "$daemon" ] && [ -x "$daemon" ] || fail "real daemon executable missing: $daemon"
+expected=$("$root/tools/build-version.sh" --binary "$version") || fail 'unrecognized package release'
+[ -z "$build_version" ] || [ "$build_version" = "$expected" ] ||
+    fail "requested build $build_version conflicts with package identity $expected"
+# Do not silently republish a stale daemon under a different version.
+make -C "$root/eigrp/code" eigrp_build_version.h \
+    EIGRP_BUILD_VERSION="$expected" >/dev/null
 
 arch=$(dpkg-architecture -qDEB_HOST_ARCH)
 case "$arch" in
@@ -76,7 +84,15 @@ check_binary()
     fi
 }
 check_binary "$daemon"
-make -C "$root/linux/code" oectl openeigrpd-config >/dev/null
+actual=$("$daemon" -V 2>/dev/null) || fail 'daemon cannot report its build version'
+[ "$actual" = "openeigrpd $expected" ] ||
+    fail "daemon version mismatch: requested $expected, found $actual"
+make -C "$root/linux/code" oectl openeigrpd-config \
+    EIGRP_BUILD_VERSION="$expected" >/dev/null
+# Query the stable machine-readable contract; human version labels may change.
+client=$("$root/linux/code/oectl" --json version | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
+[ "$client" = "$expected" ] ||
+    fail "client version mismatch: requested $expected, found $client"
 check_binary "$root/linux/code/oectl"
 check_binary "$root/linux/code/openeigrpd-config"
 

@@ -99,7 +99,9 @@ jobs:
               base="$(git rev-parse HEAD^)"
               ;;
           esac
-          make check STYLE_CHECK_BASE="$base"
+          ./tools/python tools/style-check.py --base "$base"
+          ./tools/python tools/test/test_style_check.py
+          ./tools/python tools/test/test_style_fix.py
 
       - name: Build native Linux daemon and portable sources
         run: make linux

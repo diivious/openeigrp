@@ -19,7 +19,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CODE = ROOT / "linux" / "code"
 TEST = ROOT / "linux" / "test"
-MAGIC, VERSION = 0x45474D54, 1
+MAGIC, VERSION = 0x45474D54, 2
 HEADER = "!IHHHHI"
 SCOPE = "!HHIHHI"
 SELECTOR = struct.pack(SCOPE, 4, 4453, 0, 0, 0, 0)
@@ -50,12 +50,18 @@ def get_reply(sock):
     return op, status, flags, [json.loads(s) for s in content.splitlines()]
 
 
+def identify(conn, release=b"development"):
+    conn.sendall(frame(11, release.ljust(128, b"\x00")))
+    return get_reply(conn)
+
+
 def talk(path, op, body=None):
     if body is None:
         body = SELECTOR if op >= 3 else b""
     with socket.socket(socket.AF_UNIX) as conn:
         conn.settimeout(2)
         conn.connect(str(path))
+        assert identify(conn)[1] == 0
         conn.sendall(frame(op, body))
         return get_reply(conn)
 
@@ -74,6 +80,7 @@ class LinuxManagementTests(unittest.TestCase):
             "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
             "-I", str(ROOT / "eigrp" / "code"), "-I", str(CODE),
             str(TEST / "mgnt_fixture.c"), str(CODE / "eigrp_linux_mgnt.c"),
+            str(CODE / "eigrp_linux_version.c"),
             "-o", str(cls.binary),
         ], capture_output=True, text=True)
         if built.returncode:
@@ -126,6 +133,28 @@ class LinuxManagementTests(unittest.TestCase):
         self.assertEqual([r["kind"] for r in talk(self.path, 9)[3]],
                          ["capability", "debug", "timer"])
 
+    def test_identity_required_and_wrong_build_blocked(self):
+        with socket.socket(socket.AF_UNIX) as conn:
+            conn.settimeout(2)
+            conn.connect(str(self.path))
+            conn.sendall(frame(10, SELECTOR))
+            self.assertEqual(get_reply(conn)[1], 2)
+        with socket.socket(socket.AF_UNIX) as conn:
+            conn.settimeout(2)
+            conn.connect(str(self.path))
+            self.assertEqual(identify(conn, b"other-0.10.0-dev")[1], 2)
+        with socket.socket(socket.AF_UNIX) as conn:
+            conn.settimeout(2)
+            conn.connect(str(self.path))
+            _, status, _, rows = identify(conn)
+            self.assertEqual(status, 0)
+            self.assertEqual(rows[0]["kind"], "identity")
+            self.assertEqual(rows[0]["daemon"], "openeigrpd")
+            self.assertEqual(rows[0]["release"], "development")
+            self.assertEqual(rows[0]["os"], "Linux")
+            conn.sendall(frame(1))
+            self.assertEqual(get_reply(conn)[1], 0)
+
     def test_pagination_and_scope_validation(self):
         rows = []
         offset = 0
@@ -150,6 +179,7 @@ class LinuxManagementTests(unittest.TestCase):
         with socket.socket(socket.AF_UNIX) as conn:
             conn.settimeout(3)
             conn.connect(str(self.path))
+            self.assertEqual(identify(conn)[1], 0)
             query = frame(1)
             for part in (query[:1], query[1:7], query[7:15], query[15:]):
                 conn.sendall(part)
@@ -157,7 +187,7 @@ class LinuxManagementTests(unittest.TestCase):
             conn.sendall(frame(3, SELECTOR) + frame(7, SELECTOR))
             self.assertEqual(get_reply(conn)[3][0]["kind"], "neighbor")
             self.assertEqual(get_reply(conn)[3][0]["kind"], "traffic")
-            conn.sendall(frame(2, version=2))
+            conn.sendall(frame(2, version=1))
             self.assertEqual(get_reply(conn)[1], 2)
             self.assertEqual(conn.recv(1), b"")
 
@@ -184,8 +214,9 @@ class LinuxManagementTests(unittest.TestCase):
         if os.geteuid() == 0:
             child = '''import os, socket, struct, sys
 s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect(sys.argv[1]);
-p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,1,op,0,0,len(b))+b
+p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,2,op,0,0,len(b))+b
 body=struct.pack("!HHIHHI",4,4453,0,0,0,0)
+s.sendall(p(11,b"development".ljust(128,bytes(1))));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
 s.sendall(p(8,body));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
 s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
 '''
@@ -293,6 +324,7 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
             self.skipTest("clang-format unavailable; mandatory style gate unverified")
         formatted = subprocess.run([formatter, "--dry-run", "--Werror",
                                     str(CODE / "eigrp_linux_mgnt.c"),
+                                    str(CODE / "eigrp_linux_version.c"),
                                     str(CODE / "eigrp_linux_mgnt.h"),
                                     str(TEST / "mgnt_fixture.c")],
                                    text=True, capture_output=True)

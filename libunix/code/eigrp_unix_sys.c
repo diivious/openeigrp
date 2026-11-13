@@ -10,6 +10,7 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
+#include "eigrp_build_version.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -514,9 +515,9 @@ uint64_t eigrp_sys_wallclock_msec(void)
 void eigrp_sys_software_version(uint8_t *major, uint8_t *minor)
 {
 	if (major)
-		*major = 0;
+		*major = EIGRP_VENDOR_MAJOR;
 	if (minor)
-		*minor = 0;
+		*minor = EIGRP_VENDOR_MINOR;
 }
 
 void eigrp_unix_runtime_fd_set(eigrp_instance_t *eigrp, int fd)

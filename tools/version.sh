@@ -12,8 +12,8 @@ Usage: tools/version.sh --latest [--repo PATH]
        tools/version.sh --local [LABEL] [--repo PATH]
 
 --latest obtains the highest numeric rel-X.Y.Z tag reachable from origin/master.
---local adds -LABEL to that release (default: $USER-test).
-An explicit X.Y.Z local version is retained unchanged for release builds.
+--local uses $USER-X.Y.Z-dev by default; an explicit LABEL replaces $USER.
+A local X.Y.Z request becomes $USER-X.Y.Z-dev (never a release label).
 Remote release metadata must be available; no guessed fallback is used.
 USAGE
 }
@@ -26,7 +26,7 @@ case "$mode" in
     *) die "unknown mode: $mode" ;;
 esac
 
-label="${USER:-$(id -un)}-test"
+label="${USER:-$(id -un)}"
 if [[ "$mode" == --local && $# -gt 0 && "$1" != --* ]]; then
     label="$1"; shift
 fi
@@ -42,7 +42,7 @@ done
 
 if [[ "$mode" == --local ]]; then
     if [[ "$label" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        printf '%s\n' "$label"
+        printf '%s-%s-dev\n' "${USER:-$(id -un)}" "$label"
         exit 0
     fi
     [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] ||
@@ -84,5 +84,5 @@ version="$(
 if [[ "$mode" == --latest ]]; then
     printf '%s\n' "$version"
 else
-    printf '%s-%s\n' "$version" "$label"
+    printf '%s-%s-dev\n' "$label" "$version"
 fi

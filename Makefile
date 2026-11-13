@@ -1,11 +1,11 @@
 # Copyright (C) 2026 Donnie V. Savage
 # Public developer entry points; implementation selectors remain with each suite.
 
-.DEFAULT_GOAL := all
+.DEFAULT_GOAL := _default
 PYTHON ?= $(CURDIR)/tools/python
 export PYTHON
 HOST_OS := $(shell uname -s)
-TAG ?= $(or $(USER),$(shell id -un))-test
+TAG ?= $(or $(USER),$(shell id -un))
 ARCH ?= all
 
 SCALE_VOLUME := peers internal external line kite peer-routes
@@ -16,65 +16,46 @@ UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topolo
   basic-core md5-mixed-lan md5-security dual-diamond kite-topology \
   active-topology summary-topology
 
-.PHONY: all pre-commit uut linux frr packages package-uut docker clean distclean portable-build check scale
+.PHONY: _default _base _portable _unit-tests _all _pre-commit all pre-commit \
+  uut linux frr packages package-uut docker docker-uut clean distclean scale
 
-# Keep the developer gate ordered, even under make -j. No Docker daemon,
-# FRR checkout, or Netlab environment is required for make all.
+# Each tier resolves one development identity and forwards it to all submakes.
+# Neither caller-provided RELEASE/VERSION nor ARCH/GITHUB changes the gate.
+define qualification
+version="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
+  case "$$version" in *-dev) ;; *) echo 'error: local build needs a -dev version' >&2; exit 1 ;; esac; \
+  printf 'OpenEIGRP qualification version: %s\n' "$$version"; \
+  $(MAKE) $(1) EIGRP_BUILD_VERSION="$$version" TAG='$(TAG)' ARCH=all GITHUB= VERSION= RELEASE=0
+endef
+
+# make: host build and full-tree style validation; no Docker required.
+_default:
+	@$(call qualification,_base)
+
+# make all: default build and fast tests, then build both Linux image/package
+# architectures. Do not start runtime Docker or dpkg lifecycle UUTs here.
 all:
-ifeq ($(HOST_OS),Linux)
-	$(MAKE) linux
-else
-	$(MAKE) portable-build
-endif
-	$(MAKE) check SOURCE=all
-	$(MAKE) uut
-	$(MAKE) scale
-	$(MAKE) scale SUITE=all
-ifeq ($(HOST_OS),Linux)
-	$(PYTHON) tools/test-log.py linux -- $(PYTHON) -m pytest -q linux/test
-else
-	@printf '%s\n' 'SKIP: host-native Linux tests ($(HOST_OS))'
-endif
+	@$(call qualification,_all)
 
-# Full pre-commit qualification adds both architectures of the FRR Docker
-# image and Debian package, then exercises the package lifecycle in Docker.
-# Explicit ARCH=all ensures this gate cannot silently test just one target.
+# make pre-commit: full local regression qualification, once per build.
 pre-commit:
-	$(MAKE) all
-	$(MAKE) docker ARCH=all GITHUB=
-	$(MAKE) packages ARCH=all VERSION=
-	$(MAKE) package-uut ARCH=all
+	@$(call qualification,_pre-commit)
 
-portable-build:
+_portable:
 	$(MAKE) -C eigrp/code
 	$(MAKE) -C libunix/code
 
-# The platform check must precede ALL compilation, including portable archives.
-linux:
-	@test "$(HOST_OS)" = Linux || { echo 'error: make linux requires a Linux host' >&2; exit 1; }
-	$(MAKE) -C linux
+_base:
+ifeq ($(HOST_OS),Linux)
+	$(MAKE) linux
+else
+	$(MAKE) _portable
+endif
+	$(PYTHON) tools/style-check.py --all
 
-frr:
-	./frr/tools/frr.sh --build
-
-# VERSION overrides the resolved development version for explicit package builds.
-# Without it, package metadata matches Docker's TAG release baseline.
-packages:
-	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
-	@version='$(VERSION)'; \
-	if [ -z "$$version" ]; then \
-	  version="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
-	fi; \
-	linux/packaging/build-packages.sh --version "$$version" --arch '$(ARCH)'
-
-package-uut:
-	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
-	linux/packaging/build-packages.sh --version 0.0.0~uut --arch '$(ARCH)' --uut
-
-# Preserve existing internal regression selector used by FRR integration tools.
-check:
-	@case '$(SOURCE)' in ''|changed|all) ;; *) echo 'error: check SOURCE must be changed or all' >&2; exit 2 ;; esac
-	$(PYTHON) tools/style-check.py $(if $(filter all,$(SOURCE)),--all,$(if $(STYLE_CHECK_BASE),--base $(STYLE_CHECK_BASE)))
+# Executable tooling and documentation tests belong to the quick UUT tier,
+# not the compile/style-only default target.
+_unit-tests:
 	$(PYTHON) tools/test/test_style_check.py
 	$(PYTHON) tools/test/test_style_fix.py
 	$(PYTHON) -m unittest -q tools.test.test_make_targets \
@@ -86,9 +67,54 @@ check:
 	  frr.test.setup.test_frr_setup_clone frr.test.setup.test_frr_setup_tag
 	$(PYTHON) -m unittest -q linux.test.test_docs
 
-uut: portable-build
+# Keep the gate sequential even when make -j is used. Check Docker before
+# running long UUT suites; missing Docker fails rather than silently skipping.
+_all:
+	@command -v docker >/dev/null 2>&1 || { echo 'error: make all requires Docker CLI' >&2; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo 'error: make all requires a running Docker Engine/Desktop' >&2; exit 1; }
+	$(MAKE) _base
+	$(MAKE) _unit-tests
+	$(MAKE) uut
+	$(MAKE) scale
+ifeq ($(HOST_OS),Linux)
+	$(PYTHON) tools/test-log.py linux -- $(PYTHON) -m pytest -q linux/test
+else
+	@printf '%s\n' 'Native Linux executable tests run inside the Debian package UUTs ($(HOST_OS))'
+endif
+	$(MAKE) docker ARCH=all GITHUB=
+	$(MAKE) packages ARCH=all VERSION='$(EIGRP_BUILD_VERSION)' RELEASE=0
+
+_pre-commit:
+	$(MAKE) _all
+	$(MAKE) scale SUITE=all
+	$(MAKE) docker-uut ARCH=all
+	$(MAKE) package-uut ARCH=all
+
+# The platform check must precede ALL compilation, including portable archives.
+linux:
+	@test "$(HOST_OS)" = Linux || { echo 'error: make linux requires a Linux host' >&2; exit 1; }
+	$(MAKE) -C linux
+
+frr:
+	EIGRP_BUILD_VERSION="$(EIGRP_BUILD_VERSION)" ./frr/tools/frr.sh --build
+
+# VERSION overrides the resolved development version for explicit package builds.
+# Without it, package metadata matches Docker's TAG release baseline.
+packages:
+	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
+	@version='$(VERSION)'; \
+	if [ -z "$$version" ]; then \
+	  version="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
+	fi; \
+	linux/packaging/build-packages.sh --version "$$version" --arch '$(ARCH)' $(if $(filter 1,$(RELEASE)),--release)
+
+package-uut:
+	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
+	linux/packaging/build-packages.sh --version 0.0.0~uut --arch '$(ARCH)' --uut
+
+uut: _portable
 	@$(if $(and $(SUITE),$(SCENARIO)),echo 'error: select either SUITE or SCENARIO' >&2; exit 2;,true)
-	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest -q -x libunix/test/test_archive_boundaries.py docker/test
+	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest -q -x libunix/test/test_archive_boundaries.py docker/test frr/test/version
 ifeq ($(strip $(SCENARIO)),)
 ifeq ($(strip $(SUITE)),)
 	$(PYTHON) tools/test-log.py uut/eigrp -- $(PYTHON) -m pytest -x eigrp/test
@@ -103,7 +129,7 @@ else
 endif
 
 # Preserve specialized scale selectors without expanding the public entry points.
-scale: portable-build
+scale: _portable
 	@$(if $(and $(SUITE),$(CASE)),echo 'error: select either SUITE or CASE' >&2; exit 2;,true)
 ifeq ($(strip $(SUITE)$(CASE)),)
 	@printf '\n%s\n' '=== Quick pacing/backpressure regression ==='
@@ -161,6 +187,27 @@ docker:
 	    case " $$archs " in *" $$native "*) docker tag 'openeigrp:$(TAG)'-"$$native" 'openeigrp:$(TAG)' ;; esac; \
 	  fi; \
 	fi
+
+# Exercise both built FRR images: CLI, persistent configuration, restarts,
+# and real two-router protocol-88 adjacency (the --verify contract).
+# Never accept a stale image from a different release baseline.
+docker-uut:
+	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
+	@set -e; \
+	  expected='$(EIGRP_BUILD_VERSION)'; \
+	  if [ -z "$$expected" ]; then \
+	    expected="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
+	  fi; \
+	  if [ '$(ARCH)' = all ]; then archs='amd64 arm64'; else archs='$(ARCH)'; fi; \
+	  for arch in $$archs; do \
+	    image='openeigrp:$(TAG)'-"$$arch"; \
+	    actual="$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$$image")" || exit $$?; \
+	    if [ "$$actual" != "$$expected" ]; then \
+	      printf 'error: %s reports %s, expected %s\n' "$$image" "$$actual" "$$expected" >&2; \
+	      exit 1; \
+	    fi; \
+	    ./frr/tools/docker.sh --verify "$$image" || exit $$?; \
+	  done
 
 clean:
 	$(MAKE) -C eigrp/code clean

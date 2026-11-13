@@ -23,7 +23,6 @@ on:
       - 'frr/tools/frr-install.sh'
       - 'eigrp/code/**'
       - 'frr/code/**'
-      - 'frr/patch/**'
   workflow_dispatch:
     inputs:
       release_tag:

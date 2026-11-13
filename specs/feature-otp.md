@@ -843,7 +843,7 @@ The prototype must prove that the selected EIGRP nexthop/RLOC and LISP Instance 
 
 FRR remains the routing-stack integration layer. Zebra may participate in programming the Linux FIB, but the design should first use existing FRR and Linux extension mechanisms.
 
-If stock FRR cannot represent forwarding information required by the proven dataplane design, any FRR-wide modification follows the project's managed-patch model under `frr/patch/`.
+If upstream FRR cannot represent forwarding information required by the proven dataplane design, document the missing interface and resolve it upstream before enabling the integration.
 
 ## 3.4 Linux / BIRD
 
@@ -1228,7 +1228,7 @@ Connect the proven Linux dataplane to OpenEIGRP's FRR adapter.
 
 The adapter maps the normalized OTP southbound contract into FRR/Zebra/Linux operations. Existing FRR interfaces should be used wherever they can express the required state.
 
-If FRR cannot carry a required forwarding attribute, document the exact missing interface before adding a managed FRR patch. Any FRR-wide patch belongs under `frr/patch/` and must follow the project's idempotent patch-management rules.
+If FRR cannot carry a required forwarding attribute, document the exact missing interface and resolve upstream compatibility before enabling the integration. Do not alter FRR-wide source during OpenEIGRP staging.
 
 **Completion:** a real EIGRP successor change programs the Linux LISP dataplane through the FRR integration, and route removal cleans up the corresponding forwarding state.
 

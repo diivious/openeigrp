@@ -9,7 +9,7 @@ eigrp_url=https://github.com/diivious/openeigrp.git
 # OpenEIGRP checkout. Local builds use a local FRR checkout when available,
 # otherwise the same pinned FRR revision.
 frr_url=''
-frr_release_tag=''
+frr_pin_ref=''
 pinned_frr_sha=''
 alpine_version=3.22
 
@@ -28,8 +28,8 @@ Usage:
   frr/tools/docker.sh --verify [IMAGE:TAG]  # default openeigrp:$USER
 
   --local   Build from local EIGRP edits and FRR checkout or pinned commit.
-            Default label: $USER-test; image: openeigrp:LABEL.
-            EIGRP version: latest rel-X.Y.Z tag on origin/master + -LABEL.
+            Default label: $USER; image: openeigrp:LABEL.
+            EIGRP version: LABEL-X.Y.Z-dev from the latest origin/master tag.
             For a release, VERSION=X.Y.Z is preserved unchanged.
             FRR source: local checkout if found; otherwise docker/docker.cfg pin.
   --build   Fetch both repositories from GitHub. VERSION=latest selects the
@@ -92,13 +92,15 @@ latest_version() {
     "$root/tools/version.sh" --latest --repo "$root"
 }
 
-# The selected OpenEIGRP release determines both FRR tag and the exact
-# expected commit. No mutable developer-branch configuration is consulted.
+# The selected OpenEIGRP revision determines the immutable FRR source pin.
+# Historical releases may carry a tag plus its resolved commit.
 load_frr_config() {
-    local cfg="$1" repo tag sha
+    local cfg="$1" repo ref sha
     if [[ -f "$cfg" ]]; then
         repo="$(sed -n 's/^FRR_REPO=//p' "$cfg")"
-        tag="$(sed -n 's/^FRR_TAG=//p' "$cfg")"
+        ref="$(sed -n 's/^FRR_REF=//p' "$cfg")"
+        # Source pins in historical releases predate FRR_REF.
+        [[ -n "$ref" ]] || ref="$(sed -n 's/^FRR_TAG=//p' "$cfg")"
         sha="$(sed -n 's/^FRR_SHA=//p' "$cfg")"
     else
         # Releases predating docker.cfg pinned FRR in their own docker.sh.
@@ -107,16 +109,19 @@ load_frr_config() {
         local legacy="${cfg%/docker/docker.cfg}/tools/docker.sh"
         [[ -f "$legacy" ]] || die "missing FRR source pin in selected OpenEIGRP revision: $cfg"
         repo="$(sed -n 's/^frr_url=//p' "$legacy")"
-        tag="$(sed -n 's/^frr_release_tag=//p' "$legacy")"
+        ref="$(sed -n 's/^frr_release_tag=//p' "$legacy")"
         sha="$(sed -n 's/^pinned_frr_sha=//p' "$legacy")"
         echo 'Using historical FRR pin from tagged tools/docker.sh (no docker.cfg)' >&2
     fi
     [[ "$repo" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$ ]] ||
         die "invalid FRR_REPO in $cfg"
-    frr_git_tag "$tag" || die "invalid FRR_TAG in $cfg"
+    ( frr_git_tag "$ref" || [[ "$ref" =~ ^[0-9a-f]{40}$ ]] ) || die "invalid FRR_REF in $cfg"
     [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid FRR_SHA in $cfg"
+    if [[ "$ref" =~ ^[0-9a-f]{40}$ && "$ref" != "$sha" ]]; then
+        die "FRR_REF must match FRR_SHA for immutable commit pins in $cfg"
+    fi
     frr_url="$repo"
-    frr_release_tag="$tag"
+    frr_pin_ref="$ref"
     pinned_frr_sha="$sha"
 }
 
@@ -152,8 +157,7 @@ checkout_remote() {
         die "GitHub checkout changed during build: $url ($ref)"
 }
 
-# Local FRR must retain REAL Git metadata because the managed patch installer
-# invokes git apply and verifies it is inside an FRR Git checkout. Fetch only
+# Local FRR retains Git metadata for revision identity. Fetch only
 # HEAD from the local repository (no GitHub access, no historical clone), then
 # overlay working modifications/new files and remove locally deleted files.
 stage_local_frr() {
@@ -268,7 +272,7 @@ case "$operation" in
     *) usage >&2; exit 2 ;;
 esac
 
-version="${USER:-$(id -un)}-test"
+version="${USER:-$(id -un)}"
 if [[ "$operation" == --build ]]; then
     [[ $# -gt 0 && "$1" != --* ]] || die '--build requires a version'
     version="$1"; shift
@@ -345,7 +349,7 @@ if [[ "$operation" == --local ]]; then
         load_frr_config "$eigrp_root/docker/docker.cfg"
         frr_sha="$pinned_frr_sha"
         frr_source=pinned
-        echo "Using pinned FRR $frr_release_tag ($frr_sha)" >&2
+        echo "Using pinned FRR $frr_pin_ref ($frr_sha)" >&2
     fi
     if ! release_version "$version"; then
         label="$version"
@@ -398,21 +402,21 @@ if [[ "$operation" == --local ]]; then
         stage_local_frr "$frr_root" "$workdir/frr" "$frr_sha"
         frr_ref="local:$frr_root"
     else
-        remote_sha="$(resolve_sha "$frr_url" "$frr_release_tag")" ||
-            die "cannot resolve pinned FRR tag $frr_release_tag"
+        remote_sha="$(resolve_sha "$frr_url" "$frr_pin_ref")" ||
+            die "cannot resolve pinned FRR ref $frr_pin_ref"
         [[ "$remote_sha" == "$pinned_frr_sha" ]] ||
-            die "FRR pin changed: expected $pinned_frr_sha, found $remote_sha"
-        checkout_remote "$frr_url" "$frr_release_tag" "$frr_sha" "$workdir/frr"
-        frr_ref="$frr_release_tag"
+            die "FRR source pin changed: expected $pinned_frr_sha, found $remote_sha"
+        checkout_remote "$frr_url" "$frr_pin_ref" "$frr_sha" "$workdir/frr"
+        frr_ref="$frr_pin_ref"
     fi
     eigrp_ref="local:$eigrp_root"
 else
     checkout_remote "$eigrp_url" "$eigrp_ref" "$eigrp_sha" "$workdir/eigrp"
     load_frr_config "$workdir/eigrp/docker/docker.cfg"
-    [[ "$frr_ref_set" == 1 ]] || frr_ref="$frr_release_tag"
+    [[ "$frr_ref_set" == 1 ]] || frr_ref="$frr_pin_ref"
     frr_sha="$(resolve_sha "$frr_url" "$frr_ref")" || die "cannot resolve FRR ref $frr_ref"
-    if [[ "$frr_ref" == "$frr_release_tag" && "$frr_sha" != "$pinned_frr_sha" ]]; then
-        die "FRR release tag $frr_release_tag changed: expected $pinned_frr_sha, found $frr_sha"
+    if [[ "$frr_ref" == "$frr_pin_ref" && "$frr_sha" != "$pinned_frr_sha" ]]; then
+        die "FRR ref $frr_pin_ref changed: expected $pinned_frr_sha, found $frr_sha"
     fi
     checkout_remote "$frr_url" "$frr_ref" "$frr_sha" "$workdir/frr"
     # Historical releases keep their own Dockerfile Alpine minor version.
@@ -427,7 +431,7 @@ fi
 
 # Only the configured FRR commit may claim the release label.
 if [[ -n "$pinned_frr_sha" && "$frr_sha" == "$pinned_frr_sha" ]]; then
-    frr_release="$frr_release_tag"
+    frr_release="$frr_pin_ref"
 else
     frr_release=development
 fi

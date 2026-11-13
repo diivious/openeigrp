@@ -47,3 +47,6 @@ libunix/code/eigrp-wire
 
 # netlabs config
 netlabs/remote-lab.cfg
+
+# Generated version header for native portable/core builds
+eigrp/code/eigrp_build_version.h

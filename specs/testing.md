@@ -12,7 +12,7 @@ level that actually exercises the behavior under test.
 ## Local portable qualification
 
 ```sh
-make check SOURCE=all
+make
 make uut
 make uut SCENARIO=examples/two-router-neighbor-route.yaml
 make uut SUITE=rtp-core
@@ -21,13 +21,15 @@ make all
 make pre-commit
 ```
 
-`make all` is the default developer gate: it builds the Linux daemon on
-Linux (portable code on other hosts), runs full-tree style and unit checks,
-portable UUT, quick scale, all named scale suites, and native Linux tests on
-Linux. `make pre-commit` additionally builds both FRR Docker architectures
-and both Debian architectures, then exercises package-lifecycle tests. For a
-fast first compile, use `make portable-build`; a targeted heavy scale check
-can be selected with `make scale SUITE=100k`.
+`make` compiles host-compatible code and validates full-tree style without
+Docker. `make all` adds fast unit tests, all portable YAML UUT scenarios,
+quick scale, native Linux tests on Linux, and both-architecture FRR Docker
+image and Debian package builds. `make pre-commit` additionally runs all
+extended scale/stress cases, FRR Docker integration/adjacency UUTs, and
+Debian package lifecycle UUTs. Docker and Git release-tag access are required
+for the last two tiers; missing infrastructure fails rather than being skipped.
+Direct host FRR build/UUT and remote Netlab remain separate. A targeted heavy
+scale check can be selected with `make scale SUITE=100k`.
 
 Scenarios are rooted in `eigrp/test/uut/` and use its `run.py`, `run_all.py`
 and Makefile. Start with [the UUT README](../eigrp/test/uut/README.md) for

@@ -49,9 +49,9 @@ class VersionTest(unittest.TestCase):
 
     def test_latest_release_and_development_labels(self):
         for args, version in ((["--latest"], "0.5.0"),
-                              (["--local"], "0.5.0-diivious-test"),
-                              (["--local", "diivious-test"], "0.5.0-diivious-test"),
-                              (["--local", "X-Y"], "0.5.0-X-Y")):
+                              (["--local"], "diivious-0.5.0-dev"),
+                              (["--local", "diivious-test"], "diivious-test-0.5.0-dev"),
+                              (["--local", "X-Y"], "X-Y-0.5.0-dev")):
             with self.subTest(args=args):
                 result = self.run_version(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -64,7 +64,7 @@ class VersionTest(unittest.TestCase):
         self.git(self.repo, "push", "-q", "origin", "master", "--tags")
         result = self.run_version("--local", "diivious-test")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "0.6.0-diivious-test")
+        self.assertEqual(result.stdout.strip(), "diivious-test-0.6.0-dev")
         self.assertEqual(self.run_version("--latest").stdout.strip(), "0.6.0")
 
     def test_new_remote_release_visible_to_stale_local_master(self):
@@ -82,7 +82,7 @@ class VersionTest(unittest.TestCase):
         self.git(other, "push", "-q", "origin", "master", "--tags")
         result = self.run_version("--local", "X-Y")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "0.6.0-X-Y")
+        self.assertEqual(result.stdout.strip(), "X-Y-0.6.0-dev")
         self.assertEqual(self.git(self.repo, "tag", "--points-at", "HEAD").stdout.strip(),
                          "rel-0.5.0", "the local worktree must not be changed")
 
@@ -94,7 +94,7 @@ class VersionTest(unittest.TestCase):
         self.git(self.repo, "push", "-q", "origin", "experiment", "--tags")
         self.assertEqual(self.run_version("--latest").stdout.strip(), "0.5.0")
         self.assertEqual(self.run_version("--local", "X-Y").stdout.strip(),
-                         "0.5.0-X-Y")
+                         "X-Y-0.5.0-dev")
 
     def test_invalid_label_rejected(self):
         for label in ("../bad", "bad space", "dev_under", "dev+alpha", "0.5.0-foo", "foo/slash"):
@@ -102,13 +102,13 @@ class VersionTest(unittest.TestCase):
                 result = self.run_version("--local", label)
                 self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.run_version("--local", "0.6.0").stdout.strip(),
-                         "0.6.0", "exact release versions must be unchanged")
+                         "diivious-0.6.0-dev", "local numeric input must never claim a release")
 
     def test_deleted_remote_release_is_not_reused(self):
         self.git(self.repo, "push", "-q", "origin", ":refs/tags/rel-0.5.0")
         result = self.run_version("--local", "X-Y")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "0.4.0-X-Y")
+        self.assertEqual(result.stdout.strip(), "X-Y-0.4.0-dev")
 
     def test_missing_origin_fails_without_fallback(self):
         self.git(self.repo, "remote", "remove", "origin")

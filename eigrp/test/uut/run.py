@@ -113,6 +113,58 @@ def topology_afi(t):
         raise SpecError("UUT topology requires exactly one address family")
     return next(iter(families))
 
+CAPABILITY_FIELDS = {"tlv1", "tlv2", "wide_metrics", "ipv4", "ipv6", "bfd", "snmp"}
+
+
+def validate_capability_assertion(value, where):
+    if not isinstance(value, dict):
+        raise SpecError(f"{where}: capability assertion must be a mapping")
+    check_keys(value, {"uut", "release"} | CAPABILITY_FIELDS, where)
+    if not isinstance(value.get("uut"), str) or not value["uut"]:
+        raise SpecError(f"{where}: uut is required")
+    if "release" in value and (not isinstance(value["release"], str) or not value["release"]):
+        raise SpecError(f"{where}: release must be a non-empty string")
+    for key in CAPABILITY_FIELDS:
+        if key in value and type(value[key]) is not bool:
+            raise SpecError(f"{where}: {key} must be boolean")
+    if len(value) == 1:
+        raise SpecError(f"{where}: at least one capability field is required")
+
+
+def capability_record(lines):
+    matches = []
+    for line in lines:
+        if not line.startswith("CAPABILITY|"):
+            continue
+        parts = line.split("|")[1:]
+        fields = dict(part.split("=", 1) for part in parts if "=" in part)
+        if set(fields) != CAPABILITY_FIELDS | {"release"}:
+            raise AssertionError("incomplete UUT capability record: " + line)
+        if not fields["release"]:
+            raise AssertionError("empty UUT release")
+        for key in CAPABILITY_FIELDS:
+            if fields[key] not in ("0", "1"):
+                raise AssertionError("invalid UUT capability field " + key)
+            fields[key] = fields[key] == "1"
+        matches.append(fields)
+    if len(matches) != 1:
+        raise AssertionError(f"expected one UUT capability record, got {len(matches)}")
+    return matches[0]
+
+
+def build_release():
+    path = ROOT / "eigrp/code/eigrp_build_version.h"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith('#define EIGRP_RELEASE "') and line.endswith('"'):
+            return line.split('"', 2)[1]
+    raise AssertionError("generated EIGRP_RELEASE missing from build")
+
+
+def capability_matches(actual, expected):
+    return all(actual.get(key) == (build_release() if value == "@build" else value)
+               for key, value in expected.items() if key != "uut")
+
+
 ACCOUNT_ASSERTION_KEYS = {"uut", "neighbor", "interface", "status", "restart_count", "prefix_count", "restart_active", "reset_active", "timeout", "observe"}
 
 def validate_accounting_assertion(e, where):
@@ -284,7 +336,7 @@ def validate_scenario(s):
     if s.get("schema")!=TEST_SCHEMA: raise SpecError(f"scenario schema must be {TEST_SCHEMA}")
     if not isinstance(s.get("topology"),str) or not s["topology"]: raise SpecError("scenario.topology must name its topology YAML")
     if not isinstance(s.get("steps"),list) or not s["steps"]: raise SpecError("scenario.steps must be a non-empty list")
-    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
+    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-capability","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
     marks=set()
     for idx,step in enumerate(s["steps"],1):
         if not isinstance(step,dict) or len(step)!=1: raise SpecError(f"step {idx}: exactly one operation required")
@@ -295,6 +347,7 @@ def validate_scenario(s):
             if not isinstance(arg,str) or not arg: raise SpecError(f"{where}: mark must be a non-empty string")
             if arg in marks: raise SpecError(f"{where}: duplicate mark {arg!r}")
             marks.add(arg)
+        elif op=="validate-capability": validate_capability_assertion(arg,where)
         elif op=="validate-neighbor": validate_neighbor_assertion(arg,where)
         elif op=="validate-accounting": validate_accounting_assertion(arg,where)
         elif op=="validate-route": validate_route_assertion(arg,where)
@@ -953,6 +1006,10 @@ class Runner:
         elif op=="fault-remove":
             if not self.broker.remove_fault(arg if isinstance(arg,str) else arg["name"]): raise SpecError(f"unknown fault {arg}")
         elif op=="validate-fault": self.expect("fault",arg)
+        elif op=="validate-capability":
+            actual = capability_record(self.nodes[arg["uut"]].cmd("TECH", until="END", timeout=5))
+            if not capability_matches(actual, arg):
+                raise AssertionError(f"UUT capabilities mismatch: actual={actual}, expected={arg}")
         elif op=="validate-neighbor": self.expect("neighbor",arg)
         elif op=="validate-accounting": self.expect("accounting",arg)
         elif op=="validate-route": self.expect("route",arg)

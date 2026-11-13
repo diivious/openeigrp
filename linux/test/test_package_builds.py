@@ -56,7 +56,7 @@ class MultiArchitectureBuildTests(unittest.TestCase):
         self.output = self.work / "dist"
         self.env = os.environ.copy()
         self.env.update({"PATH": str(self.bin) + os.pathsep + self.env["PATH"],
-                         "DOCKER_RECORD": str(self.record)})
+                         "DOCKER_RECORD": str(self.record), "USER": "testdev"})
 
     def build(self, *args, **extra_env):
         env = {**self.env, **extra_env}
@@ -72,7 +72,7 @@ class MultiArchitectureBuildTests(unittest.TestCase):
         result = self.build("--version", "1.2.3")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual({p.name for p in self.output.glob("*.deb")}, {
-            "openeigrpd_1.2.3_amd64.deb", "openeigrpd_1.2.3_arm64.deb"})
+            "openeigrpd_1.2.3~testdev.dev_amd64.deb", "openeigrpd_1.2.3~testdev.dev_arm64.deb"})
         calls = self.calls()
         self.assertEqual(len(calls), 2)
         for call, arch in zip(calls, ("amd64", "arm64")):
@@ -88,7 +88,16 @@ class MultiArchitectureBuildTests(unittest.TestCase):
             self.assertIn("native openeigrpd was not built", call[-1])
             self.assertIn("readonly", " ".join(call))
             self.assertIn("PACKAGE_ARCH=" + arch, call)
+            self.assertIn("EIGRP_BUILD_VERSION=testdev-1.2.3-dev", call)
         self.assertFalse(list(self.output.glob(".openeigrpd-build.*")))
+
+    def test_qualified_development_identity_is_packaged(self):
+        result = self.build("--version", "testdev-0.5.0-dev", "--arch", "amd64")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([p.name for p in self.output.glob("*.deb")],
+                         ["openeigrpd_0.5.0~testdev.dev_amd64.deb"])
+        call = self.calls()[0]
+        self.assertIn("EIGRP_BUILD_VERSION=testdev-0.5.0-dev", call)
 
     def test_single_architecture_selection(self):
         result = self.build("--version", "0.1.0~test+5", "--arch", "arm64")

@@ -40,7 +40,7 @@ int main(void)
 
 @unittest.skipUnless(platform.system() == "Linux", "Linux FRR mock headers")
 class SoftwareVersionTests(unittest.TestCase):
-    def compile_and_run(self, framework_version, major, minor):
+    def compile_and_run(self, framework_version, build_version, major, minor):
         with tempfile.TemporaryDirectory(prefix="eigrp-frr-hello-version-") as temp:
             temp = Path(temp)
             (temp / "lib").mkdir()
@@ -48,6 +48,12 @@ class SoftwareVersionTests(unittest.TestCase):
                 f'#define FRR_VERSION "{framework_version}"\n'
             )
             (temp / "driver.c").write_text(DRIVER)
+            generated = subprocess.run([
+                "python3", str(ROOT / "tools/gen-version.py"),
+                "--version", build_version, "--output",
+                str(temp / "eigrp_build_version.h")],
+                capture_output=True, text=True)
+            self.assertEqual(generated.returncode, 0, generated.stderr)
             cc = os.environ.get("CC", "cc")
             source = ROOT / "frr/code/eigrp_southbound.c"
             obj = temp / "eigrp_southbound.o"
@@ -71,14 +77,17 @@ class SoftwareVersionTests(unittest.TestCase):
             result = subprocess.run([str(binary)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_release_with_suffix(self):
-        self.compile_and_run("10.4.1-test", 10, 4)
+    def test_framework_version_does_not_change_hello_vendor_bytes(self):
+        self.compile_and_run("10.4.1-test", "diivious-0.5.0-dev", 0, 5)
+        self.compile_and_run("99.99-test", "diivious-0.5.0-dev", 0, 5)
+
+    def test_large_and_patch_release_components(self):
+        self.compile_and_run("unstable", "diivious-0.100.10-dev", 0, 100)
+        self.compile_and_run("unstable", "diivious-100.10.0-dev", 100, 10)
+        self.compile_and_run("10.4", "0.6.15", 0, 6)
 
     def test_zero_version(self):
-        self.compile_and_run("0.0", 0, 0)
-
-    def test_unparseable_version_falls_back_to_zero(self):
-        self.compile_and_run("unstable", 0, 0)
+        self.compile_and_run("10.4", "0.0.0", 0, 0)
 
 
 if __name__ == "__main__":

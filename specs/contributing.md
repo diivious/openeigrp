@@ -21,8 +21,8 @@ compact `eigrp_<module>_<object>_<action>()` names, with actions last. Use
 aliases, deprecated wrappers and sentence-length symbols.
 
 ```sh
-make check             # changed-file validation and checker tests
-make check SOURCE=all  # complete tree
+make                              # compilation and full-tree style validation
+tools/python tools/style-check.py  # changed-file-only style audit
 python3 tools/style-fix.py --help
 python3 tools/style-check.py --help
 ```

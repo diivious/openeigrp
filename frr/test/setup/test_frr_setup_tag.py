@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'tools' / 'frr-setup.sh'
-SHA = 'f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1'
+SHA = 'd63396451886705ad7beaf136ce457ed8f8cde36'
 
 
 class FrrSetupTagTest(unittest.TestCase):
@@ -26,7 +26,7 @@ class FrrSetupTagTest(unittest.TestCase):
         script = self.bin / 'git'
         script.write_text(
             '#!/bin/bash\n'
-            'if [[ "$1" == clone ]]; then\n'
+            'if [[ "$1" == init ]]; then\n'
             '  printf "%s\\n" "$*" >> "$TEST_CLONE_LOG"\n'
             '  mkdir -p "${@: -1}/.git"\n'
             'elif [[ "$1" == -C && "$3" == rev-parse ]]; then\n'
@@ -49,7 +49,7 @@ class FrrSetupTagTest(unittest.TestCase):
             f'skip_clone={int(skip)}\n'
             f'frr_root="{self.root}/frr"\n'
             'frr_url=https://github.com/FRRouting/frr.git\n'
-            'frr_tag=frr-10.7.1\n'
+            'frr_ref=d63396451886705ad7beaf136ce457ed8f8cde36\n'
             f'frr_sha={SHA}\n'
             + self.block
         )
@@ -60,9 +60,9 @@ class FrrSetupTagTest(unittest.TestCase):
     def test_missing_checkout_clones_official_tag_once(self):
         result, calls = self.run_block()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls.count('clone '), 1)
-        self.assertIn('https://github.com/FRRouting/frr.git', calls)
-        self.assertIn('--branch frr-10.7.1', calls)
+        self.assertEqual(calls.count('init -q '), 1)
+        self.assertIn('init -q', calls)
+        self.assertNotIn('frr-10.7.1', calls)
         self.assertNotIn('frr-orig', calls)
 
     def test_existing_checkout_is_not_modified(self):
@@ -73,7 +73,7 @@ class FrrSetupTagTest(unittest.TestCase):
     def test_existing_checkout_at_wrong_commit_fails_without_clone(self):
         result, calls = self.run_block(existing=True, actual='0' * 40)
         self.assertEqual(result.returncode, 2)
-        self.assertIn('expected frr-10.7.1', result.stderr)
+        self.assertIn('expected upstream FRR revision', result.stderr)
         self.assertEqual(calls, '')
 
     def test_skip_clone_requires_checkout(self):

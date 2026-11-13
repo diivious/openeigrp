@@ -771,7 +771,7 @@ FRR's existing BFD protocol integration initialization should be used once for t
 
 The current FRR API should be treated as authoritative for implementation. The historical Freivald code was written against an older FRR generation and is useful for architecture and behavior, not for copying obsolete BFD API calls.
 
-A normal implementation should not require an FRR-wide patch because BFD is already a supported FRR daemon service. If repository inspection during implementation identifies an actual missing FRR hook, that gap must be documented before considering a managed patch under `frr/patch/`.
+A normal implementation should not require an FRR-wide patch because BFD is already a supported FRR daemon service. If repository inspection identifies a missing FRR hook, document the gap and resolve upstream FRR compatibility before enabling the integration.
 
 ## 3.3 BIRD/Linux and BIRD/BSD
 

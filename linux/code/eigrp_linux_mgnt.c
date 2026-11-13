@@ -24,6 +24,8 @@
 
 #include "eigrp_cli.h"
 #include "eigrp_mgnt.h"
+#include "eigrp_features.h"
+#include "eigrp_linux_version.h"
 
 #define MGNT_FRAME_MAX                                                         \
 	(EIGRP_LINUX_MGNT_HEADER_SIZE + EIGRP_LINUX_MGNT_RESPONSE_MAX)
@@ -63,7 +65,7 @@ struct mgnt_client {
 	int fd;
 	uid_t uid;
 	uint8_t input[EIGRP_LINUX_MGNT_HEADER_SIZE
-		      + EIGRP_LINUX_MGNT_SELECTOR_SIZE];
+		      + EIGRP_LINUX_MGNT_IDENTITY_SIZE];
 	size_t have;
 	size_t need;
 	uint8_t output[MGNT_FRAME_MAX];
@@ -71,6 +73,7 @@ struct mgnt_client {
 	size_t sent;
 	uint64_t activity;
 	bool closing;
+	bool identified;
 };
 
 struct mgnt_service {
@@ -344,15 +347,17 @@ static eigrp_result_t mgnt_capabilities(struct mgnt_response *r)
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
 	mgnt_json_string(release, sizeof(release), s.release);
-	(void)snprintf(line, sizeof(line),
-		       "{\"kind\":\"capability\",\"release\":\"%s\","
-		       "\"ipv4\":%s,\"ipv6\":%s,\"tlv1\":%s,\"tlv2\":%s,"
-		       "\"wide_metrics\":%s,\"bfd\":%s,\"snmp\":%s}\n",
-		       release, s.ipv4 ? "true" : "false",
-		       s.ipv6 ? "true" : "false", s.tlv1 ? "true" : "false",
-		       s.tlv2 ? "true" : "false",
-		       s.wide_metrics ? "true" : "false",
-		       s.bfd ? "true" : "false", s.snmp ? "true" : "false");
+	(void)snprintf(
+		line, sizeof(line),
+		"{\"kind\":\"capability\",\"release\":\"%s\","
+		"\"ipv4\":%s,\"ipv6\":%s,\"tlv1\":%s,\"tlv2\":%s,"
+		"\"wide_metrics\":%s,\"bfd\":%s,\"snmp\":%s,"
+		"\"manet\":%s,\"mtr\":%s,\"evn\":%s}\n",
+		release, s.ipv4 ? "true" : "false", s.ipv6 ? "true" : "false",
+		s.tlv1 ? "true" : "false", s.tlv2 ? "true" : "false",
+		s.wide_metrics ? "true" : "false", s.bfd ? "true" : "false",
+		s.snmp ? "true" : "false", s.manet ? "true" : "false",
+		s.mtr ? "true" : "false", s.evn ? "true" : "false");
 	return mgnt_record(r, line);
 }
 
@@ -577,6 +582,47 @@ static void mgnt_reply(struct mgnt_client *client, uint16_t op, uint16_t status,
 	client->closing = close_after;
 }
 
+static void mgnt_identity(struct mgnt_client *client)
+{
+	eigrp_integration_version_t version;
+	char line[1024], release[256], integration[160];
+	char os[160], kernel[160], architecture[160];
+	char distribution[256], distribution_version[160], codename[160];
+	int size;
+
+	eigrp_linux_version_read(&version);
+	mgnt_json_string(release, sizeof(release), EIGRP_RELEASE);
+	mgnt_json_string(integration, sizeof(integration), version.integration);
+	mgnt_json_string(os, sizeof(os), version.operating_system);
+	mgnt_json_string(kernel, sizeof(kernel), version.kernel_version);
+	mgnt_json_string(architecture, sizeof(architecture),
+			 version.architecture);
+	mgnt_json_string(distribution, sizeof(distribution),
+			 version.distribution);
+	mgnt_json_string(distribution_version, sizeof(distribution_version),
+			 version.distribution_version);
+	mgnt_json_string(codename, sizeof(codename),
+			 version.distribution_codename);
+	size = snprintf(
+		line, sizeof(line),
+		"{\"kind\":\"identity\",\"daemon\":\"openeigrpd\","
+		"\"release\":\"%s\","
+		"\"integration\":\"%s\",\"os\":\"%s\","
+		"\"kernel\":\"%s\",\"architecture\":\"%s\","
+		"\"distribution\":\"%s\",\"distribution_version\":\"%s\","
+		"\"distribution_codename\":\"%s\",\"ipc\":%u}\n",
+		release, integration, os, kernel, architecture, distribution,
+		distribution_version, codename, EIGRP_LINUX_MGNT_VERSION);
+	if (size < 0 || (size_t)size >= sizeof(line)) {
+		mgnt_reply(client, EIGRP_LINUX_MGNT_IDENTITY,
+			   EIGRP_LINUX_MGNT_INTERNAL, false, NULL, 0, true);
+		return;
+	}
+	client->identified = true;
+	mgnt_reply(client, EIGRP_LINUX_MGNT_IDENTITY, EIGRP_LINUX_MGNT_OK,
+		   false, line, (size_t)size, false);
+}
+
 static void mgnt_request(struct mgnt_client *client)
 {
 	const uint8_t *p = client->input;
@@ -585,21 +631,51 @@ static void mgnt_request(struct mgnt_client *client)
 	uint32_t length = mgnt_get32(p + 12);
 	bool scoped = op >= EIGRP_LINUX_MGNT_NEIGHBORS
 		      && op != EIGRP_LINUX_MGNT_PROTOCOLS
-		      && op != EIGRP_LINUX_MGNT_CAPABILITIES;
+		      && op != EIGRP_LINUX_MGNT_CAPABILITIES
+		      && op != EIGRP_LINUX_MGNT_IDENTITY;
 	struct mgnt_request *req;
 	uint16_t status;
 	eigrp_result_t result;
 
 	if (mgnt_get32(p) != EIGRP_LINUX_MGNT_MAGIC || mgnt_get16(p + 8) != 0
 	    || mgnt_get16(p + 10) != 0
-	    || length != (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE : 0)
+	    || length
+		       != (op == EIGRP_LINUX_MGNT_IDENTITY
+				   ? EIGRP_LINUX_MGNT_IDENTITY_SIZE
+				   : (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
+					     : 0))
 	    || op < EIGRP_LINUX_MGNT_CAPABILITIES
-	    || op > EIGRP_LINUX_MGNT_CLEAR_EVENTS) {
+	    || op > EIGRP_LINUX_MGNT_IDENTITY) {
 		mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false, NULL, 0,
 			   true);
 		return;
 	}
 	if (version != EIGRP_LINUX_MGNT_VERSION) {
+		mgnt_reply(client, op, EIGRP_LINUX_MGNT_VERSION_UNSUPPORTED,
+			   false, NULL, 0, true);
+		return;
+	}
+	if (op == EIGRP_LINUX_MGNT_IDENTITY) {
+		char expected[EIGRP_LINUX_MGNT_IDENTITY_SIZE] = {0};
+
+		if (strlen(EIGRP_RELEASE) >= sizeof(expected)) {
+			mgnt_reply(client, op, EIGRP_LINUX_MGNT_INTERNAL, false,
+				   NULL, 0, true);
+			return;
+		}
+		memcpy(expected, EIGRP_RELEASE, strlen(EIGRP_RELEASE));
+		if (memcmp(p + EIGRP_LINUX_MGNT_HEADER_SIZE, expected,
+			   sizeof(expected))
+		    != 0) {
+			mgnt_reply(client, op,
+				   EIGRP_LINUX_MGNT_VERSION_UNSUPPORTED, false,
+				   NULL, 0, true);
+			return;
+		}
+		mgnt_identity(client);
+		return;
+	}
+	if (!client->identified) {
 		mgnt_reply(client, op, EIGRP_LINUX_MGNT_VERSION_UNSUPPORTED,
 			   false, NULL, 0, true);
 		return;
@@ -661,6 +737,7 @@ static void mgnt_client_close(struct mgnt_client *client)
 	client->out_size = 0;
 	client->sent = 0;
 	client->closing = false;
+	client->identified = false;
 }
 
 static void mgnt_client_read(struct mgnt_client *client)
@@ -690,13 +767,18 @@ static void mgnt_client_read(struct mgnt_client *client)
 		length = mgnt_get32(client->input + 12);
 		scoped = op >= EIGRP_LINUX_MGNT_NEIGHBORS
 			 && op != EIGRP_LINUX_MGNT_PROTOCOLS
-			 && op != EIGRP_LINUX_MGNT_CAPABILITIES;
-		if (length != (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE : 0)
+			 && op != EIGRP_LINUX_MGNT_CAPABILITIES
+			 && op != EIGRP_LINUX_MGNT_IDENTITY;
+		if (length
+			    != (op == EIGRP_LINUX_MGNT_IDENTITY
+					? EIGRP_LINUX_MGNT_IDENTITY_SIZE
+					: (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
+						  : 0))
 		    || mgnt_get32(client->input) != EIGRP_LINUX_MGNT_MAGIC
 		    || mgnt_get16(client->input + 8) != 0
 		    || mgnt_get16(client->input + 10) != 0
 		    || op < EIGRP_LINUX_MGNT_CAPABILITIES
-		    || op > EIGRP_LINUX_MGNT_CLEAR_EVENTS) {
+		    || op > EIGRP_LINUX_MGNT_IDENTITY) {
 			mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false,
 				   NULL, 0, true);
 			return;

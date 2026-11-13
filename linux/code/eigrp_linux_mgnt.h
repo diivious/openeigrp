@@ -11,9 +11,10 @@
 #include "eigrp.h"
 
 #define EIGRP_LINUX_MGNT_MAGIC 0x45474d54U /* EGMT */
-#define EIGRP_LINUX_MGNT_VERSION 1U
+#define EIGRP_LINUX_MGNT_VERSION 2U
 #define EIGRP_LINUX_MGNT_HEADER_SIZE 16U
 #define EIGRP_LINUX_MGNT_SELECTOR_SIZE 16U
+#define EIGRP_LINUX_MGNT_IDENTITY_SIZE 128U
 #define EIGRP_LINUX_MGNT_RESPONSE_MAX 16384U
 #define EIGRP_LINUX_MGNT_CLIENT_MAX 32U
 #define EIGRP_LINUX_MGNT_PAGE_SIZE 32U
@@ -35,6 +36,7 @@ typedef enum eigrp_linux_mgnt_operation {
 	EIGRP_LINUX_MGNT_EVENTS,
 	EIGRP_LINUX_MGNT_DIAGNOSTICS,
 	EIGRP_LINUX_MGNT_CLEAR_EVENTS,
+	EIGRP_LINUX_MGNT_IDENTITY,
 } eigrp_linux_mgnt_operation_t;
 
 typedef enum eigrp_linux_mgnt_status {
@@ -53,6 +55,8 @@ typedef enum eigrp_linux_mgnt_status {
  * flags:u16 (zero), offset:u32. The offset is the JSON-line record index.
  * Only the base topology ID (0) is supported.
  * Capabilities and protocols take no request body.
+ * IDENTITY requests carry a zero-padded 128-byte client build identifier.
+ * A matching identity exchange is required before any operational request.
  * Clear-events requires a scoped request, never a wildcard.
  */
 

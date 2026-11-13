@@ -161,7 +161,9 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn('build-packages.sh --version "$version" --arch', result.stdout)
         for name in ("README.md", "specs/quickstart.md", "specs/developer-guide.md"):
             text = (ROOT / name).read_text(encoding="utf-8")
-            self.assertIn("make portable-build", text)
+            self.assertIn("make all", text)
+            self.assertNotIn("make portable-build", text)
+            self.assertNotIn("make check", text)
             self.assertNotIn("make help", text)
 
     def test_native_configuration_examples(self):

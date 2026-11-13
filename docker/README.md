@@ -117,10 +117,11 @@ The Docker integration test checks both configurations before boot.
 ## Development
 
 **Before committing, run `make pre-commit`** from the repository root.
-`make all` performs the non-Docker build and regression gate, including all
-portable YAML UUTs and scale suites. `make pre-commit` additionally builds
-both Docker architectures and both Debian packages with lifecycle tests.
-Live FRR UUT and Netlab remain separate.
+`make` compiles host code and checks style; `make all` runs portable unit/YAML
+UUTs, quick scale checks and builds both FRR Docker architectures and Debian
+packages. `make pre-commit` additionally runs extended scale, Docker image
+integration/two-router adjacency UUTs and Debian package lifecycle tests.
+Direct FRR host build/UUT and remote Netlab remain separate.
 
 **Requirements:** Docker Engine/Desktop with Buildx, Git and `rsync`.
 All commands below build a local image only; none pushes to GHCR.
@@ -138,14 +139,14 @@ Local builds use the current working OpenEIGRP checkout, including
 uncommitted changes. The FRR checkout at `../frr` is used if present, or
 `FRR=/path/to/frr` may specify one explicitly; otherwise FRR is fetched
 at the exact commit recorded in `docker/docker.cfg`. Both images are tagged
-`openeigrp:${USER}-test-amd64` and `openeigrp:${USER}-test-arm64`.
-The unqualified `openeigrp:${USER}-test` tag aliases the native host
+`openeigrp:${USER}-amd64` and `openeigrp:${USER}-arm64`.
+The unqualified `openeigrp:${USER}` tag aliases the native host
 architecture, preserving existing deployment commands. `GITHUB` and `FRR`
 cannot be combined.
 
 GitHub builds use the selected OpenEIGRP `rel-X.Y.Z` commit, **including that
-revision's Dockerfile, patches, and `docker/docker.cfg`**. The config pins
-`FRR_REPO`, `FRR_TAG` and `FRR_SHA`; FRR is fetched and checked against the
+revision's Dockerfile and `docker/docker.cfg`**. The config pins
+`FRR_REPO`, `FRR_REF` and `FRR_SHA`; FRR is fetched and checked against the
 specified immutable commit. Releases predating `docker.cfg` use the FRR
 pin recorded in **their own tagged `tools/docker.sh`** (legacy releases only, never the
 developer's current pin). The Alpine minor-version default also comes from the selected
@@ -178,20 +179,23 @@ build. An exact release build never accepts a different FRR ref.
 Numeric local `--local X.Y.Z` is a special reproducibility check: it requires
 both clean working trees, the matching `rel-X.Y.Z` OpenEIGRP tag at HEAD,
 and FRR HEAD equal to the `FRR_SHA` pinned in the current `docker/docker.cfg`.
-Normal `make docker` intentionally uses a nonrelease `${USER}-test` tag and
+Normal `make docker` intentionally uses a nonrelease `${USER}` tag and
 does not impose those restrictions. Both the Docker OCI version label and the
-native Debian package version are derived from the highest `rel-X.Y.Z` tag
-reachable from `origin/master` plus `-LABEL` for development builds. Thus
-`--local diivious-test --image openeigrp:diivious-test` yields image tag
-`diivious-test` while its embedded version is `0.5.0-diivious-test` when
-`rel-0.5.0` is the latest release on master. Once `rel-0.6.0` is merged to
-master, the embedded version becomes `0.6.0-diivious-test`. The local mode
+native Debian package version derive from the highest `rel-X.Y.Z` tag
+reachable from `origin/master`. The binary/OCI identity is
+`LABEL-X.Y.Z-dev`; Debian metadata is `X.Y.Z~LABEL.dev`. For example,
+`--local diivious --image openeigrp:diivious` embeds `diivious-0.5.0-dev`
+when `rel-0.5.0` is the latest release on master. After `rel-0.6.0` is
+merged, the embedded version becomes `diivious-0.6.0-dev`. The local mode
 refreshes release metadata from Git and fails if it cannot do so; `--build latest` also uses the master-reachable release set. Tags on branches not yet
 merged into master cannot advance the shared baseline.
 
-All modes use the same managed FRR patch/install/configure/build pipeline.
-Patch drift stops the build. Labels retain EIGRP/FRR commit identities;
-locally uncommitted changes are not represented by those SHAs.
+All modes use the same FRR schema-validation/install/configure/build pipeline.
+The current development pin is an immutable upstream FRR master revision with
+integrated named-mode YANG and vtysh support. No FRR-wide changes are applied.
+Incompatible upstream source stops the build before staging. Labels retain
+EIGRP/FRR commit identities; locally uncommitted changes are not represented
+by those SHAs.
 
 ### Alpine image caching
 

@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "eigrp_build_version.h"
 #include "eigrp.h"
 #include "eigrp_log.h"
 #include "eigrp_structs.h"
@@ -813,15 +814,8 @@ bool eigrp_sys_auth_key_lookup(const char *keychain_name, uint32_t *key_id,
 
 void eigrp_sys_software_version(uint8_t *major, uint8_t *minor)
 {
-	unsigned int maj = 0, min = 0;
 	if (major)
-		*major = 0;
+		*major = EIGRP_VENDOR_MAJOR;
 	if (minor)
-		*minor = 0;
-	if (sscanf(FRR_VERSION, "%u.%u", &maj, &min) == 2) {
-		if (major)
-			*major = (uint8_t)maj;
-		if (minor)
-			*minor = (uint8_t)min;
-	}
+		*minor = EIGRP_VENDOR_MINOR;
 }

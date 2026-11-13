@@ -23,14 +23,11 @@ logging and event scheduling through EIGRP-owned APIs. See
 ## Build and inspect
 
 ```sh
-make portable-build        # portable and Unix libraries only
-make                       # full default developer gate (same as make all)
+make                       # host compilation and full-tree style checks
 make linux                 # Linux only: native daemon and oectl
 make clean
-make check                 # changed-file style checks
-make check SOURCE=all      # full-tree style checks
-make all                   # build, check, UUT, all scale suites, Linux tests
-make pre-commit            # additionally build Docker/Debian artifacts
+make all                   # fast unit/YAML UUTs, quick scale, Docker and Debian builds
+make pre-commit            # full scale, Docker and package lifecycle UUTs
 ```
 
 Compile with the repository toolchain and its `.clang-format`; never format

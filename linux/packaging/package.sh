@@ -17,7 +17,7 @@ Usage:
 
   --local     Build a production .deb from local working sources. Versions
               are latest rel-X.Y.Z on origin/master plus -LABEL; default
-              LABEL is $USER-test. Exact release X.Y.Z is preserved.
+              LABEL is $USER. Local X.Y.Z builds remain developer-qualified.
               A real daemon is required.
   --uut       In a disposable container, compile native Linux components,
               build test-fixture packages and run the real dpkg install,
@@ -55,7 +55,7 @@ case "$operation" in
     *) usage >&2; die "unknown operation: $operation" ;;
 esac
 
-version="${USER:-$(id -un)}-test"
+version="${USER:-$(id -un)}"
 if [[ "$operation" == --local && $# -gt 0 && "$1" != --* ]]; then
     version="$1"
     shift

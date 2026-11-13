@@ -3,6 +3,7 @@
 # Copyright (C) 2026 Donnie V. Savage
 """Executable .deb tests. Optional root-gated dpkg lifecycle test is intrusive."""
 
+import json
 import os
 from pathlib import Path
 import pwd
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "linux/packaging/build-deb.sh"
@@ -29,6 +31,10 @@ static void stop(int sig) { (void)sig; running = 0; }
 int main(int argc, char **argv)
 {
     FILE *config;
+    if (argc == 2 && strcmp(argv[1], "-V") == 0) {
+        printf("openeigrpd %s\n", FIXTURE_VERSION);
+        return 0;
+    }
     if (argc != 3 || strcmp(argv[1], "-f") != 0)
         return 2;
     config = fopen(argv[2], "r");
@@ -62,9 +68,15 @@ class PackagingTests(unittest.TestCase):
         cls.work = Path(cls.temp.name)
         source = cls.work / "fixture.c"
         source.write_text(FIXTURE)
-        cls.daemon = cls.work / "fixture-openeigrpd"
-        run("cc", "-O2", "-Wall", "-Wextra", "-Werror", source,
-            "-o", cls.daemon)
+        cls.source = source
+        cls.daemons = {}
+        for version in ("0.0.1", "0.0.2"):
+            daemon = cls.work / ("fixture-openeigrpd-" + version)
+            run("cc", "-O2", "-Wall", "-Wextra", "-Werror",
+                '-DFIXTURE_VERSION="' + version + '"', source,
+                "-o", daemon)
+            cls.daemons[version] = daemon
+        cls.daemon = cls.daemons["0.0.1"]
         cls.arch = run("dpkg-architecture", "-qDEB_HOST_ARCH").stdout.strip()
         assert cls.arch in ("amd64", "arm64"), cls.arch
         cls.other_arch = "arm64" if cls.arch == "amd64" else "amd64"
@@ -80,16 +92,62 @@ class PackagingTests(unittest.TestCase):
         run("dpkg-deb", "-e", cls.first, cls.ctrl)
 
     @classmethod
+    def fixture_for(cls, version):
+        daemon = cls.daemons.get(version)
+        if daemon is None:
+            daemon = cls.work / ("fixture-openeigrpd-" + version)
+            run("cc", "-O2", "-Wall", "-Wextra", "-Werror",
+                '-DFIXTURE_VERSION="' + version + '"', cls.source,
+                "-o", daemon)
+            cls.daemons[version] = daemon
+        return daemon
+
+    @classmethod
     def tearDownClass(cls):
         cls.temp.cleanup()
 
     @classmethod
     def build(cls, version):
-        result = run(BUILDER, "--version", version, "--daemon", cls.daemon,
+        result = run(BUILDER, "--version", version, "--daemon", cls.fixture_for(version),
                      "--output", cls.out)
         archive = Path(result.stdout.strip().splitlines()[-1])
         assert archive.is_file(), result.stdout
         return archive
+
+    def test_version_identity_uut(self):
+        # Exercise the real .deb builder and packaged CLI for version changes.
+        # JSON is a YAML 1.2 subset. Keep the matrix readable by the stdlib:
+        # minimal Debian package builders only install python3, not PyYAML.
+        scenario = json.loads((ROOT / "linux/test/uut/package-version.yaml").read_text())
+        self.assertEqual(scenario["schema"], "linux-package-version-uut/v1")
+        for case in scenario["cases"]:
+            with self.subTest(case=case["name"]):
+                version = case["package_version"]
+                daemon = self.fixture_for(case["daemon_version"])
+                result = run(BUILDER, "--version", version, "--daemon", daemon,
+                             "--output", self.out, check=False)
+                package = self.out / f"openeigrpd_{version}_{self.arch}.deb"
+                if case["result"] == "daemon-rejected":
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("daemon version mismatch", result.stderr)
+                    self.assertFalse(package.exists(),
+                                     "rejected version must not publish a .deb")
+                    continue
+                self.assertEqual(case["result"], "build")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(package.is_file())
+                run(VERIFIER, package, version, self.arch)
+                dest = self.work / ("uut-" + case["name"])
+                dest.mkdir()
+                run("dpkg-deb", "-x", package, dest)
+                client = dest / "usr/bin/oectl"
+                identity = json.loads(run(client, "--json", "version").stdout)
+                self.assertEqual(identity["kind"], "integration")
+                self.assertEqual(identity["build"], case["expected_build"])
+                human = run(client, "version").stdout
+                self.assertIn("Host Version:", human)
+                self.assertIn("  Integration build    : " + case["expected_build"],
+                              human)
 
     def test_production_build_fails_without_daemon(self):
         # No fallback to a fake daemon, a library, or a bundled UUT broker.
@@ -232,7 +290,7 @@ class PackagingTests(unittest.TestCase):
         # A 077 administrator umask previously made DEBIAN mode 0700,
         # causing dpkg-deb to refuse to build the package altogether.
         command = (f'umask 077; exec "{BUILDER}" --version 0.0.9 '
-                   f'--daemon "{self.daemon}" --output "{self.out}"')
+                   f'--daemon "{self.fixture_for("0.0.9")}" --output "{self.out}"')
         result = run("sh", "-c", command)
         package = Path(result.stdout.strip().splitlines()[-1])
         run(VERIFIER, package, "0.0.9", self.arch)
@@ -246,7 +304,7 @@ class PackagingTests(unittest.TestCase):
         output.mkdir()
         output.chmod(0o2755)
         result = run(BUILDER, "--version", "0.0.10", "--daemon",
-                     self.daemon, "--output", output)
+                     self.fixture_for("0.0.10"), "--output", output)
         archive = Path(result.stdout.strip().splitlines()[-1])
         run(VERIFIER, archive, "0.0.10", self.arch)
         entries = run("dpkg-deb", "--contents", archive).stdout
