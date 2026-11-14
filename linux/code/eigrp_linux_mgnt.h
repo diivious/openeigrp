@@ -14,6 +14,7 @@
 #define EIGRP_LINUX_MGNT_VERSION 2U
 #define EIGRP_LINUX_MGNT_HEADER_SIZE 16U
 #define EIGRP_LINUX_MGNT_SELECTOR_SIZE 16U
+#define EIGRP_LINUX_MGNT_TARGET_SIZE 128U
 #define EIGRP_LINUX_MGNT_IDENTITY_SIZE 128U
 #define EIGRP_LINUX_MGNT_RESPONSE_MAX 16384U
 #define EIGRP_LINUX_MGNT_CLIENT_MAX 32U
@@ -37,6 +38,8 @@ typedef enum eigrp_linux_mgnt_operation {
 	EIGRP_LINUX_MGNT_DIAGNOSTICS,
 	EIGRP_LINUX_MGNT_CLEAR_EVENTS,
 	EIGRP_LINUX_MGNT_IDENTITY,
+	EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS,
+	EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY,
 } eigrp_linux_mgnt_operation_t;
 
 typedef enum eigrp_linux_mgnt_status {
@@ -57,7 +60,13 @@ typedef enum eigrp_linux_mgnt_status {
  * Capabilities and protocols take no request body.
  * IDENTITY requests carry a zero-padded 128-byte client build identifier.
  * A matching identity exchange is required before any operational request.
- * Clear-events requires a scoped request, never a wildcard.
+ * Every clear requires an explicitly selected scope, never a wire wildcard.
+ * CLEAR_NEIGHBORS and CLEAR_TOPOLOGY append a 128-byte target:
+ * byte 0: 0=all, 1=interface (neighbors only), 2=IP address/prefix;
+ * byte 1: neighbor soft reset (0/1); byte 2: prefix length (topology);
+ * byte 3: reserved zero; bytes 4..19: raw network-order IP address or
+ * bytes 4..67: a NUL-terminated interface name. The rest must be zero.
+ * Selectors are zero-offset for all modifying requests.
  */
 
 /* The executor must execute fn synchronously in a protocol-safe context.

@@ -107,8 +107,8 @@ remaining integration requirements are documented in
 `make linux` builds `libeigrp_linux_mgnt.a`, a local Unix-domain control
 socket with versioned framing, bounded JSON-line state pages, `SO_PEERCRED`
 read-only/privileged authorization and nonblocking multi-client operation.
-It reads portable protocol state through `eigrp_mgnt.h`; clearing the event
-log is the only exposed privileged command. `make linux` also builds the
+It reads portable protocol state through `eigrp_mgnt.h`; neighbor resets, topology clears, and event-history clearing are privileged
+operations delegated to portable `eigrp_cli.h` targets. `make linux` also builds the
 standalone `linux/code/oectl` client (no portable core linkage).
 
 `openeigrpd` wires `eigrp_linux_mgnt_start()` to host-lifecycle serialization
@@ -129,22 +129,24 @@ linux/code/oectl show protocols
 linux/code/oectl show neighbors --asn 4453 --afi 4
 linux/code/oectl show interfaces --asn 4453 --afi 4
 linux/code/oectl show topology --asn 4453 --afi 4
-linux/code/oectl show routes --asn 4453 --afi 4 --json
+linux/code/oectl show address-family ipv4 4453 topology
 linux/code/oectl show statistics --asn 4453 --afi 4
 linux/code/oectl show events --asn 4453 --afi 4
 linux/code/oectl show diagnostics --asn 4453 --afi 4
 linux/code/oectl show tech-support
 linux/code/oectl clear events --asn 4453 --afi 4
+linux/code/oectl clear address-family ipv4 4453 neighbors 192.0.2.2
+linux/code/oectl clear address-family ipv4 4453 topology 198.51.100.0/24
 ```
 
 The default socket path is `/run/openeigrpd/control.sock`; `--socket PATH`
 selects another daemon endpoint. Read-only clients need socket group access,
-not root. The daemon UID or root is required to clear events. If exactly one
-running default-VRF AF exists, scoped commands may omit the ASN and AFI.
-For multiple instances, specify them explicitly. Other VRFs require explicit
+not root. The daemon UID or root is required for every clear command. Omitting ASN or
+AFI selects all matching running default-VRF contexts. Other VRFs require explicit
 `--asn`, `--afi` and numeric `--vrf-id` because the current protocol-list
-reply contains VRF names, not IDs. `show tech-support` captures all running
-default-VRF instances unless a specific selector is supplied. Its output is
+reply contains VRF names, not IDs; native Linux configuration still accepts
+only the default VRF. `show tech-support` captures all running default-VRF
+instances unless a specific selector is supplied. Its output is
 based solely on existing IPC views and never changes daemon state.
 
 `oectl` does not start `openeigrpd` or implement an interactive configuration

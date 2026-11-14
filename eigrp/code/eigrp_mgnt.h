@@ -122,10 +122,16 @@ typedef struct eigrp_topology_route_state {
 	eigrp_address_t next_hop;
 	const char *interface_name;
 	bool connected;
+	bool redistributed; /* Locally originated external path. */
+	bool external;	    /* Includes external paths learned from peers. */
 	bool successor;
 	bool feasible_successor;
 	eigrp_metric_t distance;
 	eigrp_metric_t reported_distance;
+	/* Actual DUAL vector values; bandwidth/delay are EIGRP encoded units.
+	 */
+	eigrp_metrics_t total_metric;
+	eigrp_metrics_t reported_metric;
 } eigrp_topology_route_state_t;
 
 typedef eigrp_result_t (*eigrp_topology_prefix_state_cb)(

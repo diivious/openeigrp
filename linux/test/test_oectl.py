@@ -50,11 +50,15 @@ class ControlTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def start(self):
+    def start(self, multi=False):
+        env = dict(os.environ)
+        if multi:
+            env["OECTL_TEST_MULTI"] = "1"
         self.daemon = subprocess.Popen([str(self.fixture), str(self.path)],
                                        stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE, text=True)
+                                       stderr=subprocess.PIPE, text=True,
+                                       env=env)
         self.assertEqual(self.daemon.stdout.readline(), "READY\n")
 
     def stop(self):
@@ -85,15 +89,14 @@ class ControlTests(unittest.TestCase):
 
     def test_read_views_and_render(self):
         expected = {
-            "capabilities": "capability: release=test\"fixture",
-            "protocols": "protocol: instance=eigrprulez",
+            "capabilities": 'OpenEIGRP capabilities (release test"fixture)',
+            "protocols": "EIGRP-IPv4 for process eigrprulez",
             "neighbors": "192.0.2.2",
-            "interfaces": "interface: name=eth\"0\\u000asecond",
+            "interfaces": 'eth"0\\u000asecond',
             "topology": "198.51.100.48/32",
-            "routes": "198.51.100.48/32",
-            "statistics": "sent_hello=900",
-            "events": "event_summary: capacity=500",
-            "diagnostics": "timer: type=",
+            "statistics": "Hellos sent/received: 900/0",
+            "events": "Event log: 1 entries",
+            "diagnostics": "Timer Hello, Interface eth0",
         }
         for view, marker in expected.items():
             with self.subTest(view=view):
@@ -101,8 +104,59 @@ class ControlTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(marker, result.stdout)
         topology = self.ctl("show", "topology")
-        self.assertEqual(topology.stdout.count("/32"), 96)
-        self.assertEqual(topology.stdout.count("successor"), 96)
+        self.assertEqual(len([l for l in topology.stdout.splitlines()
+                              if l.startswith("P  ")]), 48)
+        self.assertEqual(topology.stdout.count("successors"), 48)
+        self.assertEqual(topology.stdout.count("via 192.0.2.2"), 48)
+
+    def test_cisco_style_scope_abbreviations_and_detail(self):
+        for command in (("show", "addr", "ipv4", "4453", "topo"),
+                        ("show", "address-f", "ipv4", "top"),
+                        ("show", "4453", "neig"),
+                        ("show", "nei")):
+            result = self.ctl(*command)
+            self.assertEqual(result.returncode, 0, (command, result.stderr))
+            self.assertIn("AS(4453)", result.stdout)
+        result = self.ctl("show", "addr", "ipv4", "4453",
+                          "interfaces", "detail", 'eth"0\nsecond')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Hello interval 5 sec", result.stdout)
+        self.assertNotIn('eth"0\nsecond', result.stdout)
+        result = self.ctl("show", "neighbors", "detail")
+        self.assertIn("Retrans:", result.stdout)
+        missing = self.ctl("show", "interfaces", "detail", "Loopback1")
+        self.assertEqual(missing.returncode, 0, missing.stderr)
+        self.assertIn("% Interface not found: Loopback1", missing.stdout)
+        for command in (("show", "t"), ("show", "address-family", "i", "topo"),
+                        ("show", "addr", "ipv4", "6473", "top")):
+            result = self.ctl(*command)
+            self.assertNotEqual(result.returncode, 0)
+        result = self.ctl("show", "routes")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("host RIB", result.stderr)
+        result = self.ctl("show", "addr", "ipv4", "4453", "topo", "--json")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(len([json.loads(x) for x in result.stdout.splitlines()]), 96)
+
+    def test_omitted_af_and_as_walks_all_instances(self):
+        self.stop()
+        self.start(multi=True)
+        text = self.ctl("show", "nei")
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertIn("EIGRP-IPv4", text.stdout)
+        self.assertIn("EIGRP-IPv6", text.stdout)
+        self.assertIn("AS(4453)", text.stdout)
+        self.assertIn("AS(6473)", text.stdout)
+        filtered = self.ctl("show", "addr", "ipv6", "6473", "nei")
+        self.assertEqual(filtered.returncode, 0, filtered.stderr)
+        self.assertIn("EIGRP-IPv6", filtered.stdout)
+        self.assertNotIn("EIGRP-IPv4", filtered.stdout)
+        selected = self.ctl("show", "6473", "neighbors", "--json")
+        self.assertEqual(selected.returncode, 0, selected.stderr)
+        self.assertEqual(len(selected.stdout.splitlines()), 1)
+        cleared = self.ctl("clear", "events")
+        self.assertEqual(cleared.returncode, 0, cleared.stderr)
+        self.assertEqual(cleared.stdout.count("Events cleared"), 2)
 
     def test_client_has_no_core_link_dependency(self):
         symbols = subprocess.run(["nm", "-u", str(self.client)],
@@ -128,17 +182,33 @@ class ControlTests(unittest.TestCase):
         self.assertIn("eth\"0\\u000asecond", result.stdout)
         self.assertNotIn('eth"0\nsecond', result.stdout)
 
-    def test_clear_is_the_only_mutation(self):
-        self.assertIn("count=1", self.ctl("show", "events").stdout)
+    def test_clear_operations_execute_portable_targets(self):
+        self.assertIn("Event log: 1 entries", self.ctl("show", "events").stdout)
         cleared = self.ctl("-a", "4453", "-4", "clear", "events")
         self.assertEqual(cleared.returncode, 0, cleared.stderr)
         self.assertIn("Events cleared", cleared.stdout)
-        self.assertIn("count=0", self.ctl("show", "events").stdout)
-        for command in (("clear", "neighbors"), ("set", "debug"),
-                        ("configure", "terminal"), ("reset", "routes")):
+        self.assertIn("Event log: 0 entries", self.ctl("show", "events").stdout)
+        self.assertEqual(self.ctl("clear", "nei", "192.0.2.2", "soft").returncode, 0)
+        self.assertIn("192.0.2.2", self.ctl("show", "nei").stdout)
+        not_found = self.ctl("clear", "neighbors", "203.0.113.99")
+        self.assertEqual(not_found.returncode, 1)
+        self.assertIn("not running", not_found.stderr)
+        self.assertEqual(self.ctl("clear", "neighbors", "eth0").returncode, 0)
+        self.assertNotIn("192.0.2.2", self.ctl("show", "neighbors").stdout)
+        # Wrong-AFI targets must not silently succeed without a core call.
+        unsupported = self.ctl("clear", "neighbors", "2001:db8::5")
+        self.assertEqual(unsupported.returncode, 1)
+        self.assertIn("no selected address family matches", unsupported.stderr)
+        unsupported = self.ctl("clear", "topology", "2001:db8::1/128")
+        self.assertEqual(unsupported.returncode, 1)
+        self.assertIn("no selected address family matches", unsupported.stderr)
+        self.assertEqual(self.ctl("clear", "topology", "198.51.100.48/32").returncode, 0)
+        self.assertNotIn("198.51.100.48/32", self.ctl("show", "topology").stdout)
+        for command in (("set", "debug"), ("configure", "terminal"),
+                        ("reset", "routes")):
             result = self.ctl(*command)
             self.assertEqual(result.returncode, 2)
-            self.assertIn("unsupported command", result.stderr)
+            self.assertIn("unsupported", result.stderr)
 
     def test_cli_grammar_and_scope_errors(self):
         self.assertEqual(self.ctl("help").returncode, 0)
@@ -166,17 +236,16 @@ class ControlTests(unittest.TestCase):
                          ["integration", "identity", "capability"])
         self.assertEqual(records[-1]["release"], 'test"fixture')
         for argv, marker in (
-            (("show",), "unsupported command"),
-            (("show", "neighbor"), "unsupported command"),
+            (("show",), "missing show view"),
             (("--what", "show", "neighbors"), "unknown option"),
             (("--asn" ,), "missing value"),
             (("--asn", "65536", "show", "neighbors"), "invalid value"),
             (("--afi", "5", "show", "neighbors"), "AFI must be"),
-            (("--vrf-id", "22", "show", "neighbors"), "requires --asn and --afi"),
+            (("--vrf-id", "22", "show", "neighbors"), "requires explicit AFI and ASN"),
             (("--asn", "1", "--afi", "4", "show", "neighbors"),
-             "not running"),
+             "no matching running"),
             (("--asn", "4453", "--afi", "6", "show", "neighbors"),
-             "not running"),
+             "no matching running"),
             (("--asn", "4453", "show", "capabilities"), "scope options"),
         ):
             with self.subTest(argv=argv):
@@ -194,11 +263,11 @@ class ControlTests(unittest.TestCase):
                      "  evn                  : Not Supported",
                      "=== Protocols ===", "=== neighbors (AS 4453",
                      "=== interfaces (AS 4453", "=== topology (AS 4453",
-                     "=== routes (AS 4453", "=== statistics (AS 4453",
+                     "=== statistics (AS 4453",
                      "=== events (AS 4453", "=== diagnostics (AS 4453",
-                     "198.51.100.48/32", "event: number="):
+                     "198.51.100.48/32", "Event log: 1 entries"):
             self.assertIn(text, result.stdout)
-        self.assertEqual(result.stdout.count("198.51.100.48/32"), 4)
+        self.assertEqual(result.stdout.count("198.51.100.48/32"), 1)
         self.assertNotIn("=== Capabilities ===", result.stdout)
         self.assertNotIn("=== Daemon identity ===", result.stdout)
         self.assertEqual(result.stdout.count("OpenEIGRP Version:"), 1)
@@ -239,7 +308,7 @@ class ControlTests(unittest.TestCase):
         denied = self.ctl("clear", "events", uid=65534)
         self.assertEqual(denied.returncode, 1)
         self.assertIn("permission denied", denied.stderr)
-        self.assertIn("count=1", self.ctl("show", "events").stdout)
+        self.assertIn("Event log: 1 entries", self.ctl("show", "events").stdout)
 
     def test_mismatched_build_is_blocked_but_local_version_remains_available(self):
         alternate = Path(self.tmp.name) / "oectl-alternate"
@@ -291,7 +360,7 @@ class ControlTests(unittest.TestCase):
         self.start()
         self.assertEqual(self.ctl("show", "neighbors").returncode, 0)
         def run(_):
-            return self.ctl("show", "routes", "--json")
+            return self.ctl("show", "topology", "--json")
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(run, range(24)))
         self.assertTrue(all(r.returncode == 0 for r in results),
@@ -378,7 +447,9 @@ class InvalidReplyTests(unittest.TestCase):
                 self.assertFalse(errors, errors)
                 self.path.unlink()
 
-    def test_ambiguous_scope_is_rejected(self):
+    def test_multiple_instances_are_not_reported_as_ambiguous(self):
+        # The client accepts the protocol listing. With this single-shot mock,
+        # the scoped read fails at the absent daemon rather than at selection.
         body = (b'{"kind":"protocol","instance":"one","runtime":true,'
                 b'"afi":4,"asn":4453,"vrf":"default"}\n'
                 b'{"kind":"protocol","instance":"two","runtime":true,'
@@ -387,7 +458,7 @@ class InvalidReplyTests(unittest.TestCase):
         thread, errors = self.mock(header, body)
         result = self.ctl("show", "neighbors")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("multiple matching instances", result.stderr)
+        self.assertNotIn("multiple matching instances", result.stderr)
         thread.join(timeout=2)
         self.assertFalse(errors)
 

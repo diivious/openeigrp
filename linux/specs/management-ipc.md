@@ -6,7 +6,7 @@ use [openeigrpd(8)](../packaging/man/openeigrpd.8). Portable state is obtained t
 `eigrp/code/eigrp_mgnt.h`; the Linux adapter owns framing, serialization,
 permissions and client scheduling.
 
-## Version 1 wire format
+## Version 2 wire format
 
 The transport is an `AF_UNIX` `SOCK_STREAM` service. Integer fields are
 network-byte-order; never transmit raw C structures. Every request and
@@ -22,7 +22,8 @@ response begins with a 16-byte header:
 | length | 32 bits | Exact payload byte length |
 
 Operations 1 (`capabilities`) and 2 (`protocols`) have empty request payloads.
-Operations 3-10 carry a **16-byte selector** consisting of `afi:u16`,
+Operation 11 (`identity`) carries a 128-byte client release identity.
+Operations 3-10 and 12-13 carry a **16-byte selector** consisting of `afi:u16`,
 `asn:u16`, `vrf_id:u32`, `topology_id:u16`, reserved `flags:u16`, and
 `offset:u32`. Valid AFI is 4 or 6; ASN must be nonzero; only base topology
 ID 0 is accepted; selector flags are zero; offset is at most 8192.
@@ -39,6 +40,19 @@ ID 0 is accepted; selector flags are zero; offset is at most 8192.
 | 8 | events | Event ring and summary |
 | 9 | diagnostics | Capabilities, debug state, timers |
 | 10 | clear events | Privileged event-ring reset |
+| 11 | identity | Daemon/client release handshake |
+| 12 | clear neighbors | Privileged neighbor reset through `eigrp_nbr_clear()` |
+| 13 | clear topology | Privileged topology reset through `eigrp_topology_clear()` |
+
+Operations 12 and 13 append a fixed 128-byte target to the 16-byte selector.
+The target layout is `type:u8`, `soft:u8`, `prefix_length:u8`, one reserved
+byte, a 16-byte address payload and trailing zero padding. Type 0 means all,
+type 1 means an interface name (NUL-terminated at offset 4, maximum 63
+characters), and type 2 means an IPv4/IPv6 neighbor address (operation 12)
+or prefix (operation 13). Soft is valid only for neighbor clear. Only
+operations 12 and 13 accept this extension; all other operation payloads
+retain their original shape. The daemon rejects nonzero reserved bytes,
+malformed address/prefix fields and extraneous data.
 
 Responses use status 0=success, 1=invalid, 2=unsupported version,
 3=denied, 4=not found, 5=unsupported, 6=busy, or 7=internal.
@@ -63,9 +77,9 @@ with group `openeigrpctl`. The parent must be a real, owner-controlled
 process's existing socket; shutdown only removes the socket it created.
 
 Read-only clients need Unix socket access, not root. The daemon validates
-`SO_PEERCRED` for `clear events`, which only root or the daemon startup UID
-may execute. No configuration mutation, neighbor reset or topology clearing
-exists in IPC version 1.
+`SO_PEERCRED` for **every** clear operation; only root or the daemon startup UID
+may execute a neighbor, topology or event-log clear. No live configuration
+mutation is exposed.
 
 The service supports at most 32 concurrent clients with nonblocking socket
 I/O, bounded response buffers and an approximately five-second idle timeout.
@@ -79,8 +93,9 @@ and pagination; it fails on truncation rather than silently producing an
 incomplete state dump. `show tech-support` combines read-only views for
 running default-VRF instances. Nondefault VRF numeric IDs are not discoverable
 from protocol listing, so such views require explicit `--asn`, `--afi` and
-`--vrf-id` selectors. Current native configuration itself accepts only the
-default VRF.
+`--vrf-id` selectors. The native configuration and runtime currently accept
+only the default VRF. When AFI/ASN are omitted, `oectl` enumerates matching
+running default-VRF contexts, rather than failing on multiple matches.
 
 ## Validation
 

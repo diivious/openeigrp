@@ -4294,6 +4294,7 @@ eigrp_vty_neighbor_context_render(struct vty *vty, const char *instance_name,
 struct eigrp_vty_topology_show {
 	struct vty *vty;
 	bool include_serial;
+	bool detail;
 };
 
 static eigrp_result_t
@@ -4303,11 +4304,20 @@ eigrp_vty_topology_prefix_show(const eigrp_topology_prefix_state_t *state,
 	struct eigrp_vty_topology_show *show = arg;
 	char prefix[INET6_ADDRSTRLEN + 8];
 
-	vty_out(show->vty, "%c %s, %u successors, FD is ",
-		state->active ? 'A' : 'P',
-		eigrp_vty_prefix_string(&state->destination, prefix,
-					sizeof(prefix)),
-		state->successor_count);
+	if (show->detail) {
+		vty_out(show->vty, "Topology Entry for %s\n",
+			eigrp_vty_prefix_string(&state->destination, prefix,
+						sizeof(prefix)));
+		vty_out(show->vty, "  State is %s, %u successors, FD is ",
+			state->active ? "Active" : "Passive",
+			state->successor_count);
+	} else {
+		vty_out(show->vty, "%c %s, %u successors, FD is ",
+			state->active ? 'A' : 'P',
+			eigrp_vty_prefix_string(&state->destination, prefix,
+						sizeof(prefix)),
+			state->successor_count);
+	}
 	if (state->feasible_distance == EIGRP_MAX_METRIC)
 		vty_out(show->vty, "Inaccessible");
 	else
@@ -4329,6 +4339,10 @@ eigrp_vty_topology_route_show(const eigrp_topology_route_state_t *state,
 		vty_out(show->vty, "        via Connected, %s\n",
 			state->interface_name ? state->interface_name
 					      : "<unknown>");
+	else if (state->redistributed)
+		vty_out(show->vty,
+			"        via Redistributed (%" PRIu64 "/%" PRIu64 ")\n",
+			state->distance, state->reported_distance);
 	else
 		vty_out(show->vty,
 			"        via %s (%" PRIu64 "/%" PRIu64 "), %s\n",
@@ -4337,6 +4351,39 @@ eigrp_vty_topology_route_show(const eigrp_topology_route_state_t *state,
 			state->distance, state->reported_distance,
 			state->interface_name ? state->interface_name
 					      : "<unknown>");
+	if (show->detail) {
+		vty_out(show->vty, "          Route is %s%s%s\n",
+			state->external ? "External" : "Internal",
+			state->successor ? ", successor" : "",
+			state->feasible_successor ? ", feasible successor"
+						  : "");
+		vty_out(show->vty,
+			"          Composite metric (%" PRIu64 "/%" PRIu64
+			")\n",
+			state->distance, state->reported_distance);
+		vty_out(show->vty,
+			"          Total vector (EIGRP encoded): bandwidth %" PRIu64
+			", delay %" PRIu64
+			", reliability %u, load %u, MTU %u\n",
+			state->total_metric.bandwidth,
+			state->total_metric.delay,
+			state->total_metric.reliability,
+			state->total_metric.load,
+			((uint32_t)state->total_metric.mtu[0] << 16)
+				| ((uint32_t)state->total_metric.mtu[1] << 8)
+				| state->total_metric.mtu[2]);
+		vty_out(show->vty,
+			"          Reported vector (EIGRP encoded): bandwidth %" PRIu64
+			", delay %" PRIu64
+			", reliability %u, load %u, MTU %u\n",
+			state->reported_metric.bandwidth,
+			state->reported_metric.delay,
+			state->reported_metric.reliability,
+			state->reported_metric.load,
+			((uint32_t)state->reported_metric.mtu[0] << 16)
+				| ((uint32_t)state->reported_metric.mtu[1] << 8)
+				| state->reported_metric.mtu[2]);
+	}
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -4355,6 +4402,7 @@ static eigrp_result_t eigrp_vty_topology_show(struct vty *vty,
 	struct eigrp_vty_topology_show show = {
 		.vty = vty,
 		.include_serial = options->all_links,
+		.detail = options->destination != NULL,
 	};
 	eigrp_result_t result;
 
@@ -4364,9 +4412,9 @@ static eigrp_result_t eigrp_vty_topology_show(struct vty *vty,
 		if (runtime)
 			inet_ntop(AF_INET, &runtime->router_id, router_id,
 				  sizeof(router_id));
-		vty_out(vty,
-			"\nEIGRP-%s VR(%s) Topology Table for AS(%u)/ID(%s)",
-			eigrp_vty_afi_name(af->afi), instance_name, af->asn,
+		vty_out(vty, "\nEIGRP-%s VR(%s) Topology %s for AS(%u)/ID(%s)",
+			eigrp_vty_afi_name(af->afi), instance_name,
+			options->destination ? "Entry" : "Table", af->asn,
 			router_id);
 		if (strcmp(af->vrf_name, VRF_DEFAULT_NAME) != 0)
 			vty_out(vty, " VRF(%s)", af->vrf_name);
@@ -4375,14 +4423,17 @@ static eigrp_result_t eigrp_vty_topology_show(struct vty *vty,
 			vty_out(vty,
 				"  Runtime state: address-family not active in the runtime\n");
 	} else
-		vty_out(vty, "\nEIGRP-%s Topology Table for AS(%u)/ID(%s)\n",
+		vty_out(vty, "\nEIGRP-%s Topology %s for AS(%u)/ID(%s)\n",
 			eigrp_vty_afi_name(runtime->af_vectors.afi),
-			runtime->AS, inet_ntoa(runtime->router_id));
-	vty_out(vty,
-		"Codes: P - Passive, A - Active, U - Update, Q - Query, R - Reply,\n"
-		"       r - reply Status, s - sia Status\n\n");
+			options->destination ? "Entry" : "Table", runtime->AS,
+			inet_ntoa(runtime->router_id));
+	if (!options->destination)
+		vty_out(vty,
+			"Codes: P - Passive, A - Active, U - Update, Q - Query, R - Reply,\n"
+			"       r - reply Status, s - sia Status\n\n");
 	result = eigrp_topology_state_iterate(
-		af, runtime, options->destination, options->all_links,
+		af, runtime, options->destination,
+		options->all_links || options->destination != NULL,
 		eigrp_vty_topology_prefix_show, eigrp_vty_topology_route_show,
 		&show);
 	if (result == EIGRP_RESULT_NOT_FOUND) {
@@ -4827,7 +4878,9 @@ static eigrp_result_t eigrp_vty_timer_context_render(struct vty *vty,
 		eigrp_cli_result_render(vty, "timers", result);
 	if (!show.printed_header)
 		vty_out(vty,
-			"  No active IPv4 EIGRP timers are currently scheduled\n");
+			"  No active %s EIGRP timers are currently scheduled\n",
+			eigrp_vty_afi_name(af ? af->afi
+					      : runtime->af_vectors.afi));
 	vty_out(vty,
 		"  SIA process expiration: n/a until ACTIVE-time enforcement is implemented\n");
 	return EIGRP_RESULT_SUCCESS;

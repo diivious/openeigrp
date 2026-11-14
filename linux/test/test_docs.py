@@ -208,6 +208,7 @@ class DocumentationTests(unittest.TestCase):
                 self.assertEqual(self.command(oectl, options).returncode, 0)
         self.assertEqual(self.command(oectl, "show", "unsupported").returncode, 2)
         self.assertEqual(self.command(oectl, "show", "routes", "--afi", "5").returncode, 2)
+        self.assertEqual(self.command(oectl, "show", "routes").returncode, 2)
 
         # A deliberately absent socket verifies each command reaches socket
         # handling rather than being rejected as an unsupported CLI command.
@@ -215,7 +216,7 @@ class DocumentationTests(unittest.TestCase):
             absent = str(Path(tmp) / "missing.sock")
             views = (
                 "capabilities", "protocols", "neighbors", "interfaces",
-                "topology", "routes", "statistics", "traffic", "events",
+                "topology", "statistics", "traffic", "events",
                 "diagnostics", "tech-support", "version",
             )
             for view in views:

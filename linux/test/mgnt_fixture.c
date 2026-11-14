@@ -19,6 +19,8 @@
 static int runtime_identity;
 static int config_identity;
 static atomic_uint clear_count;
+static atomic_uint neighbors_cleared;
+static atomic_uint topology_cleared;
 static volatile sig_atomic_t shutdown_requested;
 
 /* Fixture models the AF-owner dispatch contract without linking a core AF. */
@@ -74,6 +76,12 @@ eigrp_result_t eigrp_status_protocol_iterate(eigrp_status_protocol_cb fn,
 		.asn = 4453,
 		.runtime_present = true,
 	};
+	eigrp_result_t result = fn(&state, arg);
+	if (result != EIGRP_RESULT_SUCCESS || !getenv("OECTL_TEST_MULTI"))
+		return result;
+	state.instance_name = "v6-test";
+	state.afi = EIGRP_AFI_IPV6;
+	state.asn = 6473;
 	return fn(&state, arg);
 }
 
@@ -81,8 +89,11 @@ eigrp_result_t eigrp_af_config_context_read(const char *name, eigrp_afi_t afi,
 					    const char *vrf, uint16_t asn,
 					    eigrp_instance_context_t *context)
 {
-	if (strcmp(name, "eigrprulez") != 0 || afi != EIGRP_AFI_IPV4
-	    || strcmp(vrf, "default") != 0 || asn != 4453)
+	if (strcmp(vrf, "default") != 0
+	    || !((strcmp(name, "eigrprulez") == 0 && afi == EIGRP_AFI_IPV4
+		  && asn == 4453)
+		 || (getenv("OECTL_TEST_MULTI") && strcmp(name, "v6-test") == 0
+		     && afi == EIGRP_AFI_IPV6 && asn == 6473)))
 		return EIGRP_RESULT_NOT_FOUND;
 	*context = (eigrp_instance_context_t){
 		.config = (eigrp_af_config_t *)&config_identity,
@@ -136,7 +147,8 @@ eigrp_result_t eigrp_nbr_state_iterate(eigrp_af_config_t *config,
 	(void)name;
 	(void)static_only;
 	state.address = fixture_addr("192.0.2.2");
-	return fn(&state, arg);
+	return atomic_load(&neighbors_cleared) ? EIGRP_RESULT_SUCCESS
+					       : fn(&state, arg);
 }
 
 eigrp_result_t
@@ -151,6 +163,8 @@ eigrp_topology_state_iterate(eigrp_af_config_t *config,
 	(void)runtime;
 	(void)destination;
 	(void)all_links;
+	if (atomic_load(&topology_cleared))
+		return EIGRP_RESULT_SUCCESS;
 	for (i = 1; i <= 48; i++) {
 		eigrp_topology_prefix_state_t prefix = {
 			.destination = {.address = {.afi = EIGRP_AFI_IPV4},
@@ -227,6 +241,52 @@ eigrp_result_t eigrp_eventlog_clear(eigrp_instance_context_t *context)
 {
 	(void)context;
 	atomic_fetch_add(&clear_count, 1);
+	return EIGRP_RESULT_SUCCESS;
+}
+
+eigrp_result_t eigrp_nbr_clear(eigrp_instance_t *runtime,
+			       const eigrp_nbr_clear_request_t *request,
+			       eigrp_nbr_clear_cb callback, void *arg,
+			       size_t *affected_count)
+{
+	const eigrp_address_t match = fixture_addr("192.0.2.2");
+	(void)callback;
+	(void)arg;
+	if (runtime != (eigrp_instance_t *)&runtime_identity || !request)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (request->interface_name
+	    && strcmp(request->interface_name, "eth0") != 0)
+		return EIGRP_RESULT_NOT_FOUND;
+	if (request->address
+	    && memcmp(request->address, &match, sizeof(match)) != 0)
+		return EIGRP_RESULT_NOT_FOUND;
+	if (affected_count)
+		*affected_count = 1;
+	if (!request->soft)
+		atomic_fetch_add(&neighbors_cleared, 1);
+	return EIGRP_RESULT_SUCCESS;
+}
+
+eigrp_result_t
+eigrp_topology_clear(eigrp_instance_context_t *context,
+		     const eigrp_topology_clear_request_t *request,
+		     size_t *affected_count)
+{
+	if (!context || !context->runtime || !request)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (request->destination) {
+		const eigrp_prefix_t *dest = request->destination;
+		if (dest->address.afi != EIGRP_AFI_IPV4
+		    || dest->prefix_length != 32
+		    || dest->address.bytes[0] != 198
+		    || dest->address.bytes[1] != 51
+		    || dest->address.bytes[2] != 100
+		    || dest->address.bytes[3] != 48)
+			return EIGRP_RESULT_NOT_FOUND;
+	}
+	if (affected_count)
+		*affected_count = 1;
+	atomic_fetch_add(&topology_cleared, 1);
 	return EIGRP_RESULT_SUCCESS;
 }
 

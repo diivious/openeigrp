@@ -68,15 +68,15 @@ oectl version
 oectl show protocols
 oectl show neighbors --asn 4453 --afi 4
 oectl show interfaces --asn 6473 --afi 6
-oectl show routes --asn 4453 --afi 4 --json
+oectl show address-family ipv4 4453 topology
 oectl show tech-support
 ```
 
-`oectl` is read-only except `clear events`, which requires root or the daemon
-startup UID. The default management socket is `/run/openeigrpd/control.sock`
+`oectl` exposes `clear events`, `clear neighbors`, and `clear topology`
+through the portable API; all require root or the daemon startup UID. The default management socket is `/run/openeigrpd/control.sock`
 (mode 0660, group `openeigrpctl`). Membership in that group allows
-observational access, not mutation. Scoped queries can autodetect one running
-default-VRF AF; multiple AFs need explicit selection.
+observational access, not mutation. Scoped queries select all matching default-VRF AS/AF contexts when selectors
+are omitted.
 
 Use `systemctl restart openeigrpd` to apply a new validated config. `SIGHUP`
 is **not** a reload: it is rejected while preserving active state.
@@ -101,7 +101,7 @@ is **not** a reload: it is rejected while preserving active state.
   redistribution is limited to connected/static routes in the default VRF.
 - MD5 key-chain auth is supported. HMAC-SHA-256, encoded type-7 secrets,
   route-map `set`, complex ACL expressions and EIGRP Stub runtime are not.
-- `oectl show routes` exposes the portable topology view, not the Linux RIB.
+- `oectl show topology` exposes portable DUAL state; host routes use the Linux RIB (`ip route`).
   IPC pagination is bounded; concurrent routing changes are not snapshotted.
 - Linux native packet/daemon tests exist, but a real systemd VM and
   privileged Cisco/Netlab adjacency qualification remain separate gates.

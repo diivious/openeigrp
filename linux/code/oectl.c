@@ -4,6 +4,7 @@
  * scheduler is linked into this executable.
  * Copyright (C) 2026 Donnie V. Savage
  */
+#include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
 #include <stddef.h>
@@ -13,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/utsname.h>
@@ -44,6 +46,19 @@ struct scope {
 	uint16_t afi;
 	uint16_t asn;
 	uint32_t vrf;
+	char vrf_name[64];
+	uint32_t router_id;
+	uint8_t target[EIGRP_LINUX_MGNT_TARGET_SIZE];
+};
+
+struct render {
+	const char *view;
+	const char *interface_name;
+	bool detail;
+	bool all_links;
+	const char *prefix;
+	bool json;
+	unsigned printed;
 };
 
 struct options {
@@ -54,6 +69,7 @@ struct options {
 	bool afi_set;
 	bool asn_set;
 	bool vrf_set;
+	const char *vrf_name;
 	bool json;
 };
 
@@ -104,25 +120,41 @@ static const char *status_name(uint16_t status)
 static void usage(FILE *file)
 {
 	fprintf(file,
-		"Usage: oectl [options] show <view>\n"
-		"       oectl [options] clear events\n"
+		"Usage: oectl [options] show [address-family ipv4|ipv6 [vrf NAME]] [ASN] VIEW [detail] [IFNAME]\n"
+		"       oectl [options] clear [address-family ipv4|ipv6 [vrf NAME]] [ASN] TARGET\n"
 		"       oectl [options] version\n"
 		"       oectl help\n\n"
-		"Views: capabilities, protocols, neighbors, interfaces, topology,\n"
-		"       routes, statistics, events, diagnostics, tech-support\n\n"
+		"Views: version, capabilities, protocols, neighbors, interfaces, topology,\n"
+		"       statistics, traffic, events, diagnostics, tech-support\n"
+		"Clear targets: events, neighbors [IFNAME|ADDRESS] [soft], topology [PREFIX]\n\n"
+		"Abbreviations must uniquely identify a keyword. Omitted AFI/ASN selects all.\n"
 		"Options:\n"
 		"  -s, --socket PATH   Control socket (default: %s)\n"
-		"  -a, --asn N        EIGRP autonomous system (1..65535)\n"
-		"  -4, -6            IPv4 or IPv6 (default: autodetect)\n"
+		"  -a, --asn N        Filter to an autonomous system (1..65535)\n"
+		"  -4, -6            IPv4 or IPv6\n"
 		"      --afi 4|6     Address family\n"
-		"      --vrf-id N    Numeric daemon VRF ID (default: 0)\n"
-		"      --json        Emit daemon JSON lines\n"
-		"  -h, --help        Show this help\n\n"
-		"Scoped views autodetect one running default-VRF instance. Multiple\n"
-		"instances require --asn and, if ambiguous, --afi. Nondefault VRFs\n"
-		"require --asn, --afi and --vrf-id. Only base topology is supported.\n"
-		"The only modifying command supported by IPC v1 is clear events.\n",
+		"      --vrf-id N    Numeric daemon VRF ID (0 is default)\n"
+		"      --json        Preserve daemon JSON-lines output\n"
+		"  -h, --help        Show this help\n",
 		OECTL_SOCKET);
+}
+
+/* Match the shortest unique prefix; never guess at an ambiguous token. */
+static int keyword(const char *word, const char *const *names, size_t count)
+{
+	size_t i, length = strlen(word);
+	int found = -1;
+
+	if (!length)
+		return -1;
+	for (i = 0; i < count; ++i) {
+		if (strncasecmp(word, names[i], length) != 0)
+			continue;
+		if (found != -1)
+			return -2;
+		found = (int)i;
+	}
+	return found;
 }
 
 static bool number(const char *arg, uint32_t limit, uint32_t *value)
@@ -262,11 +294,17 @@ static int exchange(int fd, uint16_t op, const struct scope *scope,
 		    uint32_t offset, char *response, size_t *length, bool *more)
 {
 	uint8_t request[EIGRP_LINUX_MGNT_HEADER_SIZE
-			+ EIGRP_LINUX_MGNT_IDENTITY_SIZE] = {0};
+			+ EIGRP_LINUX_MGNT_SELECTOR_SIZE
+			+ EIGRP_LINUX_MGNT_TARGET_SIZE] = {0};
 	uint8_t header[EIGRP_LINUX_MGNT_HEADER_SIZE];
-	uint32_t size = op == EIGRP_LINUX_MGNT_IDENTITY
-				? EIGRP_LINUX_MGNT_IDENTITY_SIZE
-				: (scope ? EIGRP_LINUX_MGNT_SELECTOR_SIZE : 0);
+	uint32_t size =
+		op == EIGRP_LINUX_MGNT_IDENTITY
+			? EIGRP_LINUX_MGNT_IDENTITY_SIZE
+			: (scope ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
+					   + (op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+						      ? EIGRP_LINUX_MGNT_TARGET_SIZE
+						      : 0)
+				 : 0);
 	uint16_t status, flags;
 
 	put32(request, EIGRP_LINUX_MGNT_MAGIC);
@@ -283,6 +321,10 @@ static int exchange(int fd, uint16_t op, const struct scope *scope,
 		put16(request + 18, scope->asn);
 		put32(request + 20, scope->vrf);
 		put32(request + 28, offset);
+		if (op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS)
+			memcpy(request + EIGRP_LINUX_MGNT_HEADER_SIZE
+				       + EIGRP_LINUX_MGNT_SELECTOR_SIZE,
+			       scope->target, EIGRP_LINUX_MGNT_TARGET_SIZE);
 	}
 	if (transfer(fd, request, sizeof(header) + size, true) != 0
 	    || transfer(fd, header, sizeof(header), false) != 0)
@@ -488,36 +530,205 @@ static int identify(int fd, struct record *record, char *response, size_t *size)
 	return 0;
 }
 
-static void print_record(const struct record *rec)
+static bool interface_match(const char *filter, const char *value)
+{
+	char safe[OECTL_VALUE_MAX];
+	size_t n = 0;
+	const unsigned char *p = (const unsigned char *)filter;
+
+	if (strcmp(filter, value) == 0)
+		return true;
+	while (*p && n + 7 < sizeof(safe)) {
+		unsigned char c = *p++;
+		if (c < 32 || c >= 127) {
+			n += (size_t)snprintf(safe + n, sizeof(safe) - n,
+					      "\\u%04x", c);
+		} else {
+			safe[n++] = (char)c;
+		}
+	}
+	safe[n] = 0;
+	return strcmp(safe, value) == 0;
+}
+
+/* Human-readable presentation uses the same daemon snapshots as --json.
+ * Never reinterpret unknown fields as Cisco state that is not available. */
+static void print_record(const struct record *rec, struct render *render)
 {
 	const char *kind = field(rec, "kind");
+	const char *interface_name = field(rec, "interface");
+	const char *name = field(rec, "name");
+	uint64_t elapsed;
+	const char *prefix;
 	size_t i;
 
+	if (render && render->prefix
+	    && (strcmp(kind, "prefix") == 0 || strcmp(kind, "path") == 0)
+	    && strcmp(render->prefix, field(rec, "prefix")) != 0)
+		return;
+	if (render && strcmp(kind, "path") == 0 && !render->all_links
+	    && strcmp(field(rec, "successor"), "true") != 0
+	    && strcmp(field(rec, "feasible"), "true") != 0)
+		return;
+	if (render && render->interface_name
+	    && ((strcmp(kind, "neighbor") == 0
+		 && !interface_match(render->interface_name, interface_name))
+		|| (strcmp(kind, "interface") == 0
+		    && !interface_match(render->interface_name, name))))
+		return;
+	if (render)
+		render->printed++;
 	if (strcmp(kind, "neighbor") == 0) {
-		printf("%-39s  %-16s  %-8s  hold=%ss  uptime=%ss  prefixes=%s\n",
-		       field(rec, "address"), field(rec, "interface"),
-		       field(rec, "state"), field(rec, "hold"),
-		       field(rec, "uptime"), field(rec, "prefixes"));
+		char uptime[24];
+		elapsed = strtoull(field(rec, "uptime"), NULL, 10);
+		if (elapsed >= 86400)
+			(void)snprintf(
+				uptime, sizeof(uptime), "%llud%02lluh",
+				(unsigned long long)(elapsed / 86400),
+				(unsigned long long)((elapsed / 3600) % 24));
+		else
+			(void)snprintf(
+				uptime, sizeof(uptime), "%02llu:%02llu:%02llu",
+				(unsigned long long)(elapsed / 3600),
+				(unsigned long long)((elapsed / 60) % 60),
+				(unsigned long long)(elapsed % 60));
+		printf("%-39s %-18s %4s %-9s %5s %5s %3s %7s\n",
+		       field(rec, "address"), interface_name,
+		       field(rec, "hold"), uptime, field(rec, "srtt"),
+		       field(rec, "rto"), field(rec, "queue"),
+		       field(rec, "sequence"));
+		if (render && render->detail)
+			printf("  State: %s, Retrans: %s, Prefixes: %s\n",
+			       field(rec, "state"),
+			       field(rec, "retransmissions"),
+			       field(rec, "prefixes"));
+		return;
+	}
+	if (strcmp(kind, "interface") == 0) {
+		printf("%-19s %5s %9s %9s %11s\n", name, field(rec, "peers"),
+		       field(rec, "output_queue"), field(rec, "reliable_queue"),
+		       field(rec, "retransmissions"));
+		if (render && render->detail)
+			printf("  Hello interval %s sec, Hold time %s sec, MTU %s, Bandwidth %s Kbit, Delay %s\n"
+			       "  Passive %s, Shutdown %s, Multicast %s\n",
+			       field(rec, "hello"), field(rec, "hold"),
+			       field(rec, "mtu"), field(rec, "bandwidth"),
+			       field(rec, "delay"), field(rec, "passive"),
+			       field(rec, "shutdown"), field(rec, "multicast"));
 		return;
 	}
 	if (strcmp(kind, "prefix") == 0) {
-		printf("%-43s  %-7s  FD=%s  successors=%s\n",
-		       field(rec, "prefix"),
-		       strcmp(field(rec, "active"), "true") == 0 ? "ACTIVE"
-								 : "PASSIVE",
-		       field(rec, "fd"), field(rec, "successors"));
+		printf("%c  %s, %s successors, FD is %s\n",
+		       strcmp(field(rec, "active"), "true") == 0 ? 'A' : 'P',
+		       field(rec, "prefix"), field(rec, "successors"),
+		       field(rec, "fd"));
 		return;
 	}
 	if (strcmp(kind, "path") == 0) {
-		printf("  %-41s via %-39s  %s  metric=%s  rd=%s%s%s\n",
-		       field(rec, "prefix"), field(rec, "next_hop"),
-		       field(rec, "interface"), field(rec, "distance"),
-		       field(rec, "rd"),
-		       strcmp(field(rec, "successor"), "true") == 0
-			       ? " successor"
-			       : "",
-		       strcmp(field(rec, "feasible"), "true") == 0 ? " feasible"
-								   : "");
+		prefix = field(rec, "next_hop");
+		if (strcmp(field(rec, "connected"), "true") == 0)
+			printf("   via Connected, %s\n", interface_name);
+		else
+			printf("   via %s (%s/%s), %s\n", prefix,
+			       field(rec, "distance"), field(rec, "rd"),
+			       interface_name);
+		return;
+	}
+	if (strcmp(kind, "traffic") == 0) {
+		static const struct {
+			const char *label;
+			const char *sent;
+			const char *received;
+		} counters[] = {
+			{"Hellos", "sent_hello", "received_hello"},
+			{"Updates", "sent_update", "received_update"},
+			{"Queries", "sent_query", "received_query"},
+			{"Replies", "sent_reply", "received_reply"},
+			{"Acks", "sent_ack", "received_ack"},
+			{"SIA-Queries", "sent_sia_query", "received_sia_query"},
+			{"SIA-Replies", "sent_sia_reply", "received_sia_reply"},
+		};
+		for (i = 0; i < sizeof(counters) / sizeof(counters[0]); ++i)
+			printf("  %s sent/received: %s/%s\n", counters[i].label,
+			       field(rec, counters[i].sent),
+			       field(rec, counters[i].received));
+		return;
+	}
+	if (strcmp(kind, "protocol") == 0) {
+		uint32_t id =
+			(uint32_t)strtoul(field(rec, "router_id"), NULL, 10);
+		struct in_addr address = {.s_addr = htonl(id)};
+		char router_id[INET_ADDRSTRLEN];
+
+		(void)inet_ntop(AF_INET, &address, router_id,
+				sizeof(router_id));
+		printf("EIGRP-%s for process %s, AS(%s), VRF %s\n",
+		       strcmp(field(rec, "afi"), "6") == 0 ? "IPv6" : "IPv4",
+		       field(rec, "instance"), field(rec, "asn"),
+		       field(rec, "vrf"));
+		printf("  Runtime: %s, Shutdown: %s, Router ID: %s\n",
+		       field(rec, "runtime"), field(rec, "shutdown"),
+		       router_id);
+		return;
+	}
+	if (strcmp(kind, "capability") == 0) {
+		static const char *const keys[] = {
+			"ipv4", "ipv6", "tlv1",	 "tlv2", "wide_metrics",
+			"bfd",	"snmp", "manet", "mtr",	 "evn"};
+		printf("OpenEIGRP capabilities (release %s):\n",
+		       field(rec, "release"));
+		for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
+			printf("  %-17s : %s\n", keys[i],
+			       strcmp(field(rec, keys[i]), "true") == 0
+				       ? "Supported"
+				       : "Not Supported");
+		return;
+	}
+	if (strcmp(kind, "event_summary") == 0) {
+		printf("Event log: %s entries (capacity %s, written %s, overwritten %s)\n",
+		       field(rec, "count"), field(rec, "capacity"),
+		       field(rec, "written"), field(rec, "overwritten"));
+		return;
+	}
+	if (strcmp(kind, "event") == 0) {
+		uint64_t timestamp =
+			strtoull(field(rec, "timestamp"), NULL, 10);
+		time_t seconds = (time_t)(timestamp / 1000);
+		struct tm utc;
+		char when[40];
+
+		if (gmtime_r(&seconds, &utc) != NULL
+		    && strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S",
+				&utc)) {
+			size_t n = strlen(when);
+			(void)snprintf(when + n, sizeof(when) - n, ".%03uZ",
+				       (unsigned)(timestamp % 1000));
+		} else
+			(void)snprintf(when, sizeof(when), "%s",
+				       field(rec, "timestamp"));
+		printf("%5s %s  %s\n", field(rec, "number"), when,
+		       field(rec, "message"));
+		return;
+	}
+	if (strcmp(kind, "timer") == 0) {
+		static const char *const timers[] = {"Hello", "Neighbor hold",
+						     "Limit restart",
+						     "Limit reset"};
+		uint32_t type = (uint32_t)strtoul(field(rec, "type"), NULL, 10);
+
+		printf("  Timer %s, Interface %s, Neighbor %s, expires in %s sec\n",
+		       type < sizeof(timers) / sizeof(timers[0])
+			       ? timers[type]
+			       : field(rec, "type"),
+		       field(rec, "interface"),
+		       *field(rec, "neighbor") ? field(rec, "neighbor") : "-",
+		       field(rec, "remaining"));
+		return;
+	}
+	if (strcmp(kind, "debug") == 0) {
+		printf("  Debug AFI %s AS %s VRF %s category %s\n",
+		       field(rec, "afi"), field(rec, "asn"), field(rec, "vrf"),
+		       field(rec, "category"));
 		return;
 	}
 	printf("%s:", *kind ? kind : "record");
@@ -529,10 +740,52 @@ static void print_record(const struct record *rec)
 	putchar('\n');
 }
 
+static void print_heading(const struct scope *scope, const char *view)
+{
+	const char *vrf = *scope->vrf_name ? scope->vrf_name : "default";
+	const char *afi = scope->afi == 6 ? "IPv6" : "IPv4";
+
+	if (strcmp(view, "neighbors") == 0) {
+		printf("EIGRP-%s VR(%s) Address-family Neighbors for AS(%u)\n",
+		       afi, vrf, scope->asn);
+		puts("Address                                 Interface          Hold Uptime    SRTT   RTO   Q     Seq");
+		puts("                                                                (sec)          (ms)  (ms) Cnt    Num");
+		puts("  (Cisco neighbor handle index H is not exposed by IPC)");
+	} else if (strcmp(view, "interfaces") == 0) {
+		printf("EIGRP-%s VR(%s) Address-family Interfaces for AS(%u)\n",
+		       afi, vrf, scope->asn);
+		puts("Interface           Peers  Output Q  Reliable Q  Retransmits");
+		puts("  (Cisco Mean SRTT / Pacing / Flow Timer: not exposed by IPC)");
+	} else if (strcmp(view, "topology") == 0) {
+		struct in_addr address = {.s_addr = htonl(scope->router_id)};
+		char id[INET_ADDRSTRLEN];
+		(void)inet_ntop(AF_INET, &address, id, sizeof(id));
+		printf("EIGRP-%s VR(%s) Topology Table for AS(%u)/ID(%s)\n",
+		       afi, vrf, scope->asn, id);
+		puts("Codes: P - Passive, A - Active, U - Update, Q - Query, R - Reply,");
+		puts("       r - Reply status, s - sia Status");
+		puts("  (U/Q/R/r/s per-prefix flags are not exposed by the current snapshot)");
+	} else if (strcmp(view, "statistics") == 0
+		   || strcmp(view, "traffic") == 0) {
+		printf("EIGRP-%s VR(%s) Address-family Traffic Statistics for AS(%u)\n",
+		       afi, vrf, scope->asn);
+		puts("  (Cisco process IDs and queue depths: not exposed by IPC)");
+	} else if (strcmp(view, "events") == 0) {
+		printf("Event information for AS %u (%s, VRF %s):\n",
+		       scope->asn, afi, vrf);
+	} else if (strcmp(view, "diagnostics") == 0) {
+		printf("EIGRP-%s VR(%s) Diagnostics for AS(%u)\n", afi, vrf,
+		       scope->asn);
+	} else {
+		printf("EIGRP-%s VR(%s) for AS(%u)\n", afi, vrf, scope->asn);
+	}
+}
+
 typedef int (*record_cb)(const struct record *, void *);
 
 static int show_page(const char *page, size_t length, bool json,
-		     record_cb callback, void *arg, size_t *count)
+		     record_cb callback, void *arg, size_t *count,
+		     struct render *render)
 {
 	const char *p = page;
 	const char *end = page + length;
@@ -562,7 +815,7 @@ static int show_page(const char *page, size_t length, bool json,
 		if (json)
 			(void)fwrite(p, 1, (size_t)(newline + 1 - p), stdout);
 		else if (!callback)
-			print_record(rec);
+			print_record(rec, render);
 		(*count)++;
 		p = newline + 1;
 	}
@@ -570,8 +823,9 @@ static int show_page(const char *page, size_t length, bool json,
 	return rc;
 }
 
-static int query(const struct options *opts, uint16_t op,
-		 const struct scope *scope, record_cb callback, void *arg)
+static int query_internal(const struct options *opts, uint16_t op,
+			  const struct scope *scope, record_cb callback,
+			  void *arg, struct render *render)
 {
 	char page[EIGRP_LINUX_MGNT_RESPONSE_MAX];
 	uint32_t offset = 0;
@@ -592,7 +846,7 @@ static int query(const struct options *opts, uint16_t op,
 			if (opts->json)
 				(void)fwrite(page, 1, identity_size, stdout);
 			else
-				print_record(&identity);
+				print_record(&identity, render);
 			rc = 0;
 			goto done;
 		}
@@ -601,7 +855,7 @@ static int query(const struct options *opts, uint16_t op,
 		if (exchange(fd, op, scope, offset, page, &size, &more) != 0)
 			goto done;
 		if (show_page(page, size, opts->json && !callback, callback,
-			      arg, &count)
+			      arg, &count, render)
 		    != 0)
 			goto done;
 		if (more && (!count || offset + count > OECTL_OFFSET_MAX)) {
@@ -618,6 +872,12 @@ static int query(const struct options *opts, uint16_t op,
 done:
 	close(fd);
 	return rc;
+}
+
+static int query(const struct options *opts, uint16_t op,
+		 const struct scope *scope, record_cb callback, void *arg)
+{
+	return query_internal(opts, op, scope, callback, arg, NULL);
 }
 
 struct scopes {
@@ -644,6 +904,8 @@ static int collect_scope(const struct record *rec, void *arg)
 		return 0;
 	if (opts->asn_set && asn != opts->asn)
 		return 0;
+	if (opts->vrf_name && strcmp(vrf, opts->vrf_name) != 0)
+		return 0;
 	if (strcmp(vrf, "default") != 0) {
 		list->skipped = true;
 		return 0;
@@ -653,36 +915,104 @@ static int collect_scope(const struct record *rec, void *arg)
 			"oectl: too many protocol instances to select\n");
 		return -1;
 	}
-	list->items[list->count++] =
+	list->items[list->count] =
 		(struct scope){.afi = (uint16_t)afi, .asn = (uint16_t)asn};
+	(void)snprintf(list->items[list->count].vrf_name,
+		       sizeof(list->items[list->count].vrf_name), "%s", vrf);
+	(void)number(field(rec, "router_id"), UINT32_MAX,
+		     &list->items[list->count].router_id);
+	list->count++;
 	return 0;
 }
 
-static int select_scope(const struct options *opts, struct scope *selected)
+static int select_scopes(const struct options *opts, struct scopes *list)
 {
-	struct scopes list = {.opts = opts};
-
-	if (opts->asn_set && opts->afi_set) {
-		*selected = (struct scope){
+	list->opts = opts;
+	if (opts->vrf_set && opts->vrf != 0) {
+		if (!opts->asn_set || !opts->afi_set) {
+			fprintf(stderr,
+				"oectl: nondefault VRF ID requires explicit AFI and ASN\n");
+			return -1;
+		}
+		list->items[0] = (struct scope){
 			.afi = opts->afi, .asn = opts->asn, .vrf = opts->vrf};
+		(void)snprintf(list->items[0].vrf_name,
+			       sizeof(list->items[0].vrf_name), "ID %u",
+			       opts->vrf);
+		list->count = 1;
 		return 0;
 	}
-	if (opts->vrf_set && opts->vrf != 0) {
-		fprintf(stderr,
-			"oectl: nondefault VRF requires --asn and --afi\n");
-		return -1;
-	}
-	if (query(opts, EIGRP_LINUX_MGNT_PROTOCOLS, NULL, collect_scope, &list)
+	if (query(opts, EIGRP_LINUX_MGNT_PROTOCOLS, NULL, collect_scope, list)
 	    != 0)
 		return -1;
-	if (list.count != 1) {
-		fprintf(stderr, "oectl: %s; specify --asn and --afi\n",
-			list.count
-				? "multiple matching instances"
-				: "no matching running default-VRF instance");
+	if (!list->count) {
+		fprintf(stderr, "oectl: no matching running EIGRP instance\n");
 		return -1;
 	}
-	*selected = list.items[0];
+	if (list->skipped)
+		fprintf(stderr,
+			"oectl: nondefault VRFs omitted (native Linux VRF resolution is unavailable)\n");
+	return 0;
+}
+
+/* Clear payloads are validated on both sides of the socket. A target of a
+ * different address family is skipped when the caller omitted the AFI. */
+static int clear_target(struct scope *scope, uint16_t op, const char *target,
+			bool soft)
+{
+	uint8_t bytes[16] = {0};
+	char address[INET6_ADDRSTRLEN + 8];
+	const char *slash;
+	uint32_t prefix_length;
+	size_t length;
+	int af = scope->afi == 4 ? AF_INET : AF_INET6;
+
+	memset(scope->target, 0, sizeof(scope->target));
+	if (op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS)
+		scope->target[1] = soft ? 1 : 0;
+	if (!target)
+		return 0;
+	if (op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS) {
+		if (inet_pton(af, target, bytes) == 1) {
+			scope->target[0] = 2;
+			memcpy(scope->target + 4, bytes,
+			       scope->afi == 4 ? 4 : 16);
+			return 0;
+		}
+		/* A valid address of the other family does not name an
+		 * interface. */
+		if (inet_pton(scope->afi == 4 ? AF_INET6 : AF_INET, target,
+			      bytes)
+		    == 1)
+			return 1;
+		length = strlen(target);
+		if (length == 0 || length >= 64 || strchr(target, '/'))
+			return -1;
+		scope->target[0] = 1;
+		memcpy(scope->target + 4, target, length);
+		return 0;
+	}
+	slash = strchr(target, '/');
+	if (!slash || strchr(slash + 1, '/'))
+		return -1;
+	length = (size_t)(slash - target);
+	if (!length || length >= sizeof(address)
+	    || !number(slash + 1, 128, &prefix_length))
+		return -1;
+	memcpy(address, target, length);
+	address[length] = 0;
+	if (inet_pton(af, address, bytes) != 1) {
+		if (inet_pton(scope->afi == 4 ? AF_INET6 : AF_INET, address,
+			      bytes)
+		    == 1)
+			return 1;
+		return -1;
+	}
+	if (prefix_length > (scope->afi == 4 ? 32U : 128U))
+		return -1;
+	scope->target[0] = 2;
+	scope->target[2] = (uint8_t)prefix_length;
+	memcpy(scope->target + 4, bytes, scope->afi == 4 ? 4 : 16);
 	return 0;
 }
 
@@ -765,6 +1095,8 @@ static const struct view views[] = {
 	{"traffic", EIGRP_LINUX_MGNT_TRAFFIC},
 	{"events", EIGRP_LINUX_MGNT_EVENTS},
 	{"diagnostics", EIGRP_LINUX_MGNT_DIAGNOSTICS},
+	{"version", 0},
+	{"tech-support", 0},
 };
 
 /* Human-readable component inventory, sourced only from daemon status. */
@@ -841,19 +1173,8 @@ static int tech_support(const struct options *opts)
 		puts("\n=== Protocols ===");
 	if (query(opts, EIGRP_LINUX_MGNT_PROTOCOLS, NULL, NULL, NULL) != 0)
 		return 1;
-	if (opts->asn_set || opts->afi_set || opts->vrf_set) {
-		struct scope scope;
-		if (select_scope(opts, &scope) != 0)
-			return 1;
-		list.items[list.count++] = scope;
-	} else if (query(opts, EIGRP_LINUX_MGNT_PROTOCOLS, NULL, collect_scope,
-			 &list)
-		   != 0) {
+	if (select_scopes(opts, &list) != 0)
 		return 1;
-	}
-	if (list.skipped)
-		fprintf(stderr,
-			"oectl: nondefault VRFs omitted; specify --asn, --afi, --vrf-id\n");
 	for (i = 0; i < list.count; ++i) {
 		struct scope *scope = &list.items[i];
 		if (opts->json)
@@ -861,13 +1182,21 @@ static int tech_support(const struct options *opts)
 			       "\"vrf_id\":%u}\n",
 			       scope->asn, scope->afi, scope->vrf);
 		for (j = 2; j < sizeof(views) / sizeof(views[0]); ++j) {
-			if (strcmp(views[j].name, "traffic") == 0)
+			if (strcmp(views[j].name, "traffic") == 0
+			    || (!opts->json
+				&& strcmp(views[j].name, "routes") == 0)
+			    || views[j].op == 0)
 				continue;
 			if (!opts->json)
 				printf("\n=== %s (AS %u, IPv%u, VRF ID %u) ===\n",
 				       views[j].name, scope->asn, scope->afi,
 				       scope->vrf);
-			if (query(opts, views[j].op, scope, NULL, NULL) != 0)
+			struct render render = {.view = views[j].name};
+			if (!opts->json)
+				print_heading(scope, views[j].name);
+			if (query_internal(opts, views[j].op, scope, NULL, NULL,
+					   opts->json ? NULL : &render)
+			    != 0)
 				errors++;
 		}
 	}
@@ -876,15 +1205,25 @@ static int tech_support(const struct options *opts)
 
 int main(int argc, char **argv)
 {
+	static const char *const actions[] = {"show", "clear"};
+	static const char *const families[] = {"ipv4", "ipv6"};
+	static const char *const scopes[] = {"address-family", "vrf"};
+	static const char *const extras[] = {"detail", "soft", "all-links"};
 	struct options opts = {.socket = OECTL_SOCKET};
-	const char *command[3] = {0};
-	struct scope scope;
+	const char *words[12] = {0};
+	struct scopes list = {0};
 	uint32_t value;
-	size_t words = 0, i;
+	size_t used = 0, cursor = 0, i;
+	int action, view = -1, extra;
 	uint16_t op = 0;
-	bool scoped;
 	bool version_requested = false;
-	int result;
+	const char *interface_name = NULL;
+	const char *target = NULL;
+	bool detail = false;
+	bool all_links = false;
+	bool soft = false;
+	int errors = 0;
+	size_t attempted = 0;
 
 	for (i = 1; i < (size_t)argc; i++) {
 		const char *arg = argv[i];
@@ -893,7 +1232,6 @@ int main(int argc, char **argv)
 			return 0;
 		}
 		if (strcmp(arg, "--version") == 0) {
-			/* Parse all options before choosing output format. */
 			version_requested = true;
 			continue;
 		}
@@ -902,7 +1240,9 @@ int main(int argc, char **argv)
 			continue;
 		}
 		if (strcmp(arg, "-4") == 0 || strcmp(arg, "-6") == 0) {
-			value = arg[1] - '0';
+			value = (uint32_t)(arg[1] - '0');
+			if (opts.afi_set && opts.afi != value)
+				goto conflicting_scope;
 			opts.afi = (uint16_t)value;
 			opts.afi_set = true;
 			continue;
@@ -931,6 +1271,8 @@ int main(int argc, char **argv)
 				return 2;
 			}
 			if (strcmp(arg, "--vrf-id") == 0) {
+				if (opts.vrf_set && opts.vrf != value)
+					goto conflicting_scope;
 				opts.vrf = value;
 				opts.vrf_set = true;
 			} else if (strcmp(arg, "--afi") == 0) {
@@ -939,9 +1281,13 @@ int main(int argc, char **argv)
 						"oectl: AFI must be 4 or 6\n");
 					return 2;
 				}
+				if (opts.afi_set && opts.afi != value)
+					goto conflicting_scope;
 				opts.afi = (uint16_t)value;
 				opts.afi_set = true;
 			} else {
+				if (opts.asn_set && opts.asn != value)
+					goto conflicting_scope;
 				opts.asn = (uint16_t)value;
 				opts.asn_set = true;
 			}
@@ -951,14 +1297,14 @@ int main(int argc, char **argv)
 			fprintf(stderr, "oectl: unknown option %s\n", arg);
 			return 2;
 		}
-		if (words == sizeof(command) / sizeof(command[0])) {
+		if (used == sizeof(words) / sizeof(words[0])) {
 			fprintf(stderr, "oectl: too many command words\n");
 			return 2;
 		}
-		command[words++] = arg;
+		words[used++] = arg;
 	}
 	if (version_requested) {
-		if (words != 0) {
+		if (used) {
 			fprintf(stderr,
 				"oectl: --version does not take a command\n");
 			return 2;
@@ -966,49 +1312,243 @@ int main(int argc, char **argv)
 		print_version(opts.json);
 		return 0;
 	}
-	if (words == 1 && strcmp(command[0], "help") == 0) {
+	if (used == 1 && strcmp(words[0], "help") == 0) {
 		usage(stdout);
 		return 0;
 	}
-	if (words == 1 && strcmp(command[0], "version") == 0) {
+	if (used == 1 && strcmp(words[0], "version") == 0) {
 		print_version(opts.json);
 		return 0;
 	}
-	if ((words == 2 && strcmp(command[0], "show") == 0
-	     && strcmp(command[1], "tech-support") == 0)
-	    || (words == 1 && strcmp(command[0], "tech-support") == 0))
+	if (used == 1 && strcmp(words[0], "tech-support") == 0)
 		return tech_support(&opts);
-	if (words == 2 && strcmp(command[0], "show") == 0
-	    && strcmp(command[1], "version") == 0) {
-		return show_version(&opts) == 0 ? 0 : 1;
+	if (!used || (action = keyword(words[0], actions, 2)) < 0) {
+		fprintf(stderr, "oectl: unsupported or ambiguous command\n");
+		return 2;
 	}
-	if (words == 2 && strcmp(command[0], "clear") == 0
-	    && strcmp(command[1], "events") == 0) {
-		op = EIGRP_LINUX_MGNT_CLEAR_EVENTS;
-	} else if (words == 2 && strcmp(command[0], "show") == 0) {
-		for (i = 0; i < sizeof(views) / sizeof(views[0]); ++i)
-			if (strcmp(command[1], views[i].name) == 0) {
-				op = views[i].op;
-				break;
+	cursor = 1;
+	if (cursor < used && keyword(words[cursor], scopes, 2) == 0) {
+		int family;
+		cursor++;
+		if (cursor == used
+		    || (family = keyword(words[cursor++], families, 2)) < 0) {
+			fprintf(stderr,
+				"oectl: expected address-family ipv4|ipv6\n");
+			return 2;
+		}
+		value = family == 0 ? 4 : 6;
+		if (opts.afi_set && opts.afi != value)
+			goto conflicting_scope;
+		opts.afi_set = true;
+		opts.afi = (uint16_t)value;
+		if (cursor < used && keyword(words[cursor], scopes, 2) == 1) {
+			cursor++;
+			if (cursor == used || opts.vrf_set) {
+				fprintf(stderr,
+					"oectl: missing or conflicting VRF name\n");
+				return 2;
 			}
+			opts.vrf_name = words[cursor++];
+		}
 	}
-	if (!op) {
-		fprintf(stderr,
-			"oectl: unsupported command; use 'oectl help'\n");
+	if (cursor < used && number(words[cursor], UINT16_MAX, &value)) {
+		if (!value) {
+			fprintf(stderr, "oectl: ASN must be nonzero\n");
+			return 2;
+		}
+		if (opts.asn_set && opts.asn != value)
+			goto conflicting_scope;
+		opts.asn_set = true;
+		opts.asn = (uint16_t)value;
+		cursor++;
+	}
+	if (cursor == used) {
+		fprintf(stderr, "oectl: missing show view or clear target\n");
 		return 2;
 	}
-	scoped = op >= EIGRP_LINUX_MGNT_NEIGHBORS;
-	if (!scoped && (opts.asn_set || opts.afi_set || opts.vrf_set)) {
-		fprintf(stderr,
-			"oectl: scope options are not valid for this view\n");
+	if (action == 0) {
+		if (strcasecmp(words[cursor], "routes") == 0) {
+			fprintf(stderr,
+				"oectl: routes belong to the host RIB, not the EIGRP topology; use 'ip route'\n");
+			return 2;
+		}
+		for (i = 0; i < sizeof(views) / sizeof(views[0]); ++i) {
+			if (strcmp(views[i].name, "routes") == 0)
+				continue;
+			if (strncasecmp(words[cursor], views[i].name,
+					strlen(words[cursor]))
+			    == 0) {
+				if (view >= 0) {
+					fprintf(stderr,
+						"oectl: ambiguous show view %s\n",
+						words[cursor]);
+					return 2;
+				}
+				view = (int)i;
+			}
+		}
+		if (view < 0) {
+			fprintf(stderr, "oectl: unsupported show view %s\n",
+				words[cursor]);
+			return 2;
+		}
+		op = views[view].op;
+		if (op == 0) {
+			if (cursor + 1 != used) {
+				fprintf(stderr,
+					"oectl: unexpected arguments for %s\n",
+					views[view].name);
+				return 2;
+			}
+			if (strcmp(views[view].name, "version") == 0)
+				return show_version(&opts) == 0 ? 0 : 1;
+			return tech_support(&opts);
+		}
+	} else {
+		static const char *const targets[] = {"events", "neighbors",
+						      "topology"};
+		int target = keyword(words[cursor], targets, 3);
+		if (target < 0) {
+			fprintf(stderr,
+				"oectl: unsupported or ambiguous clear target %s\n",
+				words[cursor]);
+			return 2;
+		}
+		op = target == 0   ? EIGRP_LINUX_MGNT_CLEAR_EVENTS
+		     : target == 1 ? EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+				   : EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY;
+	}
+	cursor++;
+	if (cursor < used) {
+		extra = keyword(words[cursor], extras, 3);
+		if (action == 0 && extra == 0) {
+			detail = true;
+			cursor++;
+		} else if (action == 0 && op == EIGRP_LINUX_MGNT_TOPOLOGY
+			   && extra == 2) {
+			all_links = true;
+			cursor++;
+		} else if (action == 1 && op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+			   && extra == 1) {
+			soft = true;
+			cursor++;
+		} else if (extra == -2) {
+			fprintf(stderr, "oectl: ambiguous view modifier %s\n",
+				words[cursor]);
+			return 2;
+		}
+	}
+	if (cursor < used) {
+		if (action == 0) {
+			if ((op != EIGRP_LINUX_MGNT_NEIGHBORS
+			     && op != EIGRP_LINUX_MGNT_INTERFACES
+			     && op != EIGRP_LINUX_MGNT_TOPOLOGY)
+			    || cursor + 1 != used) {
+				fprintf(stderr,
+					"oectl: unsupported command arguments\n");
+				return 2;
+			}
+			interface_name = words[cursor++];
+		} else {
+			if (op == EIGRP_LINUX_MGNT_CLEAR_EVENTS) {
+				fprintf(stderr,
+					"oectl: clear events takes no target\n");
+				return 2;
+			}
+			target = words[cursor++];
+			if (cursor < used
+			    && op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+			    && keyword(words[cursor], extras, 3) == 1) {
+				soft = true;
+				cursor++;
+			}
+			if (cursor != used) {
+				fprintf(stderr,
+					"oectl: unsupported clear arguments\n");
+				return 2;
+			}
+		}
+	}
+	if (detail && op != EIGRP_LINUX_MGNT_NEIGHBORS
+	    && op != EIGRP_LINUX_MGNT_INTERFACES) {
+		fprintf(stderr, "oectl: detail is unsupported for this view\n");
 		return 2;
 	}
-	if (scoped && select_scope(&opts, &scope) != 0)
+	if (opts.json && (detail || interface_name)) {
+		fprintf(stderr,
+			"oectl: detail and interface filters do not support --json yet\n");
+		return 2;
+	}
+	if (op <= EIGRP_LINUX_MGNT_PROTOCOLS) {
+		if (opts.asn_set || opts.afi_set || opts.vrf_set
+		    || opts.vrf_name) {
+			fprintf(stderr,
+				"oectl: scope options are not valid for this view\n");
+			return 2;
+		}
+		return query(&opts, op, NULL, NULL, NULL) == 0 ? 0 : 1;
+	}
+	if (select_scopes(&opts, &list) != 0)
 		return 1;
-	result = query(&opts, op, scoped ? &scope : NULL, NULL, NULL);
-	if (result != 0)
+	for (i = 0; i < list.count; ++i) {
+		int target_result;
+		struct render render = {
+			.view = action == 0 ? views[view].name : "events",
+			.interface_name = op == EIGRP_LINUX_MGNT_TOPOLOGY
+						  ? NULL
+						  : interface_name,
+			.prefix = op == EIGRP_LINUX_MGNT_TOPOLOGY
+					  ? interface_name
+					  : NULL,
+			.detail = detail,
+			.all_links = all_links};
+		if (action == 1 && op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS) {
+			target_result =
+				clear_target(&list.items[i], op, target, soft);
+			if (target_result == 1)
+				continue;
+			if (target_result < 0) {
+				fprintf(stderr,
+					"oectl: invalid clear target %s\n",
+					target);
+				return 2;
+			}
+		}
+		if (action == 1)
+			attempted++;
+		if (action == 0 && !opts.json) {
+			if (i)
+				putchar('\n');
+			print_heading(&list.items[i], render.view);
+		}
+		if (query_internal(&opts, op, &list.items[i], NULL, NULL,
+				   opts.json ? NULL : &render)
+		    != 0) {
+			errors++;
+			continue;
+		}
+		if (action == 0 && interface_name && !opts.json
+		    && !render.printed)
+			printf("%% %s not found: %s\n",
+			       op == EIGRP_LINUX_MGNT_TOPOLOGY ? "Network"
+							       : "Interface",
+			       interface_name);
+		if (action == 1 && !opts.json)
+			printf("%s cleared for %s AS %u VRF %s.\n",
+			       op == EIGRP_LINUX_MGNT_CLEAR_EVENTS ? "Events"
+			       : op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+				       ? "Neighbors"
+				       : "Topology",
+			       list.items[i].afi == 4 ? "IPv4" : "IPv6",
+			       list.items[i].asn, list.items[i].vrf_name);
+	}
+	if (action == 1 && !attempted) {
+		fprintf(stderr,
+			"oectl: no selected address family matches clear target\n");
 		return 1;
-	if (op == EIGRP_LINUX_MGNT_CLEAR_EVENTS && !opts.json)
-		puts("Events cleared.");
-	return 0;
+	}
+	return errors ? 1 : 0;
+conflicting_scope:
+	fprintf(stderr, "oectl: conflicting address-family/AS/VRF selectors\n");
+	return 2;
 }

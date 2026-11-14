@@ -2397,15 +2397,22 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 			continue;
 
 		memset(&route_state, 0, sizeof(route_state));
+		route_state.external = eigrp_topology_route_external(route);
+		route_state.redistributed =
+			route_state.external
+			&& route->adv_router == runtime->neighbor_self;
 		route_state.connected =
-			route->adv_router == runtime->neighbor_self;
+			!route_state.external
+			&& route->adv_router == runtime->neighbor_self;
 		route_state.successor = successor;
 		route_state.feasible_successor = feasible;
 		route_state.distance = route->distance;
 		route_state.reported_distance = route->reported_distance;
+		route_state.total_metric = route->total_metric;
+		route_state.reported_metric = route->reported_metric;
 		route_state.interface_name =
 			route->ei ? eigrp_intf_name_string(route->ei) : NULL;
-		if (!route_state.connected)
+		if (!route_state.connected && !route_state.redistributed)
 			eigrp_route_nexthop_export(route, &route_state);
 
 		result = route_callback(&route_state, arg);

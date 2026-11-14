@@ -136,6 +136,7 @@ for arch in $archs; do
             mkdir -p /work/eigrp /work/libunix /work/linux /work/tools
             cp -a /src/Makefile /work/Makefile
             cp -a /src/tools/build-version.sh /work/tools/build-version.sh
+            cp -a /src/tools/gen-version.py /work/tools/gen-version.py
             cp -a /src/eigrp/code /work/eigrp/code
             cp -a /src/libunix/code /work/libunix/code
             cp -a /src/linux/Makefile /work/linux/Makefile

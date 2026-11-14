@@ -1,17 +1,24 @@
-.Dd November 11, 2026
+.Dd November 13, 2026
 .Dt OECTL 8
 .Os
 .Sh NAME
 .Nm oectl
-.Nd inspect and administer a native OpenEIGRP daemon
+.Nd inspect and administer the native OpenEIGRP daemon
 .Sh SYNOPSIS
 .Nm
 .Op Ar options
 .Cm show
+.Op Cm address-family Ar ipv4|ipv6 Op Cm vrf Ar name
+.Op Ar asn
 .Ar view
+.Op Ar arguments
 .Nm
 .Op Ar options
-.Cm clear events
+.Cm clear
+.Op Cm address-family Ar ipv4|ipv6 Op Cm vrf Ar name
+.Op Ar asn
+.Ar target
+.Op Ar arguments
 .Nm
 .Op Ar options
 .Cm version
@@ -21,147 +28,131 @@
 .Nm
 is a noninteractive client for
 .Xr openeigrpd 8 .
-It sends versioned, bounded requests to the local Unix management socket.
-It never reads private EIGRP topology objects or the Linux kernel route
-table directly.
-Most commands report the daemon's current operational state;
-.Cm clear events
-is the only supported mutating command.
+It sends bounded, versioned requests to the local Unix management socket.
+The text renderer uses Cisco IOS/IOS XE style headings and column layouts
+where portable management snapshots contain the required data.
+Missing host/Cisco-specific fields are identified rather than fabricated.
+The machine-readable JSON records are unchanged.
 .Sh COMMANDS
 .Bl -tag -width Ds
+.It Cm show version
+Show the client, host, and portable-component version inventory.
 .It Cm show capabilities
-Report portable release and available protocol capabilities.
+Report protocol release and supported capabilities.
 .It Cm show protocols
 List configured EIGRP instances and runtime status.
-.It Cm show neighbors
-Report neighbor state, hold time, queues, retransmissions and uptime.
-.It Cm show interfaces
-Report interface EIGRP settings and operational counters.
-.It Cm show topology
-Report DUAL prefix and path state.
-.It Cm show routes
-Report successors and feasible paths from the portable topology view.
-This is
-.Em not
-a dump of the Linux kernel RIB.
+.It Cm show neighbors Op Cm detail Op Ar interface
+Show neighbors and their hold time, uptime, queues, SRTT, RTO and sequence numbers.
+.It Cm show interfaces Op Cm detail Op Ar interface
+Show EIGRP interface settings, peer counts, and operational counters.
+.It Cm show topology Op Cm all-links | Ar prefix
+Show DUAL prefixes and paths. The default human-readable view selects
+successor and feasible-successor paths; all-links includes the other paths.
 .It Cm show statistics
-Report portable traffic counters.
-.Cm show traffic
+Show portable traffic counters.
+.Cm traffic
 is an alias.
 .It Cm show events
-Report event-log summary and entries.
+Show event-log summary and entries.
 .It Cm show diagnostics
-Report feature capabilities, debug state and timer records.
+Show feature capability, debug and timer records.
 .It Cm show tech-support
-Collect the same client, host, and portable version sections as
-.Cm show version ,
-followed by the protocol list and available scoped read-only views.
+Collect version, protocol inventory and available scoped read-only views.
 .Cm tech-support
 is an alias.
-The unscoped form includes running default-VRF instances.
 .It Cm clear events
-Clear the event log for one running instance.
-Requires root or the daemon startup UID.
+Reset the event history of matching instances.
+.It Cm clear neighbors Op Ar interface|address Op Cm soft
+Reset EIGRP neighbor adjacencies using the portable administrative API.
+A soft clear may preserve an adjacency, as determined by the portable core.
+.It Cm clear topology Op Ar prefix
+Clear all topology entries or one selected prefix through the portable core.
 .It Cm version
-Show local integration release, OS, distribution, kernel, architecture
-and IPC protocol version without connecting to a daemon.
-.It Cm show version
-Show client and host versions and an aligned portable component inventory.
-Component status is read from the daemon, not inferred from the client binary.
-The local
-.Cm version
-command does not require a running daemon.
+Show local integration release, OS, kernel and IPC version without a daemon.
 .It Cm help
-Print command usage.
+Print usage.
 .El
+.Sh INSTANCE SELECTION
+An omitted autonomous-system number selects every matching AS.
+An omitted address-family selects both IPv4 and IPv6.
+When neither is given, all running default-VRF address families are selected.
+Command keywords allow unambiguous leading abbreviations such as
+.Cm show addr ipv4 topo .
+Ambiguous abbreviations return an error; names and addresses are not
+abbreviated.
+The
+.Cm vrf default
+selector is supported.
+Other named Linux VRFs cannot currently be resolved through the native
+control interface and are rejected; an explicit numeric nondefault
+.Fl -vrf-id
+requires both ASN and AFI.
 .Sh OPTIONS
 .Bl -tag -width Ds
 .It Fl s Ar path , Fl -socket Ar path
 Unix management socket; default
 .Pa /run/openeigrpd/control.sock .
 .It Fl a Ar asn , Fl -asn Ar asn
-EIGRP autonomous system number from 1 to 65535.
-.It Fl 4
-Select IPv4.
-.It Fl 6
-Select IPv6.
+Filter to autonomous system 1 through 65535.
+.It Fl 4 , Fl 6
+Select IPv4 or IPv6.
 .It Fl -afi Ar 4|6
-Select IPv4 or IPv6 using an explicit family number.
+Select an address family numerically.
 .It Fl -vrf-id Ar number
-Numeric runtime VRF ID; default 0.
-A nondefault VRF requires explicit ASN and AFI as well.
+Explicit numeric runtime VRF ID; default 0.
 .It Fl -json
-Output newline-delimited JSON records; this is not a single JSON array.
+Emit unmodified newline-delimited JSON records, rather than text output.
+The detail and positional interface/prefix display filters are not available
+in JSON mode.
 .It Fl h , Fl -help
 Print usage.
 .It Fl -version
-Print local version information and exit.
+Print local version and exit.
 .El
-.Sh INSTANCE SELECTION
-A scoped command can omit ASN and AFI only when there is exactly one
-running default-VRF address-family instance to select.
-Otherwise use
-.Fl -asn
-and
-.Fl -afi
-or
-.Fl 4
-or
-.Fl 6 .
-The protocol list exposes VRF names, not the numeric IDs needed to select
-nondefault VRFs; supply
-.Fl -asn ,
-.Fl -afi
-and
-.Fl -vrf-id
-together for these instances.
-The current native configuration only accepts the default VRF.
 .Sh EXAMPLES
-Query an IPv4 AS and obtain machine-readable routes:
 .Bd -literal -offset indent
-oectl show neighbors --asn 4453 --afi 4
-oectl show routes --asn 4453 --afi 4 --json
-.Ed
-.Pp
-Query an IPv6 AS and collect diagnostics:
-.Bd -literal -offset indent
-oectl show interfaces --asn 6473 --afi 6
-oectl show diagnostics --asn 6473 --afi 6
-oectl show tech-support
-.Ed
-.Pp
-Clear only the selected instance's event history:
-.Bd -literal -offset indent
-sudo oectl clear events --asn 4453 --afi 4
+oectl show nei
+oectl show address-family ipv4 4453 topology
+oectl show addr ipv6 topo
+oectl show address-family ipv4 4453 interfaces detail eth0
+oectl show 4453 traffic --json
+sudo oectl clear address-family ipv4 4453 neighbors 192.0.2.2
+sudo oectl clear topology 192.0.2.0/24
+sudo oectl clear events
 .Ed
 .Sh OUTPUT
-Human-readable mode formats the daemon state into headings and view-specific
-fields; JSON mode passes newline-delimited JSON records for consumers that
-process one record at a time.
-Tech-support JSON also includes local integration and scope records.
-The daemon returns no stable cross-page snapshot; routing changes may alter
-subsequent pages.
+Human-readable output is organized per matching EIGRP AF and AS.
+The command is not a Linux kernel RIB viewer; use
+.Xr ip 8
+for host routes.
+A request for
+.Cm show routes
+is rejected explicitly.
+The original machine-readable record format and fields are preserved for
+normal scoped views and technical-support JSON.
+The daemon has no stable cross-page snapshot guarantee; topology changes
+can affect subsequent pages.
 .Sh SECURITY
-The control socket is normally mode 0660, with read-only access via the
+The control socket is normally mode 0660 and belongs to the
 .Sy openeigrpctl
-group.
-The daemon checks peer credentials and permits
-.Cm clear events
-only to root or its startup UID, regardless of socket group membership.
-No interactive configuration, reload, neighbor reset or topology clearing
-operation is exposed.
+access group. Read-only clients require socket access but not root.
+Every
+.Cm clear
+request is authorized separately using peer credentials; only root or
+the daemon startup UID may invoke a modifying operation.
+No interactive configuration or live configuration reload is exposed.
 .Sh LIMITATIONS
-IPC version 1 pages contain at most 32 records and 16 KiB; page offsets
-are bounded at 8192.
-A large topology may therefore produce a pagination error instead of a
-complete output.
-Nondefault VRF numeric IDs cannot be discovered from the protocol list.
+Management IPC version 2 pages contain at most 32 records and 16 KiB.
+Page offsets are bounded at 8192; large topology dumps may therefore
+return a pagination error.
+Named nondefault Linux VRFs and byte-identical Cisco output across other
+host integrations are not supported by this client alone.
 .Sh EXIT STATUS
 .Bl -tag -width Ds
 .It 0
 Success.
 .It 1
-Daemon, socket, authorization, instance selection, or protocol failure.
+Daemon, socket, authorization, instance selection or protocol failure.
 .It 2
 Invalid command line or unsupported command.
 .El

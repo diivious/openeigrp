@@ -5,6 +5,8 @@
 
 import json
 import os
+import re
+import shlex
 from pathlib import Path
 import subprocess
 import tempfile
@@ -67,6 +69,41 @@ class MultiArchitectureBuildTests(unittest.TestCase):
         if not self.record.exists():
             return []
         return [json.loads(line) for line in self.record.read_text().splitlines()]
+
+    def test_staged_version_header(self):
+        """Run the package builder's actual staging commands and Makefile target."""
+        scenario = json.loads((ROOT / "linux/test/uut/package-build-staging.yaml").read_text())
+        self.assertEqual(scenario["schema"], "linux-package-staging-uut/v1")
+        source = BUILDER.read_text()
+        begin = source.index("            mkdir -p /work/eigrp /work/libunix /work/linux /work/tools\n")
+        end = source.index("            cd /work\n", begin)
+        staging = source[begin:end]
+        with tempfile.TemporaryDirectory(prefix="openeigrp-package-staging-") as directory:
+            work = Path(directory) / "work"
+            staging = re.sub(r"/src(?=/)|/work(?=/)",
+                             lambda match: shlex.quote(str(ROOT if match.group() == "/src" else work)),
+                             staging)
+            result = subprocess.run(["/bin/sh", "-eu", "-c", staging],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            code = work / "eigrp/code"
+            for case in scenario["cases"]:
+                with self.subTest(case=case["name"]):
+                    clean = subprocess.run(["make", "-C", str(code), "clean"],
+                                           capture_output=True, text=True)
+                    self.assertEqual(clean.returncode, 0, clean.stderr)
+                    build = subprocess.run(["make", "-C", str(code),
+                                            "eigrp_build_version.h",
+                                            "EIGRP_BUILD_VERSION=" + case["build_version"]],
+                                           capture_output=True, text=True)
+                    self.assertEqual(build.returncode, 0, build.stderr)
+                    header = (code / "eigrp_build_version.h").read_text()
+                    self.assertIn('#define EIGRP_RELEASE "' + case["build_version"] + '"',
+                                  header)
+                    self.assertIn('#define EIGRP_VENDOR_MAJOR ' + str(case["major"]),
+                                  header)
+                    self.assertIn('#define EIGRP_VENDOR_MINOR ' + str(case["minor"]),
+                                  header)
 
     def test_builds_both_isolated_architectures(self):
         result = self.build("--version", "1.2.3")

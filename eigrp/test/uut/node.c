@@ -152,9 +152,10 @@ static eigrp_result_t topo_route_cb(const eigrp_topology_route_state_t *s,
 	char a[INET6_ADDRSTRLEN];
 	(void)arg;
 	addr_text(&s->next_hop, a, sizeof(a));
-	printf("PATH|next_hop=%s|interface=%s|connected=%u|successor=%u|feasible_successor=%u|distance=%llu|reported_distance=%llu\n",
+	printf("PATH|next_hop=%s|interface=%s|connected=%u|redistributed=%u|external=%u|successor=%u|feasible_successor=%u|distance=%llu|reported_distance=%llu\n",
 	       a, s->interface_name ? s->interface_name : "-",
-	       s->connected ? 1 : 0, s->successor ? 1 : 0,
+	       s->connected ? 1 : 0, s->redistributed ? 1 : 0,
+	       s->external ? 1 : 0, s->successor ? 1 : 0,
 	       s->feasible_successor ? 1 : 0, (unsigned long long)s->distance,
 	       (unsigned long long)s->reported_distance);
 	return EIGRP_RESULT_SUCCESS;
@@ -677,6 +678,64 @@ static eigrp_result_t uut_redist_restart_expire(eigrp_instance_t *e, void *arg)
 	return EIGRP_RESULT_SUCCESS;
 }
 
+/* Exercise the actual portable administrative targets on the AF owner.
+ * These UUT commands are testing adapters, not alternate clear semantics. */
+typedef struct uut_clear_args {
+	char target[256];
+	bool soft;
+} uut_clear_args_t;
+
+static eigrp_result_t uut_clear_neighbor(eigrp_instance_t *e, void *arg)
+{
+	const uut_clear_args_t *input = arg;
+	eigrp_nbr_clear_request_t request = {.soft = input->soft};
+	eigrp_address_t address = {.afi = afi};
+	size_t affected = 0;
+
+	if (strcmp(input->target, "all") != 0) {
+		int family = afi == EIGRP_AFI_IPV4 ? AF_INET : AF_INET6;
+		if (inet_pton(family, input->target, address.bytes) == 1)
+			request.address = &address;
+		else
+			request.interface_name = input->target;
+	}
+	return eigrp_nbr_clear(e, &request, NULL, NULL, &affected);
+}
+
+static eigrp_result_t uut_clear_topology(eigrp_instance_t *e, void *arg)
+{
+	const uut_clear_args_t *input = arg;
+	eigrp_topology_clear_request_t request = {0};
+	eigrp_instance_context_t context = {0};
+	eigrp_prefix_t prefix;
+	size_t affected = 0;
+	eigrp_result_t result;
+
+	(void)e;
+	result = eigrp_af_config_context_read(
+		instance_name, afi, EIGRP_UNIX_DEFAULT_VRF_NAME, asn, &context);
+	if (result != EIGRP_RESULT_SUCCESS)
+		return result;
+	if (strcmp(input->target, "all") != 0) {
+		prefix = prefix_parse(input->target);
+		request.destination = &prefix;
+	}
+	return eigrp_topology_clear(&context, &request, &affected);
+}
+
+static eigrp_result_t uut_clear_eventlog(eigrp_instance_t *e, void *arg)
+{
+	eigrp_instance_context_t context = {0};
+	eigrp_result_t result;
+
+	(void)e;
+	(void)arg;
+	result = eigrp_af_config_context_read(
+		instance_name, afi, EIGRP_UNIX_DEFAULT_VRF_NAME, asn, &context);
+	return result == EIGRP_RESULT_SUCCESS ? eigrp_eventlog_clear(&context)
+					      : result;
+}
+
 static void load(const char *path)
 {
 	FILE *f = fopen(path, "r");
@@ -1106,6 +1165,30 @@ int main(int argc, char **argv)
 			printf("RESULT|%d\n",
 			       (int)eigrp_instance_message_call(
 				       runtime, uut_process_stale_timer, NULL));
+			fflush(stdout);
+		} else if (!strcmp(verb, "CLEAR-NBR")
+			   || !strcmp(verb, "CLEAR-TOPO")) {
+			uut_clear_args_t request = {0};
+			unsigned soft = 0;
+			eigrp_result_t result = EIGRP_RESULT_INVALID_ARGUMENT;
+			int count = sscanf(line, "%*s %255s %u", request.target,
+					   &soft);
+			if (count >= 1 && soft <= 1
+			    && (count == 1 || !strcmp(verb, "CLEAR-NBR"))) {
+				request.soft = soft != 0;
+				result = eigrp_instance_message_call(
+					runtime,
+					!strcmp(verb, "CLEAR-NBR")
+						? uut_clear_neighbor
+						: uut_clear_topology,
+					&request);
+			}
+			printf("RESULT|%d\n", (int)result);
+			fflush(stdout);
+		} else if (!strcmp(verb, "CLEAR-EVENTS")) {
+			printf("RESULT|%d\n",
+			       (int)eigrp_instance_message_call(
+				       runtime, uut_clear_eventlog, NULL));
 			fflush(stdout);
 		} else if (!strcmp(verb, "PROCESS-LIMIT-CLEAR")) {
 			printf("RESULT|%d\n",

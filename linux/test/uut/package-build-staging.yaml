@@ -1,0 +1,17 @@
+{
+  "schema": "linux-package-staging-uut/v1",
+  "cases": [
+    {
+      "name": "developer-identity",
+      "build_version": "testdev-1.2.3-dev",
+      "major": 1,
+      "minor": 2
+    },
+    {
+      "name": "release-identity",
+      "build_version": "1.2.3",
+      "major": 1,
+      "minor": 2
+    }
+  ]
+}

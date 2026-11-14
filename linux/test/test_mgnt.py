@@ -6,6 +6,7 @@
 import concurrent.futures
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -50,7 +51,10 @@ def get_reply(sock):
     return op, status, flags, [json.loads(s) for s in content.splitlines()]
 
 
-def identify(conn, release=b"development"):
+def identify(conn, release=None):
+    if release is None:
+        header = (ROOT / "eigrp/code/eigrp_build_version.h").read_text()
+        release = re.search(r'#define EIGRP_RELEASE "([^"]+)"', header).group(1).encode()
     conn.sendall(frame(11, release.ljust(128, b"\x00")))
     return get_reply(conn)
 
@@ -150,7 +154,9 @@ class LinuxManagementTests(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertEqual(rows[0]["kind"], "identity")
             self.assertEqual(rows[0]["daemon"], "openeigrpd")
-            self.assertEqual(rows[0]["release"], "development")
+            self.assertEqual(rows[0]["release"],
+                             re.search(r'#define EIGRP_RELEASE "([^"]+)"',
+                                       (ROOT / "eigrp/code/eigrp_build_version.h").read_text()).group(1))
             self.assertEqual(rows[0]["os"], "Linux")
             conn.sendall(frame(1))
             self.assertEqual(get_reply(conn)[1], 0)
@@ -212,13 +218,18 @@ class LinuxManagementTests(unittest.TestCase):
 
     def test_authorization_and_live_clear_semantic(self):
         if os.geteuid() == 0:
-            child = '''import os, socket, struct, sys
+            release = re.search(r'#define EIGRP_RELEASE "([^"]+)"',
+                                (ROOT / "eigrp/code/eigrp_build_version.h").read_text()).group(1).encode()
+            child = f'''import os, socket, struct, sys
 s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect(sys.argv[1]);
 p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,2,op,0,0,len(b))+b
 body=struct.pack("!HHIHHI",4,4453,0,0,0,0)
-s.sendall(p(11,b"development".ljust(128,bytes(1))));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
+s.sendall(p(11,{release}.ljust(128,bytes(1))));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
 s.sendall(p(8,body));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
-s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
+for op, data in ((10, body), (12, body + bytes(128)),
+                 (13, body + bytes(128))):
+    s.sendall(p(op,data));h=s.recv(16)
+    print(struct.unpack("!IHHHHI",h)[3])
 '''
             def readonly():
                 os.setgroups([65534])
@@ -228,7 +239,7 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
                                       str(self.path)], preexec_fn=readonly,
                                      text=True, capture_output=True, timeout=4)
             self.assertEqual(checked.returncode, 0, checked.stderr)
-            self.assertEqual(checked.stdout.strip(), "3")
+            self.assertEqual(checked.stdout.strip().splitlines(), ["3", "3", "3"])
         self.assertEqual(talk(self.path, 8)[3][0]["count"], 1)
         self.assertEqual(talk(self.path, 10)[1], 0)
         self.assertEqual(talk(self.path, 8)[3][0]["count"], 0)
@@ -304,6 +315,38 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
                                          stderr=subprocess.PIPE, text=True)
             self.assertEqual(self.proc.stdout.readline(), "READY\n")
             self.assertEqual(talk(self.path, 1)[1], 0)
+
+    def test_real_clear_dispatch_and_target_validation(self):
+        # These operations use the real IPC executor and public-core fixture.
+        target = bytearray(128)
+        target[0] = 2
+        target[4:8] = socket.inet_pton(socket.AF_INET, "192.0.2.2")
+        self.assertEqual(talk(self.path, 12, SELECTOR + target)[1], 0)
+        self.assertFalse(talk(self.path, 3)[3])
+        self.assertEqual(talk(self.path, 12, SELECTOR + target)[1], 0)
+        self.assertTrue(talk(self.path, 5)[3])
+        bad = bytearray(128)
+        bad[0] = 2
+        bad[2] = 32
+        bad[4:8] = socket.inet_pton(socket.AF_INET, "198.51.100.48")
+        self.assertEqual(talk(self.path, 13, SELECTOR + bad)[1], 0)
+        self.assertFalse(talk(self.path, 5)[3])
+
+    def test_malformed_clear_frames_rejected_without_mutation(self):
+        for op, body in (
+            (12, SELECTOR),
+            (13, SELECTOR),
+            (12, SELECTOR + bytes([3]) + bytes(127)),
+            (12, SELECTOR + bytes([1]) + bytes(127)),
+            (12, SELECTOR + bytes([2, 0, 1]) + bytes(125)),
+            (13, SELECTOR + bytes([2, 1, 32]) + bytes(125)),
+            (13, SELECTOR + bytes([2, 0, 33]) + bytes(125)),
+            (12, SELECTOR + bytes([0, 0, 0, 1]) + bytes(124)),
+        ):
+            with self.subTest(op=op, body=body[:20]):
+                self.assertEqual(talk(self.path, op, body)[1], 1)
+        self.assertEqual(talk(self.path, 3)[3][0]["address"], "192.0.2.2")
+        self.assertEqual(talk(self.path, 5)[3][0]["kind"], "prefix")
 
     def test_archive_boundary(self):
         built = subprocess.run(["make", "-C", str(CODE),

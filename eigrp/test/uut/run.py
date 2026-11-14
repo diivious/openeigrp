@@ -211,11 +211,11 @@ def validate_neighbor_assertion(e, where):
 
 ROUTE_ASSERTION_KEYS = {"uut", "prefix", "table", "present", "count", "min_count", "max_count", "timeout",
                         "next_hop", "metric", "distance", "active", "fd", "successors", "interface",
-                        "connected", "successor", "feasible_successor", "rd", "protocol"}
+                        "connected", "redistributed", "external", "successor", "feasible_successor", "rd", "protocol"}
 ROUTE_FIELDS = {
     "rib": {"next_hop", "metric", "distance"},
     "source": {"protocol", "metric"},
-    "path": {"next_hop", "interface", "connected", "successor", "feasible_successor", "distance", "rd"},
+    "path": {"next_hop", "interface", "connected", "redistributed", "external", "successor", "feasible_successor", "distance", "rd"},
     "topology": {"active", "fd", "successors"},
 }
 PACKET_FILTERS = {"uut", "source_uut", "destination_uut", "interface", "source_interface",
@@ -228,6 +228,9 @@ PACKET_GROUP_KEYS = {"source_uut", "destination_uut", "source_interface", "desti
                      "segment", "afi", "opcode", "multicast", "sequence", "auth_sequence", "ack", "cr", "event"}
 STEP_FIELDS = {
     "link-up": {"uut", "interface"}, "link-down": {"uut", "interface"},
+    "clear-neighbors": {"uut", "target", "soft"},
+    "clear-topology": {"uut", "prefix"},
+    "clear-events": {"uut"},
     "peer-limit": {"uut", "interface", "neighbor", "operation"},
     "peer-limit-config": {"uut", "maximum", "warning_only"},
     "redist-limit-config": {"uut", "maximum", "warning_only"},
@@ -336,7 +339,7 @@ def validate_scenario(s):
     if s.get("schema")!=TEST_SCHEMA: raise SpecError(f"scenario schema must be {TEST_SCHEMA}")
     if not isinstance(s.get("topology"),str) or not s["topology"]: raise SpecError("scenario.topology must name its topology YAML")
     if not isinstance(s.get("steps"),list) or not s["steps"]: raise SpecError("scenario.steps must be a non-empty list")
-    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-capability","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
+    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-capability","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","clear-neighbors","clear-topology","clear-events","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
     marks=set()
     for idx,step in enumerate(s["steps"],1):
         if not isinstance(step,dict) or len(step)!=1: raise SpecError(f"step {idx}: exactly one operation required")
@@ -399,7 +402,9 @@ def validate_scenario(s):
         elif op in STEP_FIELDS:
             if not isinstance(arg,dict): raise SpecError(f"{where}: must be a mapping")
             check_keys(arg,STEP_FIELDS[op],where)
-            needed={"link-up":("uut","interface"),"link-down":("uut","interface"),
+            needed={"clear-neighbors":("uut",), "clear-topology":("uut",),
+                    "clear-events":("uut",),
+                    "link-up":("uut","interface"),"link-down":("uut","interface"),
                     "peer-limit":("uut","interface","neighbor","operation"),
                     "peer-limit-config":("uut","maximum"),
                     "redist-limit-config":("uut","maximum"),
@@ -414,6 +419,16 @@ def validate_scenario(s):
                     "validate-event":("uut","contains"),
                     "validate-log":("uut","contains")}.get(op,())
             if any(k not in arg for k in needed): raise SpecError(f"{where}: missing required fields {needed}")
+            if op == "clear-neighbors":
+                target = arg.get("target", "all")
+                if not isinstance(target, str) or not target or any(c.isspace() for c in target):
+                    raise SpecError(f"{where}: invalid neighbor clear target")
+                if "soft" in arg and type(arg["soft"]) is not bool:
+                    raise SpecError(f"{where}: soft must be boolean")
+            if op == "clear-topology" and "prefix" in arg:
+                try: ipaddress.ip_network(arg["prefix"], strict=False)
+                except (ValueError, TypeError) as exc:
+                    raise SpecError(f"{where}: invalid clear prefix") from exc
             if op == "redistribute-add" and "seed" in arg and type(arg["seed"]) is not bool:
                 raise SpecError(f"{where}: seed must be boolean")
             if op in ("redistribute-metric", "default-metric"):
@@ -560,7 +575,7 @@ class Node:
             elif typ=="ACCOUNT": st["accounting"].append({"address":kv["address"],"interface":kv["interface"],"status":kv["status"],"prefix_count":int(kv["prefix_count"]),"restart_count":int(kv["restart_count"]),"restart_active":int(kv["restart_seconds"])>0,"reset_active":int(kv["reset_seconds"])>0})
             elif typ=="TOPO":
                 current_prefix=kv["prefix"]; st["topology"].append({"prefix":current_prefix,"active":kv["active"]=="1","fd":int(kv["feasible_distance"]),"successors":int(kv["successors"])})
-            elif typ=="PATH": st["paths"].append({"prefix":current_prefix,"next_hop":kv["next_hop"],"interface":kv["interface"],"connected":kv["connected"]=="1","successor":kv["successor"]=="1","feasible_successor":kv.get("feasible_successor")=="1","distance":int(kv["distance"]),"rd":int(kv["reported_distance"])})
+            elif typ=="PATH": st["paths"].append({"prefix":current_prefix,"next_hop":kv["next_hop"],"interface":kv["interface"],"connected":kv["connected"]=="1","redistributed":kv["redistributed"]=="1","external":kv["external"]=="1","successor":kv["successor"]=="1","feasible_successor":kv.get("feasible_successor")=="1","distance":int(kv["distance"]),"rd":int(kv["reported_distance"])})
             elif typ=="RIB": st["rib"].append({"prefix":kv["prefix"],"next_hop":kv["next_hop"],"metric":int(kv["metric"]),"distance":int(kv["admin_distance"])})
             elif typ=="REDIST-LIMIT": st["redist_limit"]={"state":int(kv["state"]),"restarts":int(kv["restarts"]),"count":int(kv["count"]),"restart_active":kv["restart_active"]=="1","reset_active":kv["reset_active"]=="1", "penalty":int(kv.get("penalty",0))}
             elif typ=="PROCESS-LIMIT": st["process_limit"]={"state":int(kv["state"]),"restarts":int(kv["restarts"]),"count":int(kv["count"]),"restart_active":kv["restart_active"]=="1","reset_active":kv["reset_active"]=="1", "penalty":int(kv.get("penalty",0))}
@@ -576,6 +591,21 @@ class Node:
         result = self.cmd(f"LIMIT {interface} {neighbor} {operation}", timeout=10)
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: peer limit operation failed: {result}")
+
+    def clear_neighbors(self, target="all", soft=False):
+        result = self.cmd(f"CLEAR-NBR {target} {int(soft)}", timeout=10)
+        if result != "RESULT|0":
+            raise RuntimeError(f"{self.name}: neighbor clear failed: {result}")
+
+    def clear_topology(self, prefix="all"):
+        result = self.cmd(f"CLEAR-TOPO {prefix}", timeout=10)
+        if result != "RESULT|0":
+            raise RuntimeError(f"{self.name}: topology clear failed: {result}")
+
+    def clear_events(self):
+        result = self.cmd("CLEAR-EVENTS", timeout=10)
+        if result != "RESULT|0":
+            raise RuntimeError(f"{self.name}: events clear failed: {result}")
 
     def peer_limit_config(self, maximum, warning_only=False):
         result = self.cmd(f"LIMIT-CFG {maximum} {int(warning_only)}", timeout=10)
@@ -812,7 +842,7 @@ class Runner:
         validate_route_assertion(e,"validate-route")
         if st is None: st=self.nodes[e["uut"]].state()
         prefix=str(ipaddress.ip_network(e["prefix"],strict=False)); table=e.get("table","rib"); rows=st["rib"] if table=="rib" else st["source"] if table=="source" else st["paths"] if table=="path" else st["topology"]
-        keys=("next_hop","metric","distance") if table=="rib" else (("active","fd","successors") if table=="topology" else (("next_hop","interface","connected","successor","feasible_successor","distance","rd") if table=="path" else ("protocol","metric")))
+        keys=("next_hop","metric","distance") if table=="rib" else (("active","fd","successors") if table=="topology" else (("next_hop","interface","connected","redistributed","external","successor","feasible_successor","distance","rd") if table=="path" else ("protocol","metric")))
         matches=[r for r in rows if r["prefix"].lower()==prefix.lower() and all(k not in e or r.get(k)==e[k] for k in keys)]
         if not e.get("present",True): return not matches
         if "count" in e: return len(matches)==int(e["count"])
@@ -924,6 +954,13 @@ class Runner:
             for thread in threads: thread.start()
             for thread in threads: thread.join()
             if errors: raise RuntimeError(f"batched link operation failed: {errors}")
+        elif op == "clear-neighbors":
+            self.nodes[arg["uut"]].clear_neighbors(arg.get("target", "all"),
+                                                  arg.get("soft", False))
+        elif op == "clear-topology":
+            self.nodes[arg["uut"]].clear_topology(arg.get("prefix", "all"))
+        elif op == "clear-events":
+            self.nodes[arg["uut"]].clear_events()
         elif op == "peer-limit":
             self.nodes[arg["uut"]].peer_limit(
                 arg["interface"], arg["neighbor"], arg["operation"])

@@ -55,6 +55,7 @@ struct mgnt_response {
 
 struct mgnt_request {
 	uint16_t op;
+	uint8_t target[EIGRP_LINUX_MGNT_TARGET_SIZE];
 	struct mgnt_selector selector;
 	struct mgnt_response response;
 	eigrp_instance_context_t context;
@@ -65,7 +66,8 @@ struct mgnt_client {
 	int fd;
 	uid_t uid;
 	uint8_t input[EIGRP_LINUX_MGNT_HEADER_SIZE
-		      + EIGRP_LINUX_MGNT_IDENTITY_SIZE];
+		      + EIGRP_LINUX_MGNT_SELECTOR_SIZE
+		      + EIGRP_LINUX_MGNT_TARGET_SIZE];
 	size_t have;
 	size_t need;
 	uint8_t output[MGNT_FRAME_MAX];
@@ -504,12 +506,48 @@ static eigrp_result_t mgnt_query_scoped(void *arg)
 	case EIGRP_LINUX_MGNT_CLEAR_EVENTS:
 		result = eigrp_eventlog_clear(context);
 		break;
+	case EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS: {
+		eigrp_nbr_clear_request_t request = {0};
+		eigrp_address_t address = {.afi = req->selector.afi};
+		size_t affected = 0;
+
+		if (req->target[0] == 1)
+			request.interface_name = (const char *)req->target + 4;
+		else if (req->target[0] == 2) {
+			memcpy(address.bytes, req->target + 4,
+			       req->selector.afi == 4 ? 4 : 16);
+			request.address = &address;
+		}
+		request.soft = req->target[1] != 0;
+		result = eigrp_nbr_clear(context->runtime, &request, NULL, NULL,
+					 &affected);
+		break;
+	}
+	case EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY: {
+		eigrp_topology_clear_request_t request = {0};
+		eigrp_prefix_t destination = {
+			.address.afi = req->selector.afi,
+			.prefix_length = req->target[2],
+		};
+		size_t affected = 0;
+
+		if (req->target[0] == 2) {
+			memcpy(destination.address.bytes, req->target + 4,
+			       req->selector.afi == 4 ? 4 : 16);
+			request.destination = &destination;
+		}
+		result = eigrp_topology_clear(context, &request, &affected);
+		break;
+	}
 	default:
 		return EIGRP_RESULT_UNSUPPORTED;
 	}
 	if (r->stopped)
 		return r->too_large ? EIGRP_RESULT_INTERNAL_FAILURE
 				    : EIGRP_RESULT_SUCCESS;
+	if (req->op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+	    || req->op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY)
+		return result;
 	return result == EIGRP_RESULT_NOT_FOUND ? EIGRP_RESULT_SUCCESS : result;
 }
 
@@ -643,9 +681,12 @@ static void mgnt_request(struct mgnt_client *client)
 		       != (op == EIGRP_LINUX_MGNT_IDENTITY
 				   ? EIGRP_LINUX_MGNT_IDENTITY_SIZE
 				   : (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
+						       + (op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+								  ? EIGRP_LINUX_MGNT_TARGET_SIZE
+								  : 0)
 					     : 0))
 	    || op < EIGRP_LINUX_MGNT_CAPABILITIES
-	    || op > EIGRP_LINUX_MGNT_IDENTITY) {
+	    || op > EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY) {
 		mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false, NULL, 0,
 			   true);
 		return;
@@ -682,8 +723,10 @@ static void mgnt_request(struct mgnt_client *client)
 	}
 	/* Socket DAC allows group observers; only the owner and root may
 	 * invoke semantic mutations. Never trust a client-provided UID. */
-	if (op == EIGRP_LINUX_MGNT_CLEAR_EVENTS && client->uid != 0
-	    && client->uid != mgnt.admin_uid) {
+	if ((op == EIGRP_LINUX_MGNT_CLEAR_EVENTS
+	     || op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+	     || op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY)
+	    && client->uid != 0 && client->uid != mgnt.admin_uid) {
 		mgnt_reply(client, op, EIGRP_LINUX_MGNT_DENIED, false, NULL, 0,
 			   false);
 		return;
@@ -708,12 +751,58 @@ static void mgnt_request(struct mgnt_client *client)
 		    || req->selector.asn == 0 || req->selector.flags != 0
 		    || req->selector.topology != EIGRP_TOPOLOGY_ID_BASE
 		    || req->selector.offset > MGNT_OFFSET_MAX
-		    || (op == EIGRP_LINUX_MGNT_CLEAR_EVENTS
+		    || ((op == EIGRP_LINUX_MGNT_CLEAR_EVENTS
+			 || op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+			 || op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY)
 			&& req->selector.offset != 0)) {
 			mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false,
 				   NULL, 0, false);
 			free(req);
 			return;
+		}
+		if (op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+		    || op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY) {
+			const uint8_t *target =
+				p + EIGRP_LINUX_MGNT_SELECTOR_SIZE;
+			size_t i;
+			bool invalid =
+				target[0] > 2 || target[3] != 0
+				|| (target[1] > 1)
+				|| (op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY
+				    && (target[0] == 1 || target[1] != 0))
+				|| (op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+				    && target[2] != 0)
+				|| (op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY
+				    && target[2] > (req->selector.afi == 4
+							    ? 32
+							    : 128));
+			if (target[0] == 0) {
+				for (i = 2; i < EIGRP_LINUX_MGNT_TARGET_SIZE;
+				     ++i)
+					invalid |= target[i] != 0;
+			} else if (target[0] == 1) {
+				const void *nul = memchr(target + 4, 0, 64);
+				invalid |= nul == NULL || target[4] == 0;
+				if (nul) {
+					for (i = (const uint8_t *)nul - target
+						 + 1;
+					     i < EIGRP_LINUX_MGNT_TARGET_SIZE;
+					     ++i)
+						invalid |= target[i] != 0;
+				}
+			} else {
+				for (i = 4 + (req->selector.afi == 4 ? 4 : 16);
+				     i < EIGRP_LINUX_MGNT_TARGET_SIZE; ++i)
+					invalid |= target[i] != 0;
+			}
+			if (invalid) {
+				mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID,
+					   false, NULL, 0, false);
+				free(req);
+				return;
+			}
+			memcpy(req->target, target,
+			       EIGRP_LINUX_MGNT_TARGET_SIZE);
 		}
 	}
 	req->response.offset = req->selector.offset;
@@ -773,12 +862,15 @@ static void mgnt_client_read(struct mgnt_client *client)
 			    != (op == EIGRP_LINUX_MGNT_IDENTITY
 					? EIGRP_LINUX_MGNT_IDENTITY_SIZE
 					: (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
+							    + (op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+								       ? EIGRP_LINUX_MGNT_TARGET_SIZE
+								       : 0)
 						  : 0))
 		    || mgnt_get32(client->input) != EIGRP_LINUX_MGNT_MAGIC
 		    || mgnt_get16(client->input + 8) != 0
 		    || mgnt_get16(client->input + 10) != 0
 		    || op < EIGRP_LINUX_MGNT_CAPABILITIES
-		    || op > EIGRP_LINUX_MGNT_IDENTITY) {
+		    || op > EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY) {
 			mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false,
 				   NULL, 0, true);
 			return;
