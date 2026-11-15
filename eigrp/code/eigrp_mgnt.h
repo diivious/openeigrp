@@ -37,6 +37,10 @@ typedef struct eigrp_intf_state {
 	uint32_t hello_interval;
 	uint16_t hold_time;
 	uint32_t peer_count;
+	uint32_t up_peer_count;
+	/* Average of measured SRTTs for UP neighbors on this interface. */
+	bool mean_srtt_valid;
+	uint32_t mean_srtt_msec;
 	unsigned long output_queue_count;
 	unsigned long reliable_queue_count;
 	uint8_t reliability;
@@ -116,6 +120,8 @@ typedef struct eigrp_topology_prefix_state {
 	eigrp_metric_t feasible_distance;
 	uint32_t successor_count;
 	uint64_t serial_number;
+	uint8_t dual_state;
+	uint32_t pending_replies;
 } eigrp_topology_prefix_state_t;
 
 typedef struct eigrp_topology_route_state {
@@ -154,6 +160,7 @@ eigrp_result_t eigrp_topology_instance_iterate(
 typedef enum eigrp_timer_state_type {
 	EIGRP_TIMER_STATE_HELLO = 0,
 	EIGRP_TIMER_STATE_PEER_HOLD,
+	EIGRP_TIMER_STATE_ACTIVE,
 	EIGRP_TIMER_STATE_LIMIT_RESTART,
 	EIGRP_TIMER_STATE_LIMIT_RESET,
 } eigrp_timer_state_type_t;
@@ -163,7 +170,9 @@ typedef struct eigrp_timer_state {
 	const char *interface_name;
 	bool neighbor_present;
 	eigrp_address_t neighbor_address;
+	eigrp_prefix_t destination; /* Only valid for ACTIVE/SIA. */
 	uint32_t expiration_seconds;
+	uint64_t expiration_msec; /* Actual monotonic deadline remaining. */
 } eigrp_timer_state_t;
 
 typedef eigrp_result_t (*eigrp_timer_state_cb)(const eigrp_timer_state_t *state,
@@ -303,9 +312,24 @@ typedef struct eigrp_status_protocol_state {
 	const char *vrf_name;
 	uint16_t asn;
 	bool shutdown;
+	bool parent_shutdown;
 	bool router_id_configured;
 	uint32_t router_id;
 	bool runtime_present;
+	/* Operational parameters are valid only when runtime_present is true.
+	 * Captured on the owning AF thread; never inferred from defaults. */
+	uint32_t effective_router_id;
+	uint8_t k_values[6];
+	uint8_t variance;
+	uint8_t max_paths;
+	uint8_t max_hops;
+	uint8_t distance_internal;
+	uint8_t distance_external;
+	uint8_t metric_version;
+	uint16_t active_time_seconds;
+	bool topology_count_valid;
+	uint32_t topology_prefix_count;
+	uint32_t redistributed_prefix_count;
 } eigrp_status_protocol_state_t;
 
 typedef eigrp_result_t (*eigrp_status_protocol_cb)(

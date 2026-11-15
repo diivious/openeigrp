@@ -38,6 +38,7 @@ GROUPS = {
         "mesh-topology/k6-c-simultaneous-double-link.yaml",
         "mesh-topology/k6-d-failure-during-active.yaml",
         "mesh-topology/k6-e-query-storm-watch.yaml",
+        "mesh-topology/k6-ecmp-withdrawal.yaml",
     },
     "active-topology": {
         "active-topology/sia-failure.yaml", "active-topology/sia-positive.yaml",

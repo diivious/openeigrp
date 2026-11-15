@@ -2376,6 +2376,8 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 	prefix_state.feasible_distance = prefix->fdistance;
 	prefix_state.successor_count = eigrp_topology_successor_count(prefix);
 	prefix_state.serial_number = prefix->serno;
+	prefix_state.dual_state = prefix->state;
+	prefix_state.pending_replies = prefix->rij ? prefix->rij->count : 0;
 
 	result = prefix_callback(&prefix_state, arg);
 	if (result != EIGRP_RESULT_SUCCESS)
@@ -2391,7 +2393,12 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 			(route->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)
 			!= 0;
 
-		if (route->reported_distance == EIGRP_MAX_METRIC)
+		/* Keep withdrawn/inaccessible paths visible in all-links and
+		 * selected-prefix diagnostics while they remain owned by DUAL.
+		 */
+		if (!all_links
+		    && (route->reported_distance == EIGRP_MAX_METRIC
+			|| route->reported_distance == EIGRP_METRIC_MAX))
 			continue;
 		if (!all_links && !successor && !feasible)
 			continue;
@@ -2453,7 +2460,11 @@ eigrp_result_t eigrp_topology_state_iterate(
 	if (destination) {
 		if (!eigrp_topology_table_key(destination, &lookup))
 			return EIGRP_RESULT_INVALID_ARGUMENT;
-		node = eigrp_table_node_match(runtime->topology_table, &lookup);
+		/* A requested topology destination is an exact prefix, not an
+		 * LPM route lookup. Never display a covering destination
+		 * instead. */
+		node = eigrp_table_node_lookup(runtime->topology_table,
+					       &lookup);
 		if (!node)
 			return EIGRP_RESULT_NOT_FOUND;
 		prefix = node->info;

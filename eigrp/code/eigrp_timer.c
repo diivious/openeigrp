@@ -12,6 +12,7 @@
 
 #include "eigrp.h"
 #include "eigrp_structs.h"
+#include "eigrp_table.h"
 #include "eigrp_timer.h"
 #include "eigrp_interface.h"
 #include "eigrp_neighbor.h"
@@ -151,71 +152,73 @@ void eigrp_timer_config_delete_all(eigrp_af_config_t *af)
  * Exports active EIGRP timer state through portable callbacks.
  * FRR only formats the returned state.
  */
+struct eigrp_timer_state_request {
+	const eigrp_instance_context_t *context;
+	eigrp_timer_state_cb callback;
+	void *arg;
+};
+
+static eigrp_result_t eigrp_timer_state_execute(void *arg)
+{
+	struct eigrp_timer_state_request *request = arg;
+
+	return eigrp_timer_state_iterate(request->context, request->callback,
+					 request->arg);
+}
+
 eigrp_result_t
 eigrp_timer_state_iterate(const eigrp_instance_context_t *context,
 			  eigrp_timer_state_cb callback, void *arg)
 {
+	eigrp_instance_t *runtime;
 	eigrp_intf_t *interface;
 	eigrp_nbr_t *neighbor;
+	eigrp_prefix_descriptor_t *prefix;
 	eigrp_list_item_t *interface_node;
 	eigrp_list_item_t *neighbor_node;
+	eigrp_table_node_t *node;
 	eigrp_result_t result;
 
 	if (!context || (!context->config && !context->runtime))
 		return EIGRP_RESULT_NOT_FOUND;
 	if (!callback)
 		return EIGRP_RESULT_INVALID_ARGUMENT;
-	if (!context->runtime)
+	runtime = context->runtime;
+	if (!runtime)
 		return EIGRP_RESULT_SUCCESS;
+	if (eigrp_instance_thread_dispatch_needed(runtime)) {
+		struct eigrp_timer_state_request request = {
+			.context = context,
+			.callback = callback,
+			.arg = arg,
+		};
+		return eigrp_mgnt_runtime_execute(
+			runtime, eigrp_timer_state_execute, &request);
+	}
 
-	for (EIGRP_LIST_ITERATE_RO(context->runtime->eiflist, interface_node,
+	/* Emit process groups in display order without allocating snapshots or
+	 * coupling timer ownership to an FRR-specific scheduler hierarchy. */
+	for (EIGRP_LIST_ITERATE_RO(runtime->eiflist, interface_node,
 				   interface)) {
-		if (interface->t_hello) {
-			eigrp_timer_state_t state = {
-				.type = EIGRP_TIMER_STATE_HELLO,
-				.interface_name =
-					eigrp_intf_name_string(interface),
-				.expiration_seconds =
-					eigrp_timer_remaining_seconds(
-						context->runtime,
-						interface->t_hello),
-			};
+		eigrp_timer_state_t state = {0};
+		if (!interface->t_hello)
+			continue;
+		state.type = EIGRP_TIMER_STATE_HELLO;
+		state.interface_name = eigrp_intf_name_string(interface);
+		state.expiration_msec =
+			eigrp_timer_remaining_msec(runtime, interface->t_hello);
+		state.expiration_seconds =
+			(uint32_t)((state.expiration_msec + 999U) / 1000U);
+		result = callback(&state, arg);
+		if (result != EIGRP_RESULT_SUCCESS)
+			return result;
+	}
 
-			result = callback(&state, arg);
-			if (result != EIGRP_RESULT_SUCCESS)
-				return result;
-		}
-
+	for (EIGRP_LIST_ITERATE_RO(runtime->eiflist, interface_node,
+				   interface)) {
 		for (EIGRP_LIST_ITERATE_RO(interface->nbrs, neighbor_node,
 					   neighbor)) {
 			eigrp_timer_state_t state = {0};
-			uint64_t now = eigrp_sys_monotime_msec();
-
-			state.interface_name =
-				eigrp_intf_name_string(interface);
-			state.neighbor_present = true;
-			eigrp_timer_neighbor_address(neighbor,
-						     &state.neighbor_address);
-			if (neighbor->t_limit_restart) {
-				state.type = EIGRP_TIMER_STATE_LIMIT_RESTART;
-				state.expiration_seconds =
-					eigrp_nbr_limit_remaining(
-						neighbor->limit_restart_due_msec,
-						now);
-				result = callback(&state, arg);
-				if (result != EIGRP_RESULT_SUCCESS)
-					return result;
-			}
-			if (neighbor->t_limit_reset) {
-				state.type = EIGRP_TIMER_STATE_LIMIT_RESET;
-				state.expiration_seconds =
-					eigrp_nbr_limit_remaining(
-						neighbor->limit_reset_due_msec,
-						now);
-				result = callback(&state, arg);
-				if (result != EIGRP_RESULT_SUCCESS)
-					return result;
-			}
 			if (neighbor->state == EIGRP_NEIGHBOR_DOWN
 			    || !neighbor->t_holddown)
 				continue;
@@ -225,12 +228,76 @@ eigrp_timer_state_iterate(const eigrp_instance_context_t *context,
 			state.neighbor_present = true;
 			eigrp_timer_neighbor_address(neighbor,
 						     &state.neighbor_address);
+			state.expiration_msec = eigrp_timer_remaining_msec(
+				runtime, neighbor->t_holddown);
 			state.expiration_seconds =
-				eigrp_timer_remaining_seconds(
-					context->runtime, neighbor->t_holddown);
+				(uint32_t)((state.expiration_msec + 999U)
+					   / 1000U);
 			result = callback(&state, arg);
 			if (result != EIGRP_RESULT_SUCCESS)
 				return result;
+		}
+	}
+
+	/* DUAL owns one ACTIVE/SIA timer per active destination. This is a real
+	 * protocol deadline, not a fabricated Cisco scheduler-parent timer. */
+	for (node = eigrp_table_first(runtime->topology_table); node;
+	     node = eigrp_table_next(node)) {
+		eigrp_timer_state_t state = {0};
+		prefix = node->info;
+		if (!prefix || !prefix->t_active || prefix->state == 0)
+			continue;
+		state.type = EIGRP_TIMER_STATE_ACTIVE;
+		state.destination = prefix->destination;
+		state.expiration_msec =
+			eigrp_timer_remaining_msec(runtime, prefix->t_active);
+		state.expiration_seconds =
+			(uint32_t)((state.expiration_msec + 999U) / 1000U);
+		result = callback(&state, arg);
+		if (result != EIGRP_RESULT_SUCCESS)
+			return result;
+	}
+	/* Prefix-limit penalties are neither UPDATE nor SIA process timers. */
+	for (EIGRP_LIST_ITERATE_RO(runtime->eiflist, interface_node,
+				   interface)) {
+		for (EIGRP_LIST_ITERATE_RO(interface->nbrs, neighbor_node,
+					   neighbor)) {
+			eigrp_timer_state_t state = {0};
+			uint64_t now = eigrp_sys_monotime_msec();
+			state.interface_name =
+				eigrp_intf_name_string(interface);
+			state.neighbor_present = true;
+			eigrp_timer_neighbor_address(neighbor,
+						     &state.neighbor_address);
+			if (neighbor->t_limit_restart) {
+				state.type = EIGRP_TIMER_STATE_LIMIT_RESTART;
+				if (neighbor->limit_restart_due_msec > now)
+					state.expiration_msec =
+						neighbor->limit_restart_due_msec
+						- now;
+				state.expiration_seconds =
+					(uint32_t)((state.expiration_msec
+						    + 999U)
+						   / 1000U);
+				result = callback(&state, arg);
+				if (result != EIGRP_RESULT_SUCCESS)
+					return result;
+			}
+			if (neighbor->t_limit_reset) {
+				state.type = EIGRP_TIMER_STATE_LIMIT_RESET;
+				state.expiration_msec =
+					neighbor->limit_reset_due_msec > now
+						? neighbor->limit_reset_due_msec
+							  - now
+						: 0;
+				state.expiration_seconds =
+					(uint32_t)((state.expiration_msec
+						    + 999U)
+						   / 1000U);
+				result = callback(&state, arg);
+				if (result != EIGRP_RESULT_SUCCESS)
+					return result;
+			}
 		}
 	}
 
@@ -308,24 +375,29 @@ void eigrp_timer_cancel(eigrp_instance_t *eigrp, eigrp_timer_event_t **owner)
 	free(event);
 }
 
-uint32_t eigrp_timer_remaining_seconds(eigrp_instance_t *eigrp,
-				       const eigrp_timer_event_t *event)
+uint64_t eigrp_timer_remaining_msec(eigrp_instance_t *eigrp,
+				    const eigrp_timer_event_t *event)
 {
 	uint64_t now;
-	uint64_t remaining;
-	uint32_t seconds = 0;
+	uint64_t remaining = 0;
 
 	if (!eigrp || !event)
 		return 0;
 	pthread_mutex_lock(&eigrp->work_lock);
 	now = eigrp_sys_monotime_msec();
-	if (event->due_msec > now) {
+	if (event->due_msec > now)
 		remaining = event->due_msec - now;
-		seconds = (uint32_t)((remaining + 999U) / 1000U);
-	}
 	pthread_mutex_unlock(&eigrp->work_lock);
-	return seconds;
+	return remaining;
 }
+
+uint32_t eigrp_timer_remaining_seconds(eigrp_instance_t *eigrp,
+				       const eigrp_timer_event_t *event)
+{
+	uint64_t remaining = eigrp_timer_remaining_msec(eigrp, event);
+	return (uint32_t)((remaining + 999U) / 1000U);
+}
+
 
 void eigrp_timer_cancel_all(eigrp_instance_t *eigrp)
 {

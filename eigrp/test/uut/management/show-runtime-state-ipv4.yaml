@@ -1,0 +1,31 @@
+# Show-state consumers must not change IPv4 adjacency/route lifecycle.
+schema: eigrp-uut-test/v1
+topology: ../examples/two-router.yaml
+name: named-show-runtime-state-ipv4
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, active: false, successors: 1}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: path, successor: true}
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: down}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: path, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, reliable_q: 0}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: path, successor: true}
+  - stop: all
