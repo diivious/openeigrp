@@ -28,7 +28,7 @@ class ReleaseIdentityTests(unittest.TestCase):
                 shutil.copytree(ROOT / name, work / name,
                                 ignore=shutil.ignore_patterns(
                                     "*.o", "*.a", "*.pyc", "__pycache__",
-                                    "openeigrpd", "openeigrpd-config", "oectl",
+                                    "openeigrpd", "openeigrpd-config", "eigrp",
                                     "eigrp_build_version.h", "eigrp-wire"))
             (work / "tools").mkdir()
             for name in ("Makefile", "linux/Makefile", "tools/build-version.sh",
@@ -44,7 +44,7 @@ class ReleaseIdentityTests(unittest.TestCase):
 
             def versions():
                 daemon = invoke(str(work / "linux/code/openeigrpd"), "-V")
-                client = json.loads(invoke(str(work / "linux/code/oectl"),
+                client = json.loads(invoke(str(work / "linux/code/eigrp"),
                                            "--json", "version"))
                 return daemon, client
 
@@ -54,6 +54,7 @@ class ReleaseIdentityTests(unittest.TestCase):
                 daemon, client = versions()
                 self.assertEqual(daemon, f"openeigrpd {version}")
                 self.assertEqual(client["build"], version)
+                self.assertEqual(client["client"], "eigrp")
                 # The core, daemon, client and Unix HELLO callback must share
                 # the same generated OpenEIGRP build identity.
                 header = (work / "eigrp/code/eigrp_build_version.h").read_text()
@@ -73,7 +74,7 @@ class ReleaseIdentityTests(unittest.TestCase):
             invoke("dpkg-deb", "-x", str(package), str(extract))
             self.assertEqual(invoke(str(extract / "usr/sbin/openeigrpd"), "-V"),
                              "openeigrpd testdev-0.6.0-dev")
-            self.assertEqual(json.loads(invoke(str(extract / "usr/bin/oectl"),
+            self.assertEqual(json.loads(invoke(str(extract / "usr/bin/eigrp"),
                                              "--json", "version"))["build"],
                              "testdev-0.6.0-dev")
 

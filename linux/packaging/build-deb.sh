@@ -87,13 +87,13 @@ check_binary "$daemon"
 actual=$("$daemon" -V 2>/dev/null) || fail 'daemon cannot report its build version'
 [ "$actual" = "openeigrpd $expected" ] ||
     fail "daemon version mismatch: requested $expected, found $actual"
-make -C "$root/linux/code" oectl openeigrpd-config \
+make -C "$root/linux/code" eigrp openeigrpd-config \
     EIGRP_BUILD_VERSION="$expected" >/dev/null
 # Query the stable machine-readable contract; human version labels may change.
-client=$("$root/linux/code/oectl" --json version | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
+client=$("$root/linux/code/eigrp" --json version | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
 [ "$client" = "$expected" ] ||
     fail "client version mismatch: requested $expected, found $client"
-check_binary "$root/linux/code/oectl"
+check_binary "$root/linux/code/eigrp"
 check_binary "$root/linux/code/openeigrpd-config"
 
 output=$(mkdir -p -- "$output" && CDPATH= cd -- "$output" && pwd)
@@ -107,12 +107,12 @@ mkdir -p "$pkg/DEBIAN" "$pkg/etc" "$pkg/usr/sbin" "$pkg/usr/bin" \
     "$pkg/usr/share/man/man5" "$pkg/usr/share/man/man8" \
     "$work/debian"
 install -m 0755 "$daemon" "$pkg/usr/sbin/openeigrpd"
-install -m 0755 "$root/linux/code/oectl" "$pkg/usr/bin/oectl"
+install -m 0755 "$root/linux/code/eigrp" "$pkg/usr/bin/eigrp"
 install -m 0755 "$root/linux/code/openeigrpd-config" "$pkg/usr/bin/openeigrpd-config"
 install -m 0600 "$root/linux/packaging/openeigrpd.conf" "$pkg/etc/openeigrpd.conf"
 install -m 0644 "$root/linux/packaging/openeigrpd.service" "$pkg/usr/lib/systemd/system/openeigrpd.service"
 install -m 0644 "$root/linux/packaging/openeigrpd.sysusers" "$pkg/usr/lib/sysusers.d/openeigrpd.conf"
-install -m 0644 "$root/linux/packaging/man/oectl.8" "$pkg/usr/share/man/man8/oectl.8"
+install -m 0644 "$root/linux/packaging/man/eigrp.8" "$pkg/usr/share/man/man8/eigrp.8"
 install -m 0644 "$root/linux/packaging/man/openeigrpd.conf.5" "$pkg/usr/share/man/man5/openeigrpd.conf.5"
 install -m 0644 "$root/linux/packaging/man/openeigrpd.8" "$pkg/usr/share/man/man8/openeigrpd.8"
 for script in postinst prerm postrm; do
@@ -135,7 +135,7 @@ CTRL
 multiarch=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
 shlibs=$(cd "$work" && dpkg-shlibdeps -O -l"/usr/lib/$multiarch" \
     -e"$pkg/usr/sbin/openeigrpd" \
-    -e"$pkg/usr/bin/oectl" \
+    -e"$pkg/usr/bin/eigrp" \
     -e"$pkg/usr/bin/openeigrpd-config")
 case "$shlibs" in
     shlibs:Depends=*) deps=${shlibs#shlibs:Depends=} ;;
@@ -154,7 +154,7 @@ Maintainer: Donnie V. Savage <diivious@hotmail.com>
 Depends: $deps, systemd, init-system-helpers
 Description: Native Linux EIGRP routing daemon and management client
  Standalone EIGRP integration for Linux using the portable OpenEIGRP core.
- Installs the openeigrpd daemon, oectl client, configuration validator and
+ Installs the openeigrpd daemon, eigrp client, configuration validator and
  an intentionally disabled systemd unit. No FRR, BIRD or UUT broker.
 CTRL
 # A setgid parent directory (e.g. shared build checkout) propagates mode

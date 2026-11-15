@@ -1,8 +1,8 @@
 .Dd November 13, 2026
-.Dt OECTL 8
+.Dt EIGRP 8
 .Os
 .Sh NAME
-.Nm oectl
+.Nm eigrp
 .Nd inspect and administer the native OpenEIGRP daemon
 .Sh SYNOPSIS
 .Nm
@@ -111,14 +111,14 @@ Print local version and exit.
 .El
 .Sh EXAMPLES
 .Bd -literal -offset indent
-oectl show nei
-oectl show address-family ipv4 4453 topology
-oectl show addr ipv6 topo
-oectl show address-family ipv4 4453 interfaces detail eth0
-oectl show 4453 traffic --json
-sudo oectl clear address-family ipv4 4453 neighbors 192.0.2.2
-sudo oectl clear topology 192.0.2.0/24
-sudo oectl clear events
+eigrp show nei
+eigrp show address-family ipv4 4453 topology
+eigrp show addr ipv6 topo
+eigrp show address-family ipv4 4453 interfaces detail eth0
+eigrp show 4453 traffic --json
+sudo eigrp clear address-family ipv4 4453 neighbors 192.0.2.2
+sudo eigrp clear topology 192.0.2.0/24
+sudo eigrp clear events
 .Ed
 .Sh OUTPUT
 Human-readable output is organized per matching EIGRP AF and AS.

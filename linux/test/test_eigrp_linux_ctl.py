@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: ISC
 # Copyright (C) 2026 Donnie V. Savage
-"""Executable oectl CLI regression over actual Task 11 Unix IPC."""
+"""Executable eigrp CLI regression over actual Task 11 Unix IPC."""
 
 import concurrent.futures
 import json
@@ -26,15 +26,15 @@ MAGIC = 0x45474D54
 class ControlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory(prefix="oectl-test-")
+        cls.tmp = tempfile.TemporaryDirectory(prefix="eigrp-test-")
         os.chmod(cls.tmp.name, 0o755)
-        cls.client = Path(cls.tmp.name) / "oectl"
+        cls.client = Path(cls.tmp.name) / "eigrp"
         cls.fixture = Path(cls.tmp.name) / "mgnt-fixture"
         flags = [os.environ.get("CC", "cc"), "-std=c11", "-D_GNU_SOURCE",
                  "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
                  "-I", str(ROOT / "eigrp" / "code"), "-I", str(CODE)]
         for binary, sources in (
-            (cls.client, [CODE / "oectl.c", CODE / "eigrp_linux_version.c"]),
+            (cls.client, [CODE / "eigrp_linux_ctl.c", CODE / "eigrp_linux_version.c"]),
             (cls.fixture, [TEST / "mgnt_fixture.c", CODE / "eigrp_linux_mgnt.c",
                            CODE / "eigrp_linux_version.c"]),
         ):
@@ -53,7 +53,7 @@ class ControlTests(unittest.TestCase):
     def start(self, multi=False):
         env = dict(os.environ)
         if multi:
-            env["OECTL_TEST_MULTI"] = "1"
+            env["EIGRP_LINUX_CTL_TEST_MULTI"] = "1"
         self.daemon = subprocess.Popen([str(self.fixture), str(self.path)],
                                        stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
@@ -158,6 +158,25 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(cleared.returncode, 0, cleared.stderr)
         self.assertEqual(cleared.stdout.count("Events cleared"), 2)
 
+    def test_client_identity_uut(self):
+        scenarios = json.loads((TEST / "uut/client-identity.yaml").read_text())
+        self.assertEqual(scenarios["schema"], "linux-client-identity-uut/v1")
+        for case in scenarios["cases"]:
+            with self.subTest(case=case["name"]):
+                result = subprocess.run(
+                    [str(self.client), *case["argv"]],
+                    text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, case["returncode"],
+                                 result.stderr)
+                if "json_fields" in case:
+                    payload = json.loads(result.stdout)
+                    for key, value in case["json_fields"].items():
+                        self.assertEqual(payload[key], value)
+                if "stdout_contains" in case:
+                    self.assertIn(case["stdout_contains"], result.stdout)
+                if "stderr_contains" in case:
+                    self.assertIn(case["stderr_contains"], result.stderr)
+
     def test_client_has_no_core_link_dependency(self):
         symbols = subprocess.run(["nm", "-u", str(self.client)],
                                  text=True, capture_output=True)
@@ -167,6 +186,7 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(version.returncode, 0, version.stderr)
         data = json.loads(version.stdout)
         self.assertEqual(data["kind"], "integration")
+        self.assertEqual(data["client"], "eigrp")
         self.assertEqual(data["ipc"], 2)
         self.assertIn("kernel", data)
         self.assertIn("distribution", data)
@@ -311,7 +331,7 @@ class ControlTests(unittest.TestCase):
         self.assertIn("Event log: 1 entries", self.ctl("show", "events").stdout)
 
     def test_mismatched_build_is_blocked_but_local_version_remains_available(self):
-        alternate = Path(self.tmp.name) / "oectl-alternate"
+        alternate = Path(self.tmp.name) / "eigrp-alternate"
         # Compile a genuine second OpenEIGRP build identity rather than
         # overriding the canonical generated header on the command line.
         (Path(self.tmp.name) / "eigrp_features.h").write_text(
@@ -327,7 +347,7 @@ class ControlTests(unittest.TestCase):
             "-Wall", "-Wextra", "-Werror",
             "-I", self.tmp.name, "-I", str(ROOT / "eigrp/code"),
             "-I", str(CODE),
-            str(CODE / "oectl.c"), str(CODE / "eigrp_linux_version.c"),
+            str(CODE / "eigrp_linux_ctl.c"), str(CODE / "eigrp_linux_version.c"),
             "-o", str(alternate),
         ], capture_output=True, text=True)
         self.assertEqual(built.returncode, 0, built.stderr)

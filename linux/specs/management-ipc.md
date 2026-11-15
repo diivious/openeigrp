@@ -1,7 +1,7 @@
 # Native Linux management IPC
 
 This document specifies the Linux adapter's local control protocol. For
-commands and examples use [oectl(8)](../packaging/man/oectl.8); for daemon lifecycle
+commands and examples use [eigrp(8)](../packaging/man/eigrp.8); for daemon lifecycle
 use [openeigrpd(8)](../packaging/man/openeigrpd.8). Portable state is obtained through
 `eigrp/code/eigrp_mgnt.h`; the Linux adapter owns framing, serialization,
 permissions and client scheduling.
@@ -88,20 +88,20 @@ and protects shutdown from in-flight management access. Management stops
 before portable state is destroyed. Heavy state walks may still occupy an AF
 worker while they execute.
 
-`oectl` validates response framing, operation, version, status, record lengths
+`eigrp` validates response framing, operation, version, status, record lengths
 and pagination; it fails on truncation rather than silently producing an
 incomplete state dump. `show tech-support` combines read-only views for
 running default-VRF instances. Nondefault VRF numeric IDs are not discoverable
 from protocol listing, so such views require explicit `--asn`, `--afi` and
 `--vrf-id` selectors. The native configuration and runtime currently accept
-only the default VRF. When AFI/ASN are omitted, `oectl` enumerates matching
+only the default VRF. When AFI/ASN are omitted, `eigrp` enumerates matching
 running default-VRF contexts, rather than failing on multiple matches.
 
 ## Validation
 
 ```sh
 python3 linux/test/test_mgnt.py
-python3 linux/test/test_oectl.py
+python3 linux/test/test_eigrp_linux_ctl.py
 python3 linux/test/test_daemon.py
 python3 linux/test/test_docs.py
 ```

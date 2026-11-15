@@ -24,7 +24,7 @@ logging and event scheduling through EIGRP-owned APIs. See
 
 ```sh
 make                       # host compilation and full-tree style checks
-make linux                 # Linux only: native daemon and oectl
+make linux                 # Linux only: native daemon and eigrp
 make clean
 make all                   # fast unit/YAML UUTs, quick scale, Docker and Debian builds
 make pre-commit            # full scale, Docker and package lifecycle UUTs

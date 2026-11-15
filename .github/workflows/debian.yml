@@ -143,7 +143,7 @@ jobs:
             test "$(dpkg-deb -f "$package" Version)" = "$version"
             mkdir -p "inspect/$arch"
             dpkg-deb -x "$package" "inspect/$arch"
-            for executable in usr/sbin/openeigrpd usr/bin/oectl usr/bin/openeigrpd-config; do
+            for executable in usr/sbin/openeigrpd usr/bin/eigrp usr/bin/openeigrpd-config; do
               machine="$(readelf -h "inspect/$arch/$executable" | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')"
               case "$arch:$machine" in
                 'amd64:Advanced Micro Devices X86-64'|'arm64:AArch64') ;;

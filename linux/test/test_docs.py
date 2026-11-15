@@ -25,7 +25,7 @@ MAN = LINUX / "packaging" / "man"
 BIN = LINUX / "code"
 REQUIRE_BINARIES = os.getenv("OPENEIGRP_DOCS_REQUIRE_BINARIES") == "1"
 REQUIRE_RENDERER = os.getenv("OPENEIGRP_DOCS_REQUIRE_RENDERER") == "1"
-PAGES = ("openeigrpd.8", "openeigrpd.conf.5", "oectl.8")
+PAGES = ("openeigrpd.8", "openeigrpd.conf.5", "eigrp.8")
 
 
 class DocumentationTests(unittest.TestCase):
@@ -57,7 +57,7 @@ class DocumentationTests(unittest.TestCase):
                 self.assertRegex(content, r"(?m)^\.Os$")
                 self.assertNotRegex(content, r"(?m)^\.(?:TH|SH|TP|PP|BR|RI)\b")
                 self.assertIn(".Sh SEE ALSO", content)
-                for linked in ("openeigrpd", "openeigrpd.conf", "oectl"):
+                for linked in ("openeigrpd", "openeigrpd.conf", "eigrp"):
                     if linked != filename.rsplit(".", 1)[0]:
                         self.assertRegex(
                             content,
@@ -201,14 +201,14 @@ class DocumentationTests(unittest.TestCase):
             self.command(daemon, "-t", "-f", "relative.conf").returncode, 2
         )
 
-    def test_oectl_documented_commands(self):
-        oectl = self.binary("oectl")
+    def test_eigrp_documented_commands(self):
+        eigrp = self.binary("eigrp")
         for options in ("help", "version", "--version", "--help"):
             with self.subTest(option=options):
-                self.assertEqual(self.command(oectl, options).returncode, 0)
-        self.assertEqual(self.command(oectl, "show", "unsupported").returncode, 2)
-        self.assertEqual(self.command(oectl, "show", "routes", "--afi", "5").returncode, 2)
-        self.assertEqual(self.command(oectl, "show", "routes").returncode, 2)
+                self.assertEqual(self.command(eigrp, options).returncode, 0)
+        self.assertEqual(self.command(eigrp, "show", "unsupported").returncode, 2)
+        self.assertEqual(self.command(eigrp, "show", "routes", "--afi", "5").returncode, 2)
+        self.assertEqual(self.command(eigrp, "show", "routes").returncode, 2)
 
         # A deliberately absent socket verifies each command reaches socket
         # handling rather than being rejected as an unsupported CLI command.
@@ -224,9 +224,9 @@ class DocumentationTests(unittest.TestCase):
                     args = ["--socket", absent, "show", view]
                     if view not in ("capabilities", "protocols", "tech-support", "version"):
                         args += ["--asn", "4453", "--afi", "4"]
-                    self.assertEqual(self.command(oectl, *args).returncode, 1)
+                    self.assertEqual(self.command(eigrp, *args).returncode, 1)
             self.assertEqual(
-                self.command(oectl, "--socket", absent, "clear", "events",
+                self.command(eigrp, "--socket", absent, "clear", "events",
                              "--asn", "4453", "--afi", "4").returncode, 1
             )
 

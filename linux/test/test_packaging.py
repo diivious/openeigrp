@@ -140,7 +140,7 @@ class PackagingTests(unittest.TestCase):
                 dest = self.work / ("uut-" + case["name"])
                 dest.mkdir()
                 run("dpkg-deb", "-x", package, dest)
-                client = dest / "usr/bin/oectl"
+                client = dest / "usr/bin/eigrp"
                 identity = json.loads(run(client, "--json", "version").stdout)
                 self.assertEqual(identity["kind"], "integration")
                 self.assertEqual(identity["build"], case["expected_build"])
@@ -195,17 +195,17 @@ class PackagingTests(unittest.TestCase):
         paths = sorted("/" + str(path.relative_to(dest)) for path in
                        dest.rglob("*") if path.is_file())
         self.assertEqual(paths, [
-            "/etc/openeigrpd.conf", "/usr/bin/oectl",
+            "/etc/openeigrpd.conf", "/usr/bin/eigrp",
             "/usr/bin/openeigrpd-config", "/usr/lib/systemd/system/openeigrpd.service",
             "/usr/lib/sysusers.d/openeigrpd.conf", "/usr/sbin/openeigrpd",
             "/usr/share/man/man5/openeigrpd.conf.5",
-            "/usr/share/man/man8/oectl.8", "/usr/share/man/man8/openeigrpd.8",
+            "/usr/share/man/man8/eigrp.8", "/usr/share/man/man8/openeigrpd.8",
         ])
         self.assertEqual((ctrl / "conffiles").read_text().strip(),
                          "/etc/openeigrpd.conf")
         self.assertEqual(stat.S_IMODE((dest / "etc/openeigrpd.conf").stat().st_mode),
                          0o600)
-        for name in ("usr/sbin/openeigrpd", "usr/bin/oectl",
+        for name in ("usr/sbin/openeigrpd", "usr/bin/eigrp",
                      "usr/bin/openeigrpd-config"):
             path = dest / name
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o755)
@@ -248,7 +248,7 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("invalid package metadata", result.stderr)
 
             defects = {
-                "missing-cli": "missing or unsafe package entry: usr/bin/oectl",
+                "missing-cli": "missing or unsafe package entry: usr/bin/eigrp",
                 "exposed-config": "missing or unsafe package entry: etc/openeigrpd.conf",
                 "setuid-daemon": "missing or unsafe package entry: usr/sbin/openeigrpd",
                 "missing-conffile": "configuration is not a dpkg conffile",
@@ -264,7 +264,7 @@ class PackagingTests(unittest.TestCase):
                     shutil.copytree(self.ctrl, package_dir / "DEBIAN")
                     control = package_dir / "DEBIAN"
                     if defect == "missing-cli":
-                        (package_dir / "usr/bin/oectl").unlink()
+                        (package_dir / "usr/bin/eigrp").unlink()
                     elif defect == "exposed-config":
                         (package_dir / "etc/openeigrpd.conf").chmod(0o644)
                     elif defect == "setuid-daemon":
@@ -356,7 +356,7 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o600)
             self.assertEqual(config.stat().st_uid, 0)
             self.assertTrue((Path("/usr/sbin/openeigrpd")).exists())
-            self.assertEqual(run("oectl", "version").returncode, 0)
+            self.assertEqual(run("eigrp", "version").returncode, 0)
             run("openeigrpd-config", "-t", "-f", config)
             self.assertEqual(pwd.getpwnam("openeigrp").pw_name, "openeigrp")
             self.assertEqual(grp.getgrnam("openeigrpctl").gr_name, "openeigrpctl")

@@ -118,7 +118,7 @@ class SystemdPackageTest(unittest.TestCase):
             self.assertEqual(SOCKET.stat().st_uid, pwd.getpwnam("openeigrp").pw_uid)
             self.assertEqual(SOCKET.stat().st_gid, grp.getgrnam("openeigrpctl").gr_gid)
             self.assertEqual(stat.S_IMODE(SOCKET.parent.stat().st_mode), 0o750)
-            run("oectl", "show", "version")
+            run("eigrp", "show", "version")
 
             def check_privileges():
                 pid = int(run("systemctl", "show", UNIT, "--property=MainPID",
@@ -138,14 +138,14 @@ class SystemdPackageTest(unittest.TestCase):
             check_privileges()
             run("systemctl", "restart", UNIT)
             until(lambda: active() and SOCKET.is_socket(), "restarted daemon")
-            run("oectl", "show", "version")
+            run("eigrp", "show", "version")
             check_privileges()
 
             # A running service must be restarted after a real dpkg upgrade.
             run("dpkg", "-i", self.new)
             until(lambda: active() and SOCKET.is_socket(), "upgraded daemon")
             self.assertIn("systemd package upgrade preservation test", CONFIG.read_text())
-            run("oectl", "show", "version")
+            run("eigrp", "show", "version")
             check_privileges()
             self.assertEqual(run("systemctl", "is-enabled", UNIT).stdout.strip(),
                              "enabled")

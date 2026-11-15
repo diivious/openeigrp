@@ -77,7 +77,8 @@ eigrp_result_t eigrp_status_protocol_iterate(eigrp_status_protocol_cb fn,
 		.runtime_present = true,
 	};
 	eigrp_result_t result = fn(&state, arg);
-	if (result != EIGRP_RESULT_SUCCESS || !getenv("OECTL_TEST_MULTI"))
+	if (result != EIGRP_RESULT_SUCCESS
+	    || !getenv("EIGRP_LINUX_CTL_TEST_MULTI"))
 		return result;
 	state.instance_name = "v6-test";
 	state.afi = EIGRP_AFI_IPV6;
@@ -92,8 +93,9 @@ eigrp_result_t eigrp_af_config_context_read(const char *name, eigrp_afi_t afi,
 	if (strcmp(vrf, "default") != 0
 	    || !((strcmp(name, "eigrprulez") == 0 && afi == EIGRP_AFI_IPV4
 		  && asn == 4453)
-		 || (getenv("OECTL_TEST_MULTI") && strcmp(name, "v6-test") == 0
-		     && afi == EIGRP_AFI_IPV6 && asn == 6473)))
+		 || (getenv("EIGRP_LINUX_CTL_TEST_MULTI")
+		     && strcmp(name, "v6-test") == 0 && afi == EIGRP_AFI_IPV6
+		     && asn == 6473)))
 		return EIGRP_RESULT_NOT_FOUND;
 	*context = (eigrp_instance_context_t){
 		.config = (eigrp_af_config_t *)&config_identity,

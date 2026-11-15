@@ -17,7 +17,7 @@ make                         # compile and run style checks
 make uut SUITE=ipv4-basic-core  # run a small portable EIGRP scenario suite
 ```
 
-On Linux, `make linux` also builds the native `openeigrpd` and `oectl` tools; starting a real routing daemon requires additional permissions and configuration. See the [quickstart](specs/quickstart.md) for prerequisites and your first contribution. The default `make` compiles host-compatible code and checks style; `make all` adds unit/UUT coverage and both-architecture Docker and Debian builds.
+On Linux, `make linux` also builds the native `openeigrpd` and `eigrp` tools; starting a real routing daemon requires additional permissions and configuration. See the [quickstart](specs/quickstart.md) for prerequisites and your first contribution. The default `make` compiles host-compatible code and checks style; `make all` adds unit/UUT coverage and both-architecture Docker and Debian builds.
 
 ## Architecture and code overview
 
@@ -331,8 +331,8 @@ This is the project-wide Cisco EIGRP / OpenEIGRP feature assessment, updated for
 | Debug packet / neighbor / DUAL | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | minimal logs |
 | Event logging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | DUAL state transition logging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Clear neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `oectl` command on native Linux |
-| Clear topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `oectl` command on native Linux |
+| Clear neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `eigrp` command on native Linux |
+| Clear topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `eigrp` command on native Linux |
 | Clear event logs | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | SNMP EIGRP MIB | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Conditional on host SNMP |
 

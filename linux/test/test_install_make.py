@@ -19,13 +19,13 @@ class NativeInstallTest(unittest.TestCase):
         shutil.copy2(ROOT / "linux/Makefile", self.root / "linux/Makefile")
         for directory in ("eigrp/code", "libunix/code", "linux/code"):
             (self.root / directory / "Makefile").write_text(".PHONY: all\nall:\n\t@true\n")
-        for name in ("openeigrpd", "oectl", "openeigrpd-config"):
+        for name in ("openeigrpd", "eigrp", "openeigrpd-config"):
             f = self.root / "linux/code" / name
             f.write_text("#!/bin/sh\nexit 0\n")
             f.chmod(0o755)
         for name in ("openeigrpd.conf", "openeigrpd.service", "openeigrpd.sysusers"):
             (self.root / "linux/packaging" / name).write_text(name)
-        for name in ("openeigrpd.8", "oectl.8", "openeigrpd.conf.5"):
+        for name in ("openeigrpd.8", "eigrp.8", "openeigrpd.conf.5"):
             (self.root / "linux/packaging/man" / name).write_text(name)
         self.dest = self.root / "stage"
 
@@ -37,9 +37,9 @@ class NativeInstallTest(unittest.TestCase):
     def test_layout_repeat_preserves_user_config_and_does_not_enable_service(self):
         result = self.install()
         self.assertEqual(result.returncode, 0, result.stderr)
-        for name in ("usr/sbin/openeigrpd", "usr/bin/oectl", "usr/bin/openeigrpd-config",
+        for name in ("usr/sbin/openeigrpd", "usr/bin/eigrp", "usr/bin/openeigrpd-config",
                      "etc/openeigrpd.conf", "usr/lib/systemd/system/openeigrpd.service",
-                     "usr/lib/sysusers.d/openeigrpd.conf", "usr/share/man/man8/oectl.8",
+                     "usr/lib/sysusers.d/openeigrpd.conf", "usr/share/man/man8/eigrp.8",
                      "usr/share/man/man8/openeigrpd.8", "usr/share/man/man5/openeigrpd.conf.5"):
             self.assertTrue((self.dest / name).is_file(), name)
         config = self.dest / "etc/openeigrpd.conf"

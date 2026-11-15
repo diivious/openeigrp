@@ -41,7 +41,7 @@ sudo tcpdump -ni <linux-data-interface> -s 0 -w /tmp/ipv4-proto88.pcap 'ip proto
 1. Confirm `ip proto 88`, TTL 1, TOS 0xc0, valid IPv4 total length, local
    source, destination 224.0.0.10 for multicast HELLO/UPDATE/QUERY,
    unicast destination for replies/ACKs, and correct EIGRP checksum.
-2. `show ip eigrp neighbors` on IOS and `oectl`/daemon state on Linux must
+2. `show ip eigrp neighbors` on IOS and `eigrp`/daemon state on Linux must
    show both neighbors UP and stable. Save both outputs and the pcap.
 3. Inject a passive Linux-connected IPv4 prefix and confirm IOS learns it;
    inject an IOS passive IPv4 prefix and confirm Linux installs it in RIB.

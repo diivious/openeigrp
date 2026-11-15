@@ -26,19 +26,19 @@
 #include "eigrp_linux_mgnt.h"
 #include "eigrp_linux_version.h"
 
-#define OECTL_SOCKET "/run/openeigrpd/control.sock"
-#define OECTL_TIMEOUT_MS 3000
-#define OECTL_OFFSET_MAX 8192U
-#define OECTL_FIELD_MAX 40
-#define OECTL_VALUE_MAX 1024
+#define EIGRP_LINUX_CTL_SOCKET "/run/openeigrpd/control.sock"
+#define EIGRP_LINUX_CTL_TIMEOUT_MS 3000
+#define EIGRP_LINUX_CTL_OFFSET_MAX 8192U
+#define EIGRP_LINUX_CTL_FIELD_MAX 40
+#define EIGRP_LINUX_CTL_VALUE_MAX 1024
 
 struct field {
 	char key[48];
-	char value[OECTL_VALUE_MAX];
+	char value[EIGRP_LINUX_CTL_VALUE_MAX];
 };
 
 struct record {
-	struct field fields[OECTL_FIELD_MAX];
+	struct field fields[EIGRP_LINUX_CTL_FIELD_MAX];
 	size_t count;
 };
 
@@ -120,10 +120,10 @@ static const char *status_name(uint16_t status)
 static void usage(FILE *file)
 {
 	fprintf(file,
-		"Usage: oectl [options] show [address-family ipv4|ipv6 [vrf NAME]] [ASN] VIEW [detail] [IFNAME]\n"
-		"       oectl [options] clear [address-family ipv4|ipv6 [vrf NAME]] [ASN] TARGET\n"
-		"       oectl [options] version\n"
-		"       oectl help\n\n"
+		"Usage: eigrp [options] show [address-family ipv4|ipv6 [vrf NAME]] [ASN] VIEW [detail] [IFNAME]\n"
+		"       eigrp [options] clear [address-family ipv4|ipv6 [vrf NAME]] [ASN] TARGET\n"
+		"       eigrp [options] version\n"
+		"       eigrp help\n\n"
 		"Views: version, capabilities, protocols, neighbors, interfaces, topology,\n"
 		"       statistics, traffic, events, diagnostics, tech-support\n"
 		"Clear targets: events, neighbors [IFNAME|ADDRESS] [soft], topology [PREFIX]\n\n"
@@ -136,7 +136,7 @@ static void usage(FILE *file)
 		"      --vrf-id N    Numeric daemon VRF ID (0 is default)\n"
 		"      --json        Preserve daemon JSON-lines output\n"
 		"  -h, --help        Show this help\n",
-		OECTL_SOCKET);
+		EIGRP_LINUX_CTL_SOCKET);
 }
 
 /* Match the shortest unique prefix; never guess at an ambiguous token. */
@@ -230,7 +230,7 @@ static int connect_daemon(const char *path)
 
 	if (!path || path[0] != '/' || strlen(path) >= sizeof(addr.sun_path)) {
 		fprintf(stderr,
-			"oectl: socket path must be absolute and shorter than %zu bytes\n",
+			"eigrp: socket path must be absolute and shorter than %zu bytes\n",
 			sizeof(addr.sun_path));
 		return -1;
 	}
@@ -243,7 +243,7 @@ static int connect_daemon(const char *path)
 	if (connect(fd, (struct sockaddr *)&addr, length) == 0)
 		return fd;
 	if (errno == EINPROGRESS
-	    && ready(fd, POLLOUT, now_ms() + OECTL_TIMEOUT_MS) == 0) {
+	    && ready(fd, POLLOUT, now_ms() + EIGRP_LINUX_CTL_TIMEOUT_MS) == 0) {
 		socklen_t size = sizeof(error);
 		if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &size) == 0) {
 			if (!error)
@@ -255,7 +255,7 @@ failed:
 	error = errno;
 	if (fd >= 0)
 		close(fd);
-	fprintf(stderr, "oectl: cannot connect to daemon at %s: %s\n", path,
+	fprintf(stderr, "eigrp: cannot connect to daemon at %s: %s\n", path,
 		strerror(error));
 	return -1;
 }
@@ -264,7 +264,7 @@ static int transfer(int fd, void *buffer, size_t count, bool send_data)
 {
 	uint8_t *bytes = buffer;
 	size_t done = 0;
-	int64_t deadline = now_ms() + OECTL_TIMEOUT_MS;
+	int64_t deadline = now_ms() + EIGRP_LINUX_CTL_TIMEOUT_MS;
 
 	while (done < count) {
 		ssize_t size;
@@ -333,7 +333,7 @@ static int exchange(int fd, uint16_t op, const struct scope *scope,
 	    || get16(header + 4) != EIGRP_LINUX_MGNT_VERSION
 	    || get16(header + 6) != op) {
 		fprintf(stderr,
-			"oectl: invalid or incompatible daemon reply\n");
+			"eigrp: invalid or incompatible daemon reply\n");
 		return -1;
 	}
 	status = get16(header + 8);
@@ -341,11 +341,11 @@ static int exchange(int fd, uint16_t op, const struct scope *scope,
 	size = get32(header + 12);
 	if (flags & ~1U || size > EIGRP_LINUX_MGNT_RESPONSE_MAX
 	    || (status && (size || flags))) {
-		fprintf(stderr, "oectl: malformed daemon response\n");
+		fprintf(stderr, "eigrp: malformed daemon response\n");
 		return -1;
 	}
 	if (status) {
-		fprintf(stderr, "oectl: %s (status %u)\n", status_name(status),
+		fprintf(stderr, "eigrp: %s (status %u)\n", status_name(status),
 			status);
 		return -1;
 	}
@@ -355,7 +355,7 @@ static int exchange(int fd, uint16_t op, const struct scope *scope,
 	*more = (flags & 1U) != 0;
 	return 0;
 io_error:
-	fprintf(stderr, "oectl: control connection lost: %s\n",
+	fprintf(stderr, "eigrp: control connection lost: %s\n",
 		strerror(errno));
 	return -1;
 }
@@ -468,7 +468,7 @@ static int parse_record(const char *line, size_t length, struct record *rec)
 		const char *start;
 		size_t n;
 
-		if (rec->count == OECTL_FIELD_MAX)
+		if (rec->count == EIGRP_LINUX_CTL_FIELD_MAX)
 			return -1;
 		f = &rec->fields[rec->count++];
 		if (json_string(&p, end, f->key, sizeof(f->key)) != 0
@@ -515,7 +515,7 @@ static int identify(int fd, struct record *record, char *response, size_t *size)
 		     &more)
 	    != 0) {
 		fprintf(stderr,
-			"oectl: client build %s cannot manage this daemon\n",
+			"eigrp: client build %s cannot manage this daemon\n",
 			EIGRP_RELEASE);
 		return -1;
 	}
@@ -524,7 +524,7 @@ static int identify(int fd, struct record *record, char *response, size_t *size)
 	    || strcmp(field(record, "kind"), "identity") != 0
 	    || strcmp(field(record, "release"), EIGRP_RELEASE) != 0) {
 		fprintf(stderr,
-			"oectl: invalid or mismatched daemon identity\n");
+			"eigrp: invalid or mismatched daemon identity\n");
 		return -1;
 	}
 	return 0;
@@ -532,7 +532,7 @@ static int identify(int fd, struct record *record, char *response, size_t *size)
 
 static bool interface_match(const char *filter, const char *value)
 {
-	char safe[OECTL_VALUE_MAX];
+	char safe[EIGRP_LINUX_CTL_VALUE_MAX];
 	size_t n = 0;
 	const unsigned char *p = (const unsigned char *)filter;
 
@@ -795,7 +795,7 @@ static int show_page(const char *page, size_t length, bool json,
 	*count = 0;
 	rec = calloc(1, sizeof(*rec));
 	if (!rec) {
-		fprintf(stderr, "oectl: out of memory\n");
+		fprintf(stderr, "eigrp: out of memory\n");
 		return -1;
 	}
 	while (p < end) {
@@ -804,7 +804,7 @@ static int show_page(const char *page, size_t length, bool json,
 		    || *count == EIGRP_LINUX_MGNT_PAGE_SIZE
 		    || parse_record(p, (size_t)(newline - p), rec) != 0) {
 			fprintf(stderr,
-				"oectl: malformed JSON-lines response\n");
+				"eigrp: malformed JSON-lines response\n");
 			rc = -1;
 			break;
 		}
@@ -858,9 +858,11 @@ static int query_internal(const struct options *opts, uint16_t op,
 			      arg, &count, render)
 		    != 0)
 			goto done;
-		if (more && (!count || offset + count > OECTL_OFFSET_MAX)) {
+		if (more
+		    && (!count
+			|| offset + count > EIGRP_LINUX_CTL_OFFSET_MAX)) {
 			fprintf(stderr,
-				"oectl: response exceeds management pagination limit\n");
+				"eigrp: response exceeds management pagination limit\n");
 			goto done;
 		}
 		offset += (uint32_t)count;
@@ -912,7 +914,7 @@ static int collect_scope(const struct record *rec, void *arg)
 	}
 	if (list->count == sizeof(list->items) / sizeof(list->items[0])) {
 		fprintf(stderr,
-			"oectl: too many protocol instances to select\n");
+			"eigrp: too many protocol instances to select\n");
 		return -1;
 	}
 	list->items[list->count] =
@@ -931,7 +933,7 @@ static int select_scopes(const struct options *opts, struct scopes *list)
 	if (opts->vrf_set && opts->vrf != 0) {
 		if (!opts->asn_set || !opts->afi_set) {
 			fprintf(stderr,
-				"oectl: nondefault VRF ID requires explicit AFI and ASN\n");
+				"eigrp: nondefault VRF ID requires explicit AFI and ASN\n");
 			return -1;
 		}
 		list->items[0] = (struct scope){
@@ -946,12 +948,12 @@ static int select_scopes(const struct options *opts, struct scopes *list)
 	    != 0)
 		return -1;
 	if (!list->count) {
-		fprintf(stderr, "oectl: no matching running EIGRP instance\n");
+		fprintf(stderr, "eigrp: no matching running EIGRP instance\n");
 		return -1;
 	}
 	if (list->skipped)
 		fprintf(stderr,
-			"oectl: nondefault VRFs omitted (native Linux VRF resolution is unavailable)\n");
+			"eigrp: nondefault VRFs omitted (native Linux VRF resolution is unavailable)\n");
 	return 0;
 }
 
@@ -1040,7 +1042,7 @@ static void print_version(bool json)
 	if (json) {
 		/* The local record remains independent of daemon availability.
 		 */
-		fputs("{\"kind\":\"integration\",\"client\":\"oectl\",\"name\":",
+		fputs("{\"kind\":\"integration\",\"client\":\"eigrp\",\"name\":",
 		      stdout);
 		print_json_string(version.integration);
 		fputs(",\"build\":", stdout);
@@ -1209,7 +1211,7 @@ int main(int argc, char **argv)
 	static const char *const families[] = {"ipv4", "ipv6"};
 	static const char *const scopes[] = {"address-family", "vrf"};
 	static const char *const extras[] = {"detail", "soft", "all-links"};
-	struct options opts = {.socket = OECTL_SOCKET};
+	struct options opts = {.socket = EIGRP_LINUX_CTL_SOCKET};
 	const char *words[12] = {0};
 	struct scopes list = {0};
 	uint32_t value;
@@ -1252,7 +1254,7 @@ int main(int argc, char **argv)
 		    || strcmp(arg, "--afi") == 0
 		    || strcmp(arg, "--vrf-id") == 0) {
 			if (i + 1 >= (size_t)argc) {
-				fprintf(stderr, "oectl: missing value for %s\n",
+				fprintf(stderr, "eigrp: missing value for %s\n",
 					arg);
 				return 2;
 			}
@@ -1266,7 +1268,7 @@ int main(int argc, char **argv)
 								 : UINT16_MAX,
 				    &value)
 			    || (strcmp(arg, "--vrf-id") != 0 && value == 0)) {
-				fprintf(stderr, "oectl: invalid value for %s\n",
+				fprintf(stderr, "eigrp: invalid value for %s\n",
 					arg);
 				return 2;
 			}
@@ -1278,7 +1280,7 @@ int main(int argc, char **argv)
 			} else if (strcmp(arg, "--afi") == 0) {
 				if (value != 4 && value != 6) {
 					fprintf(stderr,
-						"oectl: AFI must be 4 or 6\n");
+						"eigrp: AFI must be 4 or 6\n");
 					return 2;
 				}
 				if (opts.afi_set && opts.afi != value)
@@ -1294,11 +1296,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 		if (arg[0] == '-') {
-			fprintf(stderr, "oectl: unknown option %s\n", arg);
+			fprintf(stderr, "eigrp: unknown option %s\n", arg);
 			return 2;
 		}
 		if (used == sizeof(words) / sizeof(words[0])) {
-			fprintf(stderr, "oectl: too many command words\n");
+			fprintf(stderr, "eigrp: too many command words\n");
 			return 2;
 		}
 		words[used++] = arg;
@@ -1306,7 +1308,7 @@ int main(int argc, char **argv)
 	if (version_requested) {
 		if (used) {
 			fprintf(stderr,
-				"oectl: --version does not take a command\n");
+				"eigrp: --version does not take a command\n");
 			return 2;
 		}
 		print_version(opts.json);
@@ -1323,7 +1325,7 @@ int main(int argc, char **argv)
 	if (used == 1 && strcmp(words[0], "tech-support") == 0)
 		return tech_support(&opts);
 	if (!used || (action = keyword(words[0], actions, 2)) < 0) {
-		fprintf(stderr, "oectl: unsupported or ambiguous command\n");
+		fprintf(stderr, "eigrp: unsupported or ambiguous command\n");
 		return 2;
 	}
 	cursor = 1;
@@ -1333,7 +1335,7 @@ int main(int argc, char **argv)
 		if (cursor == used
 		    || (family = keyword(words[cursor++], families, 2)) < 0) {
 			fprintf(stderr,
-				"oectl: expected address-family ipv4|ipv6\n");
+				"eigrp: expected address-family ipv4|ipv6\n");
 			return 2;
 		}
 		value = family == 0 ? 4 : 6;
@@ -1345,7 +1347,7 @@ int main(int argc, char **argv)
 			cursor++;
 			if (cursor == used || opts.vrf_set) {
 				fprintf(stderr,
-					"oectl: missing or conflicting VRF name\n");
+					"eigrp: missing or conflicting VRF name\n");
 				return 2;
 			}
 			opts.vrf_name = words[cursor++];
@@ -1353,7 +1355,7 @@ int main(int argc, char **argv)
 	}
 	if (cursor < used && number(words[cursor], UINT16_MAX, &value)) {
 		if (!value) {
-			fprintf(stderr, "oectl: ASN must be nonzero\n");
+			fprintf(stderr, "eigrp: ASN must be nonzero\n");
 			return 2;
 		}
 		if (opts.asn_set && opts.asn != value)
@@ -1363,13 +1365,13 @@ int main(int argc, char **argv)
 		cursor++;
 	}
 	if (cursor == used) {
-		fprintf(stderr, "oectl: missing show view or clear target\n");
+		fprintf(stderr, "eigrp: missing show view or clear target\n");
 		return 2;
 	}
 	if (action == 0) {
 		if (strcasecmp(words[cursor], "routes") == 0) {
 			fprintf(stderr,
-				"oectl: routes belong to the host RIB, not the EIGRP topology; use 'ip route'\n");
+				"eigrp: routes belong to the host RIB, not the EIGRP topology; use 'ip route'\n");
 			return 2;
 		}
 		for (i = 0; i < sizeof(views) / sizeof(views[0]); ++i) {
@@ -1380,7 +1382,7 @@ int main(int argc, char **argv)
 			    == 0) {
 				if (view >= 0) {
 					fprintf(stderr,
-						"oectl: ambiguous show view %s\n",
+						"eigrp: ambiguous show view %s\n",
 						words[cursor]);
 					return 2;
 				}
@@ -1388,7 +1390,7 @@ int main(int argc, char **argv)
 			}
 		}
 		if (view < 0) {
-			fprintf(stderr, "oectl: unsupported show view %s\n",
+			fprintf(stderr, "eigrp: unsupported show view %s\n",
 				words[cursor]);
 			return 2;
 		}
@@ -1396,7 +1398,7 @@ int main(int argc, char **argv)
 		if (op == 0) {
 			if (cursor + 1 != used) {
 				fprintf(stderr,
-					"oectl: unexpected arguments for %s\n",
+					"eigrp: unexpected arguments for %s\n",
 					views[view].name);
 				return 2;
 			}
@@ -1410,7 +1412,7 @@ int main(int argc, char **argv)
 		int target = keyword(words[cursor], targets, 3);
 		if (target < 0) {
 			fprintf(stderr,
-				"oectl: unsupported or ambiguous clear target %s\n",
+				"eigrp: unsupported or ambiguous clear target %s\n",
 				words[cursor]);
 			return 2;
 		}
@@ -1433,7 +1435,7 @@ int main(int argc, char **argv)
 			soft = true;
 			cursor++;
 		} else if (extra == -2) {
-			fprintf(stderr, "oectl: ambiguous view modifier %s\n",
+			fprintf(stderr, "eigrp: ambiguous view modifier %s\n",
 				words[cursor]);
 			return 2;
 		}
@@ -1445,14 +1447,14 @@ int main(int argc, char **argv)
 			     && op != EIGRP_LINUX_MGNT_TOPOLOGY)
 			    || cursor + 1 != used) {
 				fprintf(stderr,
-					"oectl: unsupported command arguments\n");
+					"eigrp: unsupported command arguments\n");
 				return 2;
 			}
 			interface_name = words[cursor++];
 		} else {
 			if (op == EIGRP_LINUX_MGNT_CLEAR_EVENTS) {
 				fprintf(stderr,
-					"oectl: clear events takes no target\n");
+					"eigrp: clear events takes no target\n");
 				return 2;
 			}
 			target = words[cursor++];
@@ -1464,26 +1466,26 @@ int main(int argc, char **argv)
 			}
 			if (cursor != used) {
 				fprintf(stderr,
-					"oectl: unsupported clear arguments\n");
+					"eigrp: unsupported clear arguments\n");
 				return 2;
 			}
 		}
 	}
 	if (detail && op != EIGRP_LINUX_MGNT_NEIGHBORS
 	    && op != EIGRP_LINUX_MGNT_INTERFACES) {
-		fprintf(stderr, "oectl: detail is unsupported for this view\n");
+		fprintf(stderr, "eigrp: detail is unsupported for this view\n");
 		return 2;
 	}
 	if (opts.json && (detail || interface_name)) {
 		fprintf(stderr,
-			"oectl: detail and interface filters do not support --json yet\n");
+			"eigrp: detail and interface filters do not support --json yet\n");
 		return 2;
 	}
 	if (op <= EIGRP_LINUX_MGNT_PROTOCOLS) {
 		if (opts.asn_set || opts.afi_set || opts.vrf_set
 		    || opts.vrf_name) {
 			fprintf(stderr,
-				"oectl: scope options are not valid for this view\n");
+				"eigrp: scope options are not valid for this view\n");
 			return 2;
 		}
 		return query(&opts, op, NULL, NULL, NULL) == 0 ? 0 : 1;
@@ -1509,7 +1511,7 @@ int main(int argc, char **argv)
 				continue;
 			if (target_result < 0) {
 				fprintf(stderr,
-					"oectl: invalid clear target %s\n",
+					"eigrp: invalid clear target %s\n",
 					target);
 				return 2;
 			}
@@ -1544,11 +1546,11 @@ int main(int argc, char **argv)
 	}
 	if (action == 1 && !attempted) {
 		fprintf(stderr,
-			"oectl: no selected address family matches clear target\n");
+			"eigrp: no selected address family matches clear target\n");
 		return 1;
 	}
 	return errors ? 1 : 0;
 conflicting_scope:
-	fprintf(stderr, "oectl: conflicting address-family/AS/VRF selectors\n");
+	fprintf(stderr, "eigrp: conflicting address-family/AS/VRF selectors\n");
 	return 2;
 }

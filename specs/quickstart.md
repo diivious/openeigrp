@@ -28,7 +28,7 @@ make
 ```
 
 `make` compiles `eigrp/code/` and `libunix/code/` and validates style.
-On Linux it also builds the native `openeigrpd`, `oectl` and
+On Linux it also builds the native `openeigrpd`, `eigrp` and
 `openeigrpd-config` executables. Docker is not required.
 
 ## 3. Run a small test

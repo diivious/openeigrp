@@ -17,7 +17,7 @@ management IPC, and process lifecycle belong in `linux/code/`.
 make linux
 ```
 
-This builds `linux/code/openeigrpd`, `oectl`, `openeigrpd-config`, the portable
+This builds `linux/code/openeigrpd`, `eigrp`, `openeigrpd-config`, the portable
 EIGRP core, shared Unix scheduling and native interface, IPv4/IPv6 packet,
 Netlink RIB/redistribution, policy and management services. The executable
 contains no FRR, BIRD or UUT simulation code. On non-Linux hosts, `make linux`
@@ -34,7 +34,7 @@ linux/code/openeigrpd -t -f "$PWD/linux/config/openeigrpd.conf.example"
 # Use an existing, owner-controlled, non-group-writable directory for -s.
 linux/code/openeigrpd -f /etc/openeigrpd.conf
 # In a second terminal:
-linux/code/oectl show protocols
+linux/code/eigrp show protocols
 ```
 
 The foreground daemon handles SIGTERM/SIGINT gracefully, publishes a
@@ -102,14 +102,14 @@ remaining integration requirements are documented in
 [configuration](configuration.md) and
 [policy/authentication](policy-authentication.md).
 
-## Management IPC and oectl
+## Management IPC and eigrp
 
 `make linux` builds `libeigrp_linux_mgnt.a`, a local Unix-domain control
 socket with versioned framing, bounded JSON-line state pages, `SO_PEERCRED`
 read-only/privileged authorization and nonblocking multi-client operation.
 It reads portable protocol state through `eigrp_mgnt.h`; neighbor resets, topology clears, and event-history clearing are privileged
 operations delegated to portable `eigrp_cli.h` targets. `make linux` also builds the
-standalone `linux/code/oectl` client (no portable core linkage).
+standalone `linux/code/eigrp` client (no portable core linkage).
 
 `openeigrpd` wires `eigrp_linux_mgnt_start()` to host-lifecycle serialization
 and dispatches each scoped runtime-state walk synchronously onto its owning
@@ -119,24 +119,24 @@ topology walker lacks cursor support; IPC offsets are therefore bounded and
 large-topology pagination is incomplete. See
 [management IPC](management-ipc.md) for the protocol, security and scale
 contract. Run `python3 linux/test/test_mgnt.py` for the real AF_UNIX server
-tests. Run `python3 linux/test/test_oectl.py` for end-to-end CLI tests over
+tests. Run `python3 linux/test/test_eigrp_linux_ctl.py` for end-to-end CLI tests over
 real server fixtures and crafted IPC failures.
 
 ```sh
-linux/code/oectl version
-linux/code/oectl show version
-linux/code/oectl show protocols
-linux/code/oectl show neighbors --asn 4453 --afi 4
-linux/code/oectl show interfaces --asn 4453 --afi 4
-linux/code/oectl show topology --asn 4453 --afi 4
-linux/code/oectl show address-family ipv4 4453 topology
-linux/code/oectl show statistics --asn 4453 --afi 4
-linux/code/oectl show events --asn 4453 --afi 4
-linux/code/oectl show diagnostics --asn 4453 --afi 4
-linux/code/oectl show tech-support
-linux/code/oectl clear events --asn 4453 --afi 4
-linux/code/oectl clear address-family ipv4 4453 neighbors 192.0.2.2
-linux/code/oectl clear address-family ipv4 4453 topology 198.51.100.0/24
+linux/code/eigrp version
+linux/code/eigrp show version
+linux/code/eigrp show protocols
+linux/code/eigrp show neighbors --asn 4453 --afi 4
+linux/code/eigrp show interfaces --asn 4453 --afi 4
+linux/code/eigrp show topology --asn 4453 --afi 4
+linux/code/eigrp show address-family ipv4 4453 topology
+linux/code/eigrp show statistics --asn 4453 --afi 4
+linux/code/eigrp show events --asn 4453 --afi 4
+linux/code/eigrp show diagnostics --asn 4453 --afi 4
+linux/code/eigrp show tech-support
+linux/code/eigrp clear events --asn 4453 --afi 4
+linux/code/eigrp clear address-family ipv4 4453 neighbors 192.0.2.2
+linux/code/eigrp clear address-family ipv4 4453 topology 198.51.100.0/24
 ```
 
 The default socket path is `/run/openeigrpd/control.sock`; `--socket PATH`
@@ -149,10 +149,10 @@ only the default VRF. `show tech-support` captures all running default-VRF
 instances unless a specific selector is supplied. Its output is
 based solely on existing IPC views and never changes daemon state.
 
-`oectl` does not start `openeigrpd` or implement an interactive configuration
+`eigrp` does not start `openeigrpd` or implement an interactive configuration
 shell. Existing IPC fixture tests are complemented by real native daemon
 lifecycle tests. Privileged Netlab and Cisco adjacency tests remain a
-separate qualification requirement. See [oectl(8)](../packaging/man/oectl.8)
+separate qualification requirement. See [eigrp(8)](../packaging/man/eigrp.8)
 for command and exit-status details.
 
 ## Regression and qualification
@@ -165,7 +165,7 @@ python3 linux/test/test_config.py
 python3 linux/test/test_policy.py
 python3 linux/test/test_redist.py
 python3 linux/test/test_mgnt.py
-python3 linux/test/test_oectl.py
+python3 linux/test/test_eigrp_linux_ctl.py
 python3 linux/test/test_daemon.py
 python3 linux/test/test_docs.py
 make uut

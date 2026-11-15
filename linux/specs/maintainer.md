@@ -2,7 +2,7 @@
 
 This is a **local build** for Debian and Ubuntu. No APT repository, Docker
 image, FRR/BIRD component or UUT broker is required at runtime. The package
-name is `openeigrpd`; it installs `openeigrpd`, `oectl`, and the offline
+name is `openeigrpd`; it installs `openeigrpd`, `eigrp`, and the offline
 `openeigrpd-config` validator.
 
 This guide is for package and release maintainers. For a first installation,
@@ -160,7 +160,7 @@ sudoedit /etc/openeigrpd.conf
 sudo openeigrpd-config -t -f /etc/openeigrpd.conf
 sudo systemctl enable --now openeigrpd.service
 sudo systemctl status openeigrpd.service
-sudo oectl show protocols
+sudo eigrp show protocols
 sudo systemctl restart openeigrpd.service
 sudo systemctl stop openeigrpd.service
 sudo systemctl disable openeigrpd.service
@@ -185,7 +185,7 @@ sudo usermod -aG openeigrpctl USERNAME
 Group membership does **not** grant the `clear events` operation: the IPC
 server checks `SO_PEERCRED` and only allows root or daemon UID to modify
 state. The control directory is not group-writable. Re-login for group
-membership to take effect. `oectl` does not require privileged packet
+membership to take effect. `eigrp` does not require privileged packet
 capabilities.
 
 The configuration is a dpkg-managed `conffile` at `/etc/openeigrpd.conf`
@@ -217,7 +217,7 @@ and cleaned by systemd, not maintained by package scripts.
 python3 linux/test/test_packaging.py
 # DANGEROUS: installs test packages into the running OS. Use a disposable VM.
 sudo OPENEIGRP_PACKAGE_SYSTEM_TEST=1 python3 linux/test/test_packaging.py
-python3 linux/test/test_oectl.py
+python3 linux/test/test_eigrp_linux_ctl.py
 python3 linux/test/test_config.py
 ```
 

@@ -39,7 +39,7 @@ additional assertions is still one scenario, not a new scenario count.
 ## Integration-specific tests
 
 - Native Linux: `python3 linux/test/test_daemon.py`, `test_config.py`,
-  `test_oectl.py`, `test_mgnt.py`, plus [documentation checks](../linux/test/test_docs.py).
+  `test_eigrp_linux_ctl.py`, `test_mgnt.py`, plus [documentation checks](../linux/test/test_docs.py).
   Raw-socket and systemd tests require a privileged Linux environment.
 - FRR: see [FRR tests](../frr/test/README.md).
 - Shared Unix host: see [Unix host tests](../libunix/README.md).

@@ -21,7 +21,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 DAEMON = ROOT / "linux" / "code" / "openeigrpd"
-CLIENT = ROOT / "linux" / "code" / "oectl"
+CLIENT = ROOT / "linux" / "code" / "eigrp"
 
 
 class NativeDaemonTests(unittest.TestCase):

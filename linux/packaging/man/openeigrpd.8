@@ -103,7 +103,7 @@ Start and inspect the packaged service:
 .Bd -literal -offset indent
 sudo systemctl enable --now openeigrpd
 sudo systemctl status openeigrpd
-sudo oectl show protocols
+sudo eigrp show protocols
 .Ed
 .Pp
 Use a dedicated socket for a foreground development run:
@@ -133,5 +133,5 @@ permissions or runtime semantic readiness.
 .Ex -std
 .Sh SEE ALSO
 .Xr openeigrpd.conf 5 ,
-.Xr oectl 8 ,
+.Xr eigrp 8 ,
 .Xr systemctl 1
