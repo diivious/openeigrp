@@ -294,7 +294,10 @@ learned_via_peer() {
     local node="$1" prefix="$2" peer="$3" output
     output="$(docker exec "$node" vtysh -d eigrpd -c "$topology_command $prefix" 2>&1)" || return 1
     check_cli_output "$output"
-    grep -Eq "^[[:space:]]*[PA][[:space:]]+${prefix//./\.}," <<< "$output" || return 1
+    # A prefix-specific query renders "Topology Entry ... for <prefix>"
+    # and "State is Passive/Active", not the P/A full-table row.
+    grep -Fq " for $prefix" <<< "$output" || return 1
+    grep -Eq '^[[:space:]]*State is (Passive|Active) ' <<< "$output" || return 1
     grep -Fq "via $peer (" <<< "$output"
 }
 

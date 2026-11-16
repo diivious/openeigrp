@@ -1,0 +1,17 @@
+# Verify internal route convergence through the portable UUT after scale build.
+schema: eigrp-uut-test/v1
+name: scale-internal-route-smoke
+topology: ../examples/ipv4-basic-core.yaml
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.12.0.2, state: up}
+        - neighbor: {uut: r3, neighbor: 10.23.0.2, state: up}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: rib, next_hop: 10.12.0.2, distance: 90}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: rib, next_hop: 10.23.0.2, distance: 90}
+        - route: {uut: r1, prefix: 10.3.0.0/24, table: topology, active: false, successors: 1}
+        - route: {uut: r3, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1}
+  - stop: all

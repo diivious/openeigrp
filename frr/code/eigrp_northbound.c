@@ -4504,9 +4504,15 @@ static int eigrpd_named_variance_destroy(struct nb_cb_destroy_args *args)
 		eigrp_metric_variance_update(EIGRP_RESET, &context, 0), true);
 }
 
+static const char *eigrpd_features[] = {
+	"openeigrp",
+	NULL,
+};
+
 /* clang-format off */
 const struct frr_yang_module_info frr_eigrpd_info = {
 	.name = "frr-eigrpd",
+	.features = eigrpd_features,
 	.nodes = {
 		{
 			.xpath = "/frr-eigrpd:eigrpd/named",

@@ -319,6 +319,8 @@ struct nb_node {
 };
 struct frr_yang_module_info {
 	const char *name;
+	bool ignore_cfg_cbs;
+	const char **features;
 	struct nb_node nodes[192];
 };
 typedef int zebra_capabilities_t;
