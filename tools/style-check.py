@@ -14,15 +14,14 @@ from pathlib import Path
 
 
 C_SUFFIXES = {".c", ".h", ".cc", ".cpp", ".hpp"}
-TEXT_SUFFIXES = C_SUFFIXES | {
-    ".py", ".sh", ".bash", ".yaml", ".yml", ".md", ".json",
-    ".toml", ".ini", ".mk", ".txt",
+# Only source files are subject to style checks. Preserve exact test output,
+# configuration, and documentation, including intentional whitespace.
+FORMAT_SUFFIXES = C_SUFFIXES | {
+    ".hh", ".cxx", ".hxx", ".m", ".mm", ".java",
+    ".js", ".jsx", ".ts", ".tsx", ".proto", ".cu", ".cuh",
 }
-TEXT_NAMES = {
-    "Makefile", "Dockerfile", "README", ".clang-format", ".gitignore",
-    ".gitattributes", ".dockerignore", "CONTRIBUTING", "LICENSE",
-    "SECURITY.md", "tools/python", "docker/docker-start", "docker/daemons",
-}
+CODE_SUFFIXES = FORMAT_SUFFIXES | {".py", ".sh", ".bash"}
+CODE_NAMES = {"tools/python", "docker/docker-start"}
 UNSAFE_APIS = {
     "sprintf": "use snprintf() with an explicit buffer size",
     "vsprintf": "use vsnprintf() with an explicit buffer size",
@@ -69,9 +68,7 @@ def git(root, *args):
 
 
 def checked(path):
-    name = Path(path).name
-    return (Path(path).suffix.lower() in TEXT_SUFFIXES or name in TEXT_NAMES
-            or path in TEXT_NAMES)
+    return Path(path).suffix.lower() in CODE_SUFFIXES or path in CODE_NAMES
 
 
 def paths_from_git(data):
@@ -234,6 +231,7 @@ def check_source(root, path, contents, selected, formatter):
                 if name == "sprintf" and path.startswith("frr/code/"):
                     guidance = "use snprintfrr() with an explicit buffer size"
                 violations.append(f"{path}:{number}: {name}() is prohibited: {guidance}")
+    if Path(path).suffix.lower() in FORMAT_SUFFIXES:
         violations += formatting_errors(root, path, contents, selected, formatter)
     return violations
 
@@ -281,7 +279,7 @@ def main():
         version_checked = False
         for label, path, contents, lines in snapshots(root, mode, args.base):
             count += 1
-            if Path(path).suffix.lower() in C_SUFFIXES and not version_checked:
+            if Path(path).suffix.lower() in FORMAT_SUFFIXES and not version_checked:
                 formatter = find_formatter()
                 if not formatter:
                     raise RuntimeError("clang-format not found; install it before checking C source")

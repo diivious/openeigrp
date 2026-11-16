@@ -1,0 +1,101 @@
+
+EIGRP-IPv4 VR(eigrprulez) Topology Table for AS(4453)/ID(192.0.2.1)
+Codes: P - Passive, A - Active, U - Update, Q - Query, R - Reply,
+       r - reply Status, s - sia Status
+
+P 198.51.100.1/32, 1 successors, FD is 256, serno 1
+        via 192.0.2.2 (256/128), eth0
+P 198.51.100.2/32, 1 successors, FD is 512, serno 2
+        via 192.0.2.2 (512/256), eth0
+P 198.51.100.3/32, 1 successors, FD is 768, serno 3
+        via 192.0.2.2 (768/384), eth0
+P 198.51.100.4/32, 1 successors, FD is 1024, serno 4
+        via 192.0.2.2 (1024/512), eth0
+P 198.51.100.5/32, 1 successors, FD is 1280, serno 5
+        via 192.0.2.2 (1280/640), eth0
+P 198.51.100.6/32, 1 successors, FD is 1536, serno 6
+        via 192.0.2.2 (1536/768), eth0
+P 198.51.100.7/32, 1 successors, FD is 1792, serno 7
+        via 192.0.2.2 (1792/896), eth0
+P 198.51.100.8/32, 1 successors, FD is 2048, serno 8
+        via 192.0.2.2 (2048/1024), eth0
+P 198.51.100.9/32, 1 successors, FD is 2304, serno 9
+        via 192.0.2.2 (2304/1152), eth0
+P 198.51.100.10/32, 1 successors, FD is 2560, serno 10
+        via 192.0.2.2 (2560/1280), eth0
+P 198.51.100.11/32, 1 successors, FD is 2816, serno 11
+        via 192.0.2.2 (2816/1408), eth0
+P 198.51.100.12/32, 1 successors, FD is 3072, serno 12
+        via 192.0.2.2 (3072/1536), eth0
+P 198.51.100.13/32, 1 successors, FD is 3328, serno 13
+        via 192.0.2.2 (3328/1664), eth0
+P 198.51.100.14/32, 1 successors, FD is 3584, serno 14
+        via 192.0.2.2 (3584/1792), eth0
+P 198.51.100.15/32, 1 successors, FD is 3840, serno 15
+        via 192.0.2.2 (3840/1920), eth0
+P 198.51.100.16/32, 1 successors, FD is 4096, serno 16
+        via 192.0.2.2 (4096/2048), eth0
+P 198.51.100.17/32, 1 successors, FD is 4352, serno 17
+        via 192.0.2.2 (4352/2176), eth0
+P 198.51.100.18/32, 1 successors, FD is 4608, serno 18
+        via 192.0.2.2 (4608/2304), eth0
+P 198.51.100.19/32, 1 successors, FD is 4864, serno 19
+        via 192.0.2.2 (4864/2432), eth0
+P 198.51.100.20/32, 1 successors, FD is 5120, serno 20
+        via 192.0.2.2 (5120/2560), eth0
+P 198.51.100.21/32, 1 successors, FD is 5376, serno 21
+        via 192.0.2.2 (5376/2688), eth0
+P 198.51.100.22/32, 1 successors, FD is 5632, serno 22
+        via 192.0.2.2 (5632/2816), eth0
+P 198.51.100.23/32, 1 successors, FD is 5888, serno 23
+        via 192.0.2.2 (5888/2944), eth0
+P 198.51.100.24/32, 1 successors, FD is 6144, serno 24
+        via 192.0.2.2 (6144/3072), eth0
+P 198.51.100.25/32, 1 successors, FD is 6400, serno 25
+        via 192.0.2.2 (6400/3200), eth0
+P 198.51.100.26/32, 1 successors, FD is 6656, serno 26
+        via 192.0.2.2 (6656/3328), eth0
+P 198.51.100.27/32, 1 successors, FD is 6912, serno 27
+        via 192.0.2.2 (6912/3456), eth0
+P 198.51.100.28/32, 1 successors, FD is 7168, serno 28
+        via 192.0.2.2 (7168/3584), eth0
+P 198.51.100.29/32, 1 successors, FD is 7424, serno 29
+        via 192.0.2.2 (7424/3712), eth0
+P 198.51.100.30/32, 1 successors, FD is 7680, serno 30
+        via 192.0.2.2 (7680/3840), eth0
+P 198.51.100.31/32, 1 successors, FD is 7936, serno 31
+        via 192.0.2.2 (7936/3968), eth0
+P 198.51.100.32/32, 1 successors, FD is 8192, serno 32
+        via 192.0.2.2 (8192/4096), eth0
+P 198.51.100.33/32, 1 successors, FD is 8448, serno 33
+        via 192.0.2.2 (8448/4224), eth0
+P 198.51.100.34/32, 1 successors, FD is 8704, serno 34
+        via 192.0.2.2 (8704/4352), eth0
+P 198.51.100.35/32, 1 successors, FD is 8960, serno 35
+        via 192.0.2.2 (8960/4480), eth0
+P 198.51.100.36/32, 1 successors, FD is 9216, serno 36
+        via 192.0.2.2 (9216/4608), eth0
+P 198.51.100.37/32, 1 successors, FD is 9472, serno 37
+        via 192.0.2.2 (9472/4736), eth0
+P 198.51.100.38/32, 1 successors, FD is 9728, serno 38
+        via 192.0.2.2 (9728/4864), eth0
+P 198.51.100.39/32, 1 successors, FD is 9984, serno 39
+        via 192.0.2.2 (9984/4992), eth0
+P 198.51.100.40/32, 1 successors, FD is 10240, serno 40
+        via 192.0.2.2 (10240/5120), eth0
+P 198.51.100.41/32, 1 successors, FD is 10496, serno 41
+        via 192.0.2.2 (10496/5248), eth0
+P 198.51.100.42/32, 1 successors, FD is 10752, serno 42
+        via 192.0.2.2 (10752/5376), eth0
+P 198.51.100.43/32, 1 successors, FD is 11008, serno 43
+        via 192.0.2.2 (11008/5504), eth0
+P 198.51.100.44/32, 1 successors, FD is 11264, serno 44
+        via 192.0.2.2 (11264/5632), eth0
+P 198.51.100.45/32, 1 successors, FD is 11520, serno 45
+        via 192.0.2.2 (11520/5760), eth0
+P 198.51.100.46/32, 1 successors, FD is 11776, serno 46
+        via 192.0.2.2 (11776/5888), eth0
+P 198.51.100.47/32, 1 successors, FD is 12032, serno 47
+        via 192.0.2.2 (12032/6016), eth0
+P 198.51.100.48/32, 1 successors, FD is 12288, serno 48
+        via 192.0.2.2 (12288/6144), eth0

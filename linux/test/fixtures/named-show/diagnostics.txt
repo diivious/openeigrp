@@ -1,0 +1,15 @@
+
+EIGRP-IPv4 VR(eigrprulez) Diagnostics for AS(4453)
+OpenEIGRP capabilities (release test"fixture):
+  ipv4              : Supported
+  ipv6              : Not Supported
+  tlv1              : Supported
+  tlv2              : Supported
+  wide_metrics      : Not Supported
+  bfd               : Not Supported
+  snmp              : Not Supported
+  manet             : Not Supported
+  mtr               : Not Supported
+  evn               : Not Supported
+  Debug AFI 4 AS 4453 VRF  category 1
+  Timer 0, Interface eth0, Neighbor -, expires in 4 sec

@@ -1,0 +1,8 @@
+
+EIGRP-IPv4 VR(eigrprulez) Accounting for AS(4453)/ID(192.0.2.1)
+Total Prefix Count: 48
+States: A-Adjacency, P-Suspended, D-Locked
+State Address/Source                           Interface              Prefix Count Restart Count Restart(s)  Reset(s)
+P     192.0.2.2                                eth0                   12           2             30          45
+  Process topology: suspended, prefixes: 48, violations: 2, restart/reset: 30/45 seconds, penalty: 1234 (Q16)
+  Redistribution: locked, prefixes: 3, violations: 4, restart/reset: 50/60 seconds, penalty: 5678 (Q16)

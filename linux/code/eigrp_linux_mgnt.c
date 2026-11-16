@@ -39,12 +39,14 @@ struct mgnt_selector {
 	uint16_t topology;
 	uint16_t flags;
 	uint32_t offset;
+	char vrf_name[EIGRP_LINUX_MGNT_VRF_NAME_SIZE];
+	char instance_name[EIGRP_LINUX_MGNT_INSTANCE_NAME_SIZE];
 };
 
 struct mgnt_response {
 	char data[EIGRP_LINUX_MGNT_RESPONSE_MAX];
 	size_t used;
-	uint32_t index;
+	uint64_t index;
 	uint32_t offset;
 	uint16_t count;
 	bool more;
@@ -156,6 +158,20 @@ static void mgnt_json_string(char *dst, size_t length, const char *src)
 	dst[i] = '\0';
 }
 
+/* Reject missing terminators and nonzero padding in scoped identities. */
+static bool mgnt_name_valid(const char *name, size_t size)
+{
+	const char *end = memchr(name, 0, size);
+	size_t i;
+
+	if (!end)
+		return false;
+	for (i = (size_t)(end - name) + 1; i < size; ++i)
+		if (name[i])
+			return false;
+	return true;
+}
+
 static void mgnt_address(const eigrp_address_t *address, char *buf, size_t size)
 {
 	int family = address->afi == EIGRP_AFI_IPV4   ? AF_INET
@@ -175,10 +191,9 @@ static void mgnt_prefix(const eigrp_prefix_t *prefix, char *buf, size_t size)
 		       (unsigned)prefix->prefix_length);
 }
 
-/* Stop the public walker on the first record beyond the page. A large offset
- * is rejected at the IPC boundary to bound scanning while holding host-side
- * protocol serialization. The portable iterator exposes no resume cursor. */
-#define MGNT_OFFSET_MAX 8192U
+/* Stop the public walker on the first record beyond the page. The portable
+ * iterator does not yet expose a resume cursor; large offsets replay records
+ * but must never silently truncate the topology. */
 static eigrp_result_t mgnt_record(struct mgnt_response *r, const char *line)
 {
 	size_t size;
@@ -192,8 +207,12 @@ static eigrp_result_t mgnt_record(struct mgnt_response *r, const char *line)
 	}
 	size = strlen(line);
 	if (size >= sizeof(r->data) - r->used) {
-		r->too_large = true;
 		r->stopped = true;
+		if (r->count) {
+			r->more = true;
+			return EIGRP_RESULT_CONFLICT;
+		}
+		r->too_large = true;
 		return EIGRP_RESULT_INTERNAL_FAILURE;
 	}
 	memcpy(r->data + r->used, line, size);
@@ -206,24 +225,50 @@ static eigrp_result_t mgnt_protocol(const eigrp_status_protocol_state_t *s,
 				    void *arg)
 {
 	struct mgnt_response *r = arg;
-	char line[640], name[144], vrf[144];
+	char line[1150], name[144], vrf[144];
+	eigrp_instance_context_t context = {0};
+	bool id_valid;
+	uint32_t id = 0;
 
+	id_valid = eigrp_af_config_context_read(s->instance_name, s->afi,
+						s->vrf_name, s->asn, &context)
+			   == EIGRP_RESULT_SUCCESS
+		   && context.runtime != NULL;
+	if (id_valid)
+		id = eigrp_instance_vrf_id(context.runtime);
 	mgnt_json_string(name, sizeof(name), s->instance_name);
 	mgnt_json_string(vrf, sizeof(vrf), s->vrf_name);
-	(void)snprintf(line, sizeof(line),
-		       "{\"kind\":\"protocol\",\"instance\":\"%s\",\"afi\":%u,"
-		       "\"vrf\":\"%s\",\"asn\":%u,\"shutdown\":%s,"
-		       "\"runtime\":%s,\"router_id\":%u}\n",
-		       name, (unsigned)s->afi, vrf, s->asn,
-		       s->shutdown ? "true" : "false",
-		       s->runtime_present ? "true" : "false", s->router_id);
+	(void)snprintf(
+		line, sizeof(line),
+		"{\"kind\":\"protocol\",\"instance\":\"%s\",\"afi\":%u,"
+		"\"vrf\":\"%s\",\"asn\":%u,\"vrf_id_valid\":%s,\"vrf_id\":%u,\"shutdown\":%s,"
+		"\"runtime\":%s,\"parent_shutdown\":%s,\"router_id\":%u,"
+		"\"router_id_configured\":%s,\"effective_router_id\":%u,"
+		"\"k1\":%u,\"k2\":%u,\"k3\":%u,\"k4\":%u,"
+		"\"k5\":%u,\"k6\":%u,\"variance\":%u,"
+		"\"max_paths\":%u,\"max_hops\":%u,"
+		"\"distance_internal\":%u,\"distance_external\":%u,"
+		"\"metric_version\":%u,\"active_time\":%u,"
+		"\"topology_count_valid\":%s,\"topology_prefixes\":%u,"
+		"\"redistributed_prefixes\":%u}\n",
+		name, (unsigned)s->afi, vrf, s->asn,
+		id_valid ? "true" : "false", id, s->shutdown ? "true" : "false",
+		s->runtime_present ? "true" : "false",
+		s->parent_shutdown ? "true" : "false", s->router_id,
+		s->router_id_configured ? "true" : "false",
+		s->effective_router_id, s->k_values[0], s->k_values[1],
+		s->k_values[2], s->k_values[3], s->k_values[4], s->k_values[5],
+		s->variance, s->max_paths, s->max_hops, s->distance_internal,
+		s->distance_external, s->metric_version, s->active_time_seconds,
+		s->topology_count_valid ? "true" : "false",
+		s->topology_prefix_count, s->redistributed_prefix_count);
 	return mgnt_record(r, line);
 }
 
 static eigrp_result_t mgnt_interface(const eigrp_intf_state_t *s, void *arg)
 {
 	struct mgnt_response *r = arg;
-	char line[1100], name[160];
+	char line[2300], name[160];
 
 	mgnt_json_string(name, sizeof(name), s->interface_name);
 	(void)snprintf(
@@ -232,22 +277,54 @@ static eigrp_result_t mgnt_interface(const eigrp_intf_state_t *s, void *arg)
 		"\"configured\":%s,\"passive\":%s,\"shutdown\":%s,"
 		"\"multicast\":%s,\"bandwidth\":%u,\"delay\":%u,"
 		"\"mtu\":%u,\"hello\":%u,\"hold\":%u,\"peers\":%u,"
+		"\"up_peers\":%u,\"mean_srtt_valid\":%s,\"mean_srtt\":%u,"
+		"\"bandwidth_percent_configured\":%s,\"bandwidth_percent\":%u,"
+		"\"hello_configured\":%s,\"hold_configured\":%s,"
+		"\"reliability\":%u,\"load\":%u,\"tlv1_peers\":%u,"
+		"\"tlv2_peers\":%u,\"auth_configured\":%s,\"auth_mode\":%u,"
+		"\"split_horizon\":%s,\"next_hop_self\":%s,"
+		"\"hello_timer_running\":%s,\"hello_timer_remaining\":%u,"
 		"\"output_queue\":%lu,\"reliable_queue\":%lu,"
-		"\"retransmissions\":%llu}\n",
+		"\"unreliable_mcast\":%llu,\"reliable_mcast\":%llu,"
+		"\"unreliable_ucast\":%llu,\"reliable_ucast\":%llu,"
+		"\"mcast_exceptions\":%llu,\"cr_packets\":%llu,"
+		"\"retransmissions\":%llu,\"pacing_bytes\":%llu,"
+		"\"pacing_defers\":%llu,\"pacing_defer_ms\":%llu}\n",
 		name, s->runtime_present ? "true" : "false",
 		s->config_present ? "true" : "false",
 		s->passive ? "true" : "false", s->shutdown ? "true" : "false",
 		s->multicast_enabled ? "true" : "false", s->bandwidth, s->delay,
 		s->mtu, s->hello_interval, s->hold_time, s->peer_count,
-		s->output_queue_count, s->reliable_queue_count,
-		(unsigned long long)s->retransmissions_sent);
+		s->up_peer_count, s->mean_srtt_valid ? "true" : "false",
+		s->mean_srtt_msec,
+		s->bandwidth_percent_configured ? "true" : "false",
+		s->bandwidth_percent,
+		s->hello_interval_configured ? "true" : "false",
+		s->hold_time_configured ? "true" : "false", s->reliability,
+		s->load, s->tlv1_peer_count, s->tlv2_peer_count,
+		s->authentication_configured ? "true" : "false",
+		s->authentication_mode, s->split_horizon ? "true" : "false",
+		s->next_hop_self ? "true" : "false",
+		s->hello_timer_running ? "true" : "false",
+		s->hello_timer_remaining, s->output_queue_count,
+		s->reliable_queue_count,
+		(unsigned long long)s->unreliable_multicast_sent,
+		(unsigned long long)s->reliable_multicast_sent,
+		(unsigned long long)s->unreliable_unicast_sent,
+		(unsigned long long)s->reliable_unicast_sent,
+		(unsigned long long)s->multicast_exceptions,
+		(unsigned long long)s->cr_packets_sent,
+		(unsigned long long)s->retransmissions_sent,
+		(unsigned long long)s->pacing_tx_bytes,
+		(unsigned long long)s->pacing_defer_count,
+		(unsigned long long)s->pacing_defer_msec);
 	return mgnt_record(r, line);
 }
 
 static eigrp_result_t mgnt_neighbor(const eigrp_nbr_state_t *s, void *arg)
 {
 	struct mgnt_response *r = arg;
-	char line[900], addr[INET6_ADDRSTRLEN], name[160], state[120];
+	char line[1400], addr[INET6_ADDRSTRLEN], name[160], state[120];
 
 	mgnt_address(&s->address, addr, sizeof(addr));
 	mgnt_json_string(name, sizeof(name), s->interface_name);
@@ -255,13 +332,23 @@ static eigrp_result_t mgnt_neighbor(const eigrp_nbr_state_t *s, void *arg)
 	(void)snprintf(
 		line, sizeof(line),
 		"{\"kind\":\"neighbor\",\"address\":\"%s\",\"interface\":\"%s\","
-		"\"state\":\"%s\",\"uptime\":%llu,\"hold\":%u,"
+		"\"state\":\"%s\",\"runtime\":%s,\"uptime\":%llu,\"hold\":%u,"
 		"\"queue\":%lu,\"sequence\":%u,\"prefixes\":%u,"
-		"\"srtt\":%u,\"rto\":%u,\"retransmissions\":%llu}\n",
-		addr, name, state, (unsigned long long)s->uptime_seconds,
-		s->hold_time, s->reliable_queue_count, s->sequence_number,
-		s->prefix_count, s->srtt_msec, s->rto_msec,
-		(unsigned long long)s->retransmit_count);
+		"\"srtt_valid\":%s,\"srtt\":%u,\"rto\":%u,"
+		"\"retransmissions\":%llu,\"retry\":%u,"
+		"\"os_major\":%u,\"os_minor\":%u,\"tlv_major\":%u,"
+		"\"tlv_minor\":%u,\"tlv_version\":%u,\"static\":%s,"
+		"\"limit_status\":%u,\"limit_restarts\":%u,"
+		"\"limit_restart_secs\":%u,\"limit_reset_secs\":%u}\n",
+		addr, name, state, s->runtime_present ? "true" : "false",
+		(unsigned long long)s->uptime_seconds, s->hold_time,
+		s->reliable_queue_count, s->sequence_number, s->prefix_count,
+		s->srtt_valid ? "true" : "false", s->srtt_msec, s->rto_msec,
+		(unsigned long long)s->retransmit_count, s->retry_count,
+		s->os_major, s->os_minor, s->tlv_major, s->tlv_minor,
+		s->tlv_version, s->static_configured ? "true" : "false",
+		(unsigned)(unsigned char)s->limit_status, s->limit_restart_cnt,
+		s->limit_restart_seconds, s->limit_reset_seconds);
 	return mgnt_record(r, line);
 }
 
@@ -275,11 +362,12 @@ mgnt_topology_prefix(const eigrp_topology_prefix_state_t *s, void *arg)
 	mgnt_prefix(&s->destination, pfx, sizeof(pfx));
 	(void)snprintf(line, sizeof(line),
 		       "{\"kind\":\"prefix\",\"prefix\":\"%s\",\"active\":%s,"
-		       "\"fd\":%llu,\"successors\":%u,\"serial\":%llu}\n",
+		       "\"fd\":%llu,\"successors\":%u,\"serial\":%llu,"
+		       "\"dual_state\":%u,\"pending_replies\":%u}\n",
 		       pfx, s->active ? "true" : "false",
 		       (unsigned long long)s->feasible_distance,
-		       s->successor_count,
-		       (unsigned long long)s->serial_number);
+		       s->successor_count, (unsigned long long)s->serial_number,
+		       s->dual_state, s->pending_replies);
 	return mgnt_record(r, line);
 }
 
@@ -287,8 +375,10 @@ static eigrp_result_t mgnt_topology_route(const eigrp_topology_route_state_t *s,
 					  void *arg)
 {
 	struct mgnt_response *r = arg;
-	char line[640], pfx[INET6_ADDRSTRLEN + 12];
+	char line[1500], pfx[INET6_ADDRSTRLEN + 12];
 	char addr[INET6_ADDRSTRLEN], name[160];
+	const eigrp_metrics_t *t = &s->total_metric;
+	const eigrp_metrics_t *m = &s->reported_metric;
 
 	mgnt_prefix(&r->prefix, pfx, sizeof(pfx));
 	mgnt_address(&s->next_hop, addr, sizeof(addr));
@@ -296,13 +386,37 @@ static eigrp_result_t mgnt_topology_route(const eigrp_topology_route_state_t *s,
 	(void)snprintf(
 		line, sizeof(line),
 		"{\"kind\":\"path\",\"prefix\":\"%s\",\"next_hop\":\"%s\","
-		"\"interface\":\"%s\",\"connected\":%s,\"successor\":%s,"
-		"\"feasible\":%s,\"distance\":%llu,\"rd\":%llu}\n",
+		"\"interface\":\"%s\",\"connected\":%s,\"redistributed\":%s,"
+		"\"external\":%s,\"successor\":%s,\"feasible\":%s,"
+		"\"distance\":%llu,\"rd\":%llu,"
+		"\"total_bw\":%llu,\"total_delay\":%llu,"
+		"\"total_wide_bw\":%llu,\"total_wide_delay\":%llu,"
+		"\"total_mtu\":%u,\"total_reliability\":%u,"
+		"\"total_load\":%u,\"total_hops\":%u,\"total_tag\":%u,"
+		"\"total_flags\":%u,"
+		"\"reported_bw\":%llu,\"reported_delay\":%llu,"
+		"\"reported_wide_bw\":%llu,\"reported_wide_delay\":%llu,"
+		"\"reported_mtu\":%u,\"reported_reliability\":%u,"
+		"\"reported_load\":%u,\"reported_hops\":%u,"
+		"\"reported_tag\":%u,\"reported_flags\":%u}\n",
 		pfx, addr, name, s->connected ? "true" : "false",
-		s->successor ? "true" : "false",
+		s->redistributed ? "true" : "false",
+		s->external ? "true" : "false", s->successor ? "true" : "false",
 		s->feasible_successor ? "true" : "false",
 		(unsigned long long)s->distance,
-		(unsigned long long)s->reported_distance);
+		(unsigned long long)s->reported_distance,
+		(unsigned long long)t->bandwidth, (unsigned long long)t->delay,
+		(unsigned long long)t->wide_bandwidth,
+		(unsigned long long)t->wide_delay,
+		((unsigned)t->mtu[2] << 16) | ((unsigned)t->mtu[1] << 8)
+			| t->mtu[0],
+		t->reliability, t->load, t->hop_count, t->tag, t->flags,
+		(unsigned long long)m->bandwidth, (unsigned long long)m->delay,
+		(unsigned long long)m->wide_bandwidth,
+		(unsigned long long)m->wide_delay,
+		((unsigned)m->mtu[2] << 16) | ((unsigned)m->mtu[1] << 8)
+			| m->mtu[0],
+		m->reliability, m->load, m->hop_count, m->tag, m->flags);
 	return mgnt_record(r, line);
 }
 
@@ -328,16 +442,84 @@ static eigrp_result_t mgnt_event(uint32_t number, const eigrp_eventlog_msg_t *s,
 static eigrp_result_t mgnt_timer(const eigrp_timer_state_t *s, void *arg)
 {
 	struct mgnt_response *r = arg;
-	char line[420], name[160], addr[INET6_ADDRSTRLEN];
+	char line[510], name[160], addr[INET6_ADDRSTRLEN];
+	char destination[INET6_ADDRSTRLEN + 12];
 
+	mgnt_prefix(&s->destination, destination, sizeof(destination));
 	mgnt_json_string(name, sizeof(name), s->interface_name);
 	mgnt_address(&s->neighbor_address, addr, sizeof(addr));
 	(void)snprintf(line, sizeof(line),
 		       "{\"kind\":\"timer\",\"type\":%u,\"interface\":\"%s\","
-		       "\"neighbor\":\"%s\",\"remaining\":%u}\n",
+		       "\"neighbor\":\"%s\",\"remaining\":%u,"
+		       "\"remaining_ms\":%llu,\"neighbor_present\":%s,"
+		       "\"destination\":\"%s\"}\n",
 		       (unsigned)s->type, name, s->neighbor_present ? addr : "",
-		       s->expiration_seconds);
+		       s->expiration_seconds,
+		       (unsigned long long)s->expiration_msec,
+		       s->neighbor_present ? "true" : "false",
+		       s->type == EIGRP_TIMER_STATE_ACTIVE ? destination : "");
 	return mgnt_record(r, line);
+}
+
+static eigrp_result_t mgnt_accounting_entry(const eigrp_stat_nbr_limit_t *s,
+					    void *arg)
+{
+	struct mgnt_response *r = arg;
+	char line[430], addr[INET6_ADDRSTRLEN], name[160];
+
+	mgnt_address(&s->neighbor_address, addr, sizeof(addr));
+	mgnt_json_string(name, sizeof(name), s->interface_name);
+	(void)snprintf(
+		line, sizeof(line),
+		"{\"kind\":\"accounting_entry\",\"address\":\"%s\","
+		"\"interface\":\"%s\",\"status\":%u,\"prefixes\":%u,"
+		"\"restarts\":%u,\"restart_secs\":%u,\"reset_secs\":%u}\n",
+		addr, name, (unsigned)(unsigned char)s->status, s->prefix_count,
+		s->restart_cnt, s->restart_seconds, s->reset_seconds);
+	return mgnt_record(r, line);
+}
+
+/* Records carry their own type, allowing pagination across independent
+ * summary and neighbor iterator calls without keeping borrowed core state. */
+static eigrp_result_t mgnt_accounting(const eigrp_instance_context_t *context,
+				      struct mgnt_response *r)
+{
+	eigrp_pfxlimits_summary_t summary;
+	uint32_t total = 0;
+	eigrp_result_t result;
+	char line[570];
+
+	result = eigrp_stat_pfxlimits_summary_read(context, &summary);
+	if (result != EIGRP_RESULT_SUCCESS && result != EIGRP_RESULT_NOT_FOUND)
+		return result;
+	if (result == EIGRP_RESULT_SUCCESS) {
+		/* The process prefix count is computed by the same portable
+		 * function as the accounting walker. */
+		total = summary.process.prefix_cnt;
+		(void)snprintf(
+			line, sizeof(line),
+			"{\"kind\":\"accounting_summary\",\"total\":%u,"
+			"\"process_state\":%u,\"process_prefixes\":%u,"
+			"\"process_restarts\":%u,\"process_restart_secs\":%u,"
+			"\"process_reset_secs\":%u,\"process_penalty\":%u,"
+			"\"redist_state\":%u,\"redist_prefixes\":%u,"
+			"\"redist_restarts\":%u,\"redist_restart_secs\":%u,"
+			"\"redist_reset_secs\":%u,\"redist_penalty\":%u}\n",
+			total, summary.process.state,
+			summary.process.prefix_cnt, summary.process.restart_cnt,
+			summary.process.restart_seconds,
+			summary.process.reset_seconds,
+			summary.process.penalty_q16, summary.redist.state,
+			summary.redist.prefix_cnt, summary.redist.restart_cnt,
+			summary.redist.restart_seconds,
+			summary.redist.reset_seconds,
+			summary.redist.penalty_q16);
+		result = mgnt_record(r, line);
+		if (result != EIGRP_RESULT_SUCCESS)
+			return result;
+	}
+	return eigrp_stat_accounting_iterate(context, &total,
+					     mgnt_accounting_entry, r);
 }
 
 static eigrp_result_t mgnt_capabilities(struct mgnt_response *r)
@@ -416,13 +598,32 @@ mgnt_lookup_protocol(const eigrp_status_protocol_state_t *s, void *arg)
 
 	if (s->afi != lookup->selector.afi || s->asn != lookup->selector.asn)
 		return EIGRP_RESULT_SUCCESS;
+	if (lookup->selector.instance_name[0]
+	    && (strcmp(s->instance_name, lookup->selector.instance_name) != 0
+		|| strcmp(s->vrf_name, lookup->selector.vrf_name) != 0))
+		return EIGRP_RESULT_SUCCESS;
 	if (eigrp_af_config_context_read(s->instance_name, s->afi, s->vrf_name,
 					 s->asn, &context)
 	    != EIGRP_RESULT_SUCCESS)
 		return EIGRP_RESULT_SUCCESS;
-	if (!context.runtime
-	    || eigrp_instance_vrf_id(context.runtime) != lookup->selector.vrf)
+	/* The default Linux VRF can retain named AF configuration without a
+	 * running EIGRP instance. FRR shows this configuration as inactive. */
+	if (lookup->selector.instance_name[0] && lookup->selector.vrf != 0
+	    && (!context.runtime
+		|| eigrp_instance_vrf_id(context.runtime)
+			   != lookup->selector.vrf))
 		return EIGRP_RESULT_SUCCESS;
+	if (!lookup->selector.instance_name[0]) {
+		/* A numeric runtime ID cannot identify an inactive nondefault
+		 * VRF. Named selectors use portable config identity instead. */
+		if (context.runtime) {
+			if (eigrp_instance_vrf_id(context.runtime)
+			    != lookup->selector.vrf)
+				return EIGRP_RESULT_SUCCESS;
+		} else if (lookup->selector.vrf != 0
+			   || strcmp(s->vrf_name, "default") != 0)
+			return EIGRP_RESULT_SUCCESS;
+	}
 	lookup->found = true;
 	lookup->context = context;
 	lookup->context.topology_id = lookup->selector.topology;
@@ -439,16 +640,33 @@ static eigrp_result_t mgnt_query_scoped(void *arg)
 	char line[360];
 	size_t i;
 
+	/* A retained address-family configuration has no portable runtime
+	 * counters, topology, timers, or event log to report. Its configured
+	 * interface and static-neighbor views remain available. */
+	if (!context->runtime && req->op != EIGRP_LINUX_MGNT_NEIGHBORS
+	    && req->op != EIGRP_LINUX_MGNT_STATIC_NEIGHBORS
+	    && req->op != EIGRP_LINUX_MGNT_INTERFACES)
+		return EIGRP_RESULT_SUCCESS;
+
 	switch (req->op) {
 	case EIGRP_LINUX_MGNT_NEIGHBORS:
-		result = eigrp_nbr_state_iterate(context->config,
-						 context->runtime, NULL, false,
-						 mgnt_neighbor, r);
+	case EIGRP_LINUX_MGNT_STATIC_NEIGHBORS:
+		result = eigrp_nbr_state_iterate(
+			context->config, context->runtime, NULL,
+			req->op == EIGRP_LINUX_MGNT_STATIC_NEIGHBORS,
+			mgnt_neighbor, r);
 		break;
 	case EIGRP_LINUX_MGNT_INTERFACES:
 		result = eigrp_intf_state_iterate(context->config,
 						  context->runtime, NULL,
 						  mgnt_interface, r);
+		/* FRR distinguishes no matching interfaces from retained
+		 * configuration with no active interfaces. Carry the iterator's
+		 * real NOT_FOUND result without exposing a synthetic interface.
+		 */
+		if (result == EIGRP_RESULT_NOT_FOUND)
+			result = mgnt_record(
+				r, "{\"kind\":\"interface_empty\"}\n");
 		break;
 	case EIGRP_LINUX_MGNT_TOPOLOGY:
 	case EIGRP_LINUX_MGNT_ROUTES:
@@ -459,6 +677,12 @@ static eigrp_result_t mgnt_query_scoped(void *arg)
 		break;
 	case EIGRP_LINUX_MGNT_TRAFFIC:
 		result = mgnt_traffic(context, r);
+		break;
+	case EIGRP_LINUX_MGNT_TIMERS:
+		result = eigrp_timer_state_iterate(context, mgnt_timer, r);
+		break;
+	case EIGRP_LINUX_MGNT_ACCOUNTING:
+		result = mgnt_accounting(context, r);
 		break;
 	case EIGRP_LINUX_MGNT_EVENTS:
 		result = eigrp_eventlog_state_read(context, &event_state);
@@ -562,10 +786,11 @@ static eigrp_result_t mgnt_query(void *arg)
 		return mgnt_capabilities(r);
 	if (req->op == EIGRP_LINUX_MGNT_PROTOCOLS) {
 		result = eigrp_status_protocol_iterate(mgnt_protocol, r);
-		return r->stopped
-			       ? (r->too_large ? EIGRP_RESULT_INTERNAL_FAILURE
-					       : EIGRP_RESULT_SUCCESS)
-			       : result;
+		if (r->stopped)
+			return r->too_large ? EIGRP_RESULT_INTERNAL_FAILURE
+					    : EIGRP_RESULT_SUCCESS;
+		return result == EIGRP_RESULT_NOT_FOUND ? EIGRP_RESULT_SUCCESS
+							: result;
 	}
 
 	result = eigrp_status_protocol_iterate(mgnt_lookup_protocol, &lookup);
@@ -576,6 +801,16 @@ static eigrp_result_t mgnt_query(void *arg)
 			       : result;
 
 	req->context = lookup.context;
+	/* Configuration-only AFs have no packet-thread-owned runtime state.
+	 * The daemon executor already serializes access to their config. Never
+	 * run clear operations or invoke a missing runtime executor. */
+	if (!req->context.runtime) {
+		if (req->op == EIGRP_LINUX_MGNT_CLEAR_EVENTS
+		    || req->op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+		    || req->op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY)
+			return EIGRP_RESULT_NOT_FOUND;
+		return mgnt_query_scoped(req);
+	}
 	/* Configuration identity is protected by the daemon executor. Runtime
 	 * topology and neighbor descriptors belong to the AF packet thread. */
 	return eigrp_mgnt_runtime_execute(req->context.runtime,
@@ -661,6 +896,12 @@ static void mgnt_identity(struct mgnt_client *client)
 		   false, line, (size_t)size, false);
 }
 
+static bool mgnt_has_target(uint16_t op)
+{
+	return op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+	       || op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY;
+}
+
 static void mgnt_request(struct mgnt_client *client)
 {
 	const uint8_t *p = client->input;
@@ -680,13 +921,15 @@ static void mgnt_request(struct mgnt_client *client)
 	    || length
 		       != (op == EIGRP_LINUX_MGNT_IDENTITY
 				   ? EIGRP_LINUX_MGNT_IDENTITY_SIZE
+			   : op == EIGRP_LINUX_MGNT_PROTOCOLS
+				   ? sizeof(uint32_t)
 				   : (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
-						       + (op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+						       + (mgnt_has_target(op)
 								  ? EIGRP_LINUX_MGNT_TARGET_SIZE
 								  : 0)
 					     : 0))
 	    || op < EIGRP_LINUX_MGNT_CAPABILITIES
-	    || op > EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY) {
+	    || op > EIGRP_LINUX_MGNT_STATIC_NEIGHBORS) {
 		mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false, NULL, 0,
 			   true);
 		return;
@@ -738,6 +981,9 @@ static void mgnt_request(struct mgnt_client *client)
 		return;
 	}
 	req->op = op;
+	if (op == EIGRP_LINUX_MGNT_PROTOCOLS)
+		req->selector.offset =
+			mgnt_get32(p + EIGRP_LINUX_MGNT_HEADER_SIZE);
 	if (scoped) {
 		p += EIGRP_LINUX_MGNT_HEADER_SIZE;
 		req->selector.afi = mgnt_get16(p);
@@ -746,11 +992,26 @@ static void mgnt_request(struct mgnt_client *client)
 		req->selector.topology = mgnt_get16(p + 8);
 		req->selector.flags = mgnt_get16(p + 10);
 		req->selector.offset = mgnt_get32(p + 12);
+		memcpy(req->selector.vrf_name, p + 16,
+		       sizeof(req->selector.vrf_name));
+		memcpy(req->selector.instance_name,
+		       p + 16 + EIGRP_LINUX_MGNT_VRF_NAME_SIZE,
+		       sizeof(req->selector.instance_name));
+		if (!mgnt_name_valid(req->selector.vrf_name,
+				     sizeof(req->selector.vrf_name))
+		    || !mgnt_name_valid(req->selector.instance_name,
+					sizeof(req->selector.instance_name))
+		    || (!!req->selector.vrf_name[0]
+			!= !!req->selector.instance_name[0])) {
+			mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false,
+				   NULL, 0, false);
+			free(req);
+			return;
+		}
 		if ((req->selector.afi != EIGRP_AFI_IPV4
 		     && req->selector.afi != EIGRP_AFI_IPV6)
 		    || req->selector.asn == 0 || req->selector.flags != 0
 		    || req->selector.topology != EIGRP_TOPOLOGY_ID_BASE
-		    || req->selector.offset > MGNT_OFFSET_MAX
 		    || ((op == EIGRP_LINUX_MGNT_CLEAR_EVENTS
 			 || op == EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
 			 || op == EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY)
@@ -861,8 +1122,11 @@ static void mgnt_client_read(struct mgnt_client *client)
 		if (length
 			    != (op == EIGRP_LINUX_MGNT_IDENTITY
 					? EIGRP_LINUX_MGNT_IDENTITY_SIZE
+				: op == EIGRP_LINUX_MGNT_PROTOCOLS
+					? sizeof(uint32_t)
 					: (scoped ? EIGRP_LINUX_MGNT_SELECTOR_SIZE
-							    + (op >= EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS
+							    + (mgnt_has_target(
+								       op)
 								       ? EIGRP_LINUX_MGNT_TARGET_SIZE
 								       : 0)
 						  : 0))
@@ -870,7 +1134,7 @@ static void mgnt_client_read(struct mgnt_client *client)
 		    || mgnt_get16(client->input + 8) != 0
 		    || mgnt_get16(client->input + 10) != 0
 		    || op < EIGRP_LINUX_MGNT_CAPABILITIES
-		    || op > EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY) {
+		    || op > EIGRP_LINUX_MGNT_STATIC_NEIGHBORS) {
 			mgnt_reply(client, op, EIGRP_LINUX_MGNT_INVALID, false,
 				   NULL, 0, true);
 			return;

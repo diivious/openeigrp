@@ -1,0 +1,9 @@
+
+EIGRP-IPv4 VR(eigrprulez) Topology Entry for AS(4453)/ID(192.0.2.1) for 198.51.100.48/32
+  State is Passive (DUAL state 2), 1 successors, FD is 12288, serno 48
+  Replies pending: 3, serial number: 48
+        via 192.0.2.2 (12288/6144), eth0
+          Route is Internal, successor
+          Composite metric (12288/6144)
+          Total vector: bandwidth 50000 Kbit/s, delay 5 us, reliability 230/255, load 7/255, MTU 1500, hop count 2
+          Reported vector: bandwidth 10000 Kbit/s, delay 1 us, reliability n/a, load n/a, MTU n/a, hop count 1

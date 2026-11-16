@@ -1,0 +1,21 @@
+{
+  "name": "code-only style scope UUT",
+  "description": "Run actual style commands and preserve non-code fixtures in changed and full-tree modes",
+  "non_code": [
+    "linux/test/fixtures/named-show/neighbors.txt",
+    "linux/test/uut/format.yaml",
+    "linux/test/uut/config.yml",
+    "linux/test/fixtures/show.json",
+    "docs/guide.md",
+    "docs/format.toml",
+    "docs/config.ini",
+    "docs/fragment.mk",
+    "README",
+    "Makefile",
+    "Dockerfile",
+    ".clang-format",
+    ".gitignore"
+  ],
+  "whitespace_code": ["tools/check.py", "tools/check.sh", "tools/check.bash"],
+  "formatted_code": ["linux/code/check.c", "linux/code/check.h", "tools/check.js"]
+}

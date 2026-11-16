@@ -11,9 +11,13 @@
 #include "eigrp.h"
 
 #define EIGRP_LINUX_MGNT_MAGIC 0x45474d54U /* EGMT */
-#define EIGRP_LINUX_MGNT_VERSION 2U
+#define EIGRP_LINUX_MGNT_VERSION 5U
 #define EIGRP_LINUX_MGNT_HEADER_SIZE 16U
-#define EIGRP_LINUX_MGNT_SELECTOR_SIZE 16U
+#define EIGRP_LINUX_MGNT_VRF_NAME_SIZE 64U
+#define EIGRP_LINUX_MGNT_INSTANCE_NAME_SIZE 128U
+#define EIGRP_LINUX_MGNT_SELECTOR_SIZE                                         \
+	(16U + EIGRP_LINUX_MGNT_VRF_NAME_SIZE                                  \
+	 + EIGRP_LINUX_MGNT_INSTANCE_NAME_SIZE)
 #define EIGRP_LINUX_MGNT_TARGET_SIZE 128U
 #define EIGRP_LINUX_MGNT_IDENTITY_SIZE 128U
 #define EIGRP_LINUX_MGNT_RESPONSE_MAX 16384U
@@ -25,6 +29,10 @@
  * Requests set status/flags to zero. Response flags bit 0 indicates that
  * another page can be requested (offset += number of JSON-lines returned).
  * The length excludes the header. Responses contain newline-delimited JSON.
+ * Version 5 adds a four-byte pagination offset to protocols requests and
+ * an interface_empty status record when the portable interface iterator
+ * has no matches. The client omits this metadata from
+ * --json output. Earlier clients and daemons must not interoperate.
  */
 typedef enum eigrp_linux_mgnt_operation {
 	EIGRP_LINUX_MGNT_CAPABILITIES = 1,
@@ -40,6 +48,9 @@ typedef enum eigrp_linux_mgnt_operation {
 	EIGRP_LINUX_MGNT_IDENTITY,
 	EIGRP_LINUX_MGNT_CLEAR_NEIGHBORS,
 	EIGRP_LINUX_MGNT_CLEAR_TOPOLOGY,
+	EIGRP_LINUX_MGNT_TIMERS,
+	EIGRP_LINUX_MGNT_ACCOUNTING,
+	EIGRP_LINUX_MGNT_STATIC_NEIGHBORS,
 } eigrp_linux_mgnt_operation_t;
 
 typedef enum eigrp_linux_mgnt_status {
@@ -55,9 +66,14 @@ typedef enum eigrp_linux_mgnt_status {
 
 /* A scoped request is exactly 16 bytes, network byte order:
  * afi:u16 (4 or 6), asn:u16 (nonzero), vrf_id:u32, topology_id:u16,
- * flags:u16 (zero), offset:u32. The offset is the JSON-line record index.
+ * flags:u16 (zero), offset:u32, followed by zero-terminated/zero-padded
+ * vrf_name[64] and instance_name[128]. The offset is the JSON-line record
+ * index. Both names must be set together, or both blank for numeric runtime
+ * VRF ID selection. When names are present, they identify the exact portable
+ * configured address family, including one with no runtime.
  * Only the base topology ID (0) is supported.
- * Capabilities and protocols take no request body.
+ * Capabilities takes no request body; protocols takes a 4-byte network-order
+ * pagination offset.
  * IDENTITY requests carry a zero-padded 128-byte client build identifier.
  * A matching identity exchange is required before any operational request.
  * Every clear requires an explicitly selected scope, never a wire wildcard.

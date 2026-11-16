@@ -1,0 +1,14 @@
+
+EIGRP-IPv4 Protocol for AS(4453)
+  Named instance: eigrprulez, VRF: default
+  Address-family state: active
+  Router-ID: 192.0.2.1
+  Topology: base (0)
+  Metric weights: K1=1, K2=0, K3=1, K4=0, K5=0, K6=0
+  Metric version: classic (32-bit)
+  Administrative distance: internal 90, external 170
+  Maximum paths: 4, maximum hops: 100
+  Variance: 2
+  Active-time configured: 180 seconds
+  Reachable topology prefixes: 48
+  Redistributed prefixes: 3

@@ -20,10 +20,21 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CODE = ROOT / "linux" / "code"
 TEST = ROOT / "linux" / "test"
-MAGIC, VERSION = 0x45474D54, 2
+MAGIC, VERSION = 0x45474D54, 5
 HEADER = "!IHHHHI"
 SCOPE = "!HHIHHI"
-SELECTOR = struct.pack(SCOPE, 4, 4453, 0, 0, 0, 0)
+
+
+def selector(afi=4, asn=4453, vrf_id=0, flags=0, offset=0,
+             vrf_name="", instance_name=""):
+    vrf = vrf_name.encode()
+    instance = instance_name.encode()
+    assert len(vrf) < 64 and len(instance) < 128
+    return (struct.pack(SCOPE, afi, asn, vrf_id, 0, flags, offset)
+            + vrf.ljust(64, b"\x00") + instance.ljust(128, b"\x00"))
+
+
+SELECTOR = selector()
 
 
 def frame(op, body=b"", magic=MAGIC, version=VERSION, status=0, flags=0,
@@ -61,7 +72,7 @@ def identify(conn, release=None):
 
 def talk(path, op, body=None):
     if body is None:
-        body = SELECTOR if op >= 3 else b""
+        body = SELECTOR if op >= 3 else struct.pack("!I", 0) if op == 2 else b""
     with socket.socket(socket.AF_UNIX) as conn:
         conn.settimeout(2)
         conn.connect(str(path))
@@ -124,7 +135,9 @@ class LinuxManagementTests(unittest.TestCase):
                          (3, "neighbor"), (4, "interface"),
                          (5, "prefix"), (6, "prefix"),
                          (7, "traffic"), (8, "event_summary"),
-                         (9, "capability")):
+                         (9, "capability"),
+                         (14, "timer"), (15, "accounting_summary"),
+                         (16, "neighbor")):
             with self.subTest(op=op):
                 returned_op, status, flags, rows = talk(self.path, op)
                 self.assertEqual((returned_op, status), (op, 0))
@@ -136,6 +149,40 @@ class LinuxManagementTests(unittest.TestCase):
         self.assertEqual(talk(self.path, 8)[3][1]["message"], 'event"\nnewline')
         self.assertEqual([r["kind"] for r in talk(self.path, 9)[3]],
                          ["capability", "debug", "timer"])
+        self.assertEqual(talk(self.path, 14)[3][0]["remaining_ms"], 4123)
+        self.assertEqual(talk(self.path, 15)[3][0]["total"], 48)
+        self.assertEqual(talk(self.path, 15)[3][1]["prefixes"], 12)
+        self.assertEqual(talk(self.path, 16)[3][0]["static"], True)
+        self.assertEqual(talk(self.path, 3)[3][0]["static"], False)
+        self.assertEqual(talk(self.path, 3)[3][0]["retry"], 3)
+
+    def test_protocol_pages_and_interface_no_match(self):
+        # The configured AF enumeration must advance beyond the first page.
+        self.proc.stdin.write("q\n")
+        self.proc.stdin.flush()
+        self.assertEqual(self.proc.communicate(timeout=5)[0].count("STOPPED"), 1)
+        env = dict(os.environ, EIGRP_LINUX_CTL_TEST_MANY="1",
+                   EIGRP_LINUX_CTL_TEST_NO_INTERFACES="1")
+        self.proc = subprocess.Popen([str(self.binary), str(self.path)],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, env=env)
+        self.assertEqual(self.proc.stdout.readline(), "READY\n")
+        rows, offset = [], 0
+        for _ in range(16):
+            _, status, flags, page = talk(self.path, 2, struct.pack("!I", offset))
+            self.assertEqual(status, 0)
+            self.assertLessEqual(len(page), 32)
+            self.assertTrue(page)
+            rows.extend(page)
+            offset += len(page)
+            if not flags:
+                break
+        else:
+            self.fail("protocol pagination did not finish")
+        self.assertEqual(len(rows), 141)
+        self.assertEqual(rows[-1]["instance"], "bulk-139")
+        self.assertEqual(talk(self.path, 2, b"")[1], 1)
+        self.assertEqual(talk(self.path, 4)[3], [{"kind": "interface_empty"}])
 
     def test_identity_required_and_wrong_build_blocked(self):
         with socket.socket(socket.AF_UNIX) as conn:
@@ -165,7 +212,7 @@ class LinuxManagementTests(unittest.TestCase):
         rows = []
         offset = 0
         while True:
-            scope = struct.pack(SCOPE, 4, 4453, 0, 0, 0, offset)
+            scope = selector(offset=offset)
             _, status, flags, page = talk(self.path, 5, scope)
             self.assertEqual(status, 0)
             self.assertLessEqual(len(page), 32)
@@ -176,10 +223,25 @@ class LinuxManagementTests(unittest.TestCase):
         self.assertEqual(len(rows), 96)
         self.assertEqual(rows[0]["prefix"], "198.51.100.1/32")
         self.assertEqual(rows[-1]["prefix"], "198.51.100.48/32")
-        self.assertEqual(talk(self.path, 3, struct.pack(SCOPE, 6, 4453, 0, 0, 0, 0))[1], 4)
-        self.assertEqual(talk(self.path, 3, struct.pack(SCOPE, 4, 0, 0, 0, 0, 0))[1], 1)
-        self.assertEqual(talk(self.path, 5, struct.pack(SCOPE, 4, 4453, 0, 0, 0, 8193))[1], 1)
-        self.assertEqual(talk(self.path, 4, struct.pack(SCOPE, 4, 4453, 0, 0, 1, 0))[1], 1)
+        self.assertEqual(talk(self.path, 3, selector(afi=6))[1], 4)
+        self.assertEqual(talk(self.path, 3, selector(asn=0))[1], 1)
+        self.assertEqual(talk(self.path, 5, selector(offset=8193))[1], 0)
+        self.assertEqual(talk(self.path, 4, selector(flags=1))[1], 1)
+        self.assertEqual(talk(self.path, 4, selector(vrf_name="blue"))[1], 1)
+        self.assertEqual(talk(self.path, 4, selector(instance_name="foo"))[1], 1)
+        self.assertEqual(talk(self.path, 4, selector(vrf_name="blue",
+                instance_name="not-configured"))[1], 4)
+        self.assertEqual(talk(self.path, 4, selector(vrf_name="default",
+                instance_name="eigrprulez"))[1], 0)
+        bad = bytearray(SELECTOR)
+        bad[16:80] = b"x" * 64
+        self.assertEqual(talk(self.path, 4, bytes(bad))[1], 1)
+        bad = bytearray(SELECTOR)
+        bad[80:208] = b"x" * 128
+        self.assertEqual(talk(self.path, 4, bytes(bad))[1], 1)
+        bad = bytearray(selector(vrf_name="default", instance_name="eigrprulez"))
+        bad[16 + len("default") + 1] = 1
+        self.assertEqual(talk(self.path, 4, bytes(bad))[1], 1)
 
     def test_framing_version_partial_reads_and_sequential_clients(self):
         with socket.socket(socket.AF_UNIX) as conn:
@@ -193,7 +255,7 @@ class LinuxManagementTests(unittest.TestCase):
             conn.sendall(frame(3, SELECTOR) + frame(7, SELECTOR))
             self.assertEqual(get_reply(conn)[3][0]["kind"], "neighbor")
             self.assertEqual(get_reply(conn)[3][0]["kind"], "traffic")
-            conn.sendall(frame(2, version=1))
+            conn.sendall(frame(2, struct.pack("!I", 0), version=1))
             self.assertEqual(get_reply(conn)[1], 2)
             self.assertEqual(conn.recv(1), b"")
 
@@ -201,7 +263,9 @@ class LinuxManagementTests(unittest.TestCase):
         for corrupt in (
             frame(1, magic=0), frame(1, status=1), frame(1, flags=1),
             frame(1, size=2**32-1), frame(42), frame(3, b"abc"),
-            frame(1, SELECTOR),
+            frame(1, SELECTOR), frame(2), frame(2, SELECTOR),
+            frame(14, SELECTOR + bytes(128)),
+            frame(15, SELECTOR + bytes(128)), frame(16, SELECTOR + bytes(128)),
         ):
             with self.subTest(corrupt=corrupt[:16]):
                 with socket.socket(socket.AF_UNIX) as conn:
@@ -222,8 +286,8 @@ class LinuxManagementTests(unittest.TestCase):
                                 (ROOT / "eigrp/code/eigrp_build_version.h").read_text()).group(1).encode()
             child = f'''import os, socket, struct, sys
 s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect(sys.argv[1]);
-p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,2,op,0,0,len(b))+b
-body=struct.pack("!HHIHHI",4,4453,0,0,0,0)
+p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,5,op,0,0,len(b))+b
+body=struct.pack("!HHIHHI",4,4453,0,0,0,0)+bytes(192)
 s.sendall(p(11,{release}.ljust(128,bytes(1))));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
 s.sendall(p(8,body));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
 for op, data in ((10, body), (12, body + bytes(128)),
@@ -243,7 +307,7 @@ for op, data in ((10, body), (12, body + bytes(128)),
         self.assertEqual(talk(self.path, 8)[3][0]["count"], 1)
         self.assertEqual(talk(self.path, 10)[1], 0)
         self.assertEqual(talk(self.path, 8)[3][0]["count"], 0)
-        self.assertEqual(talk(self.path, 10, struct.pack(SCOPE, 4, 4453, 0, 0, 0, 1))[1], 1)
+        self.assertEqual(talk(self.path, 10, selector(offset=1))[1], 1)
 
     def test_concurrent_connections_disconnects_and_backpressure(self):
         def get(i):

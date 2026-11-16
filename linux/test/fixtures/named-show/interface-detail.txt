@@ -1,0 +1,21 @@
+
+EIGRP-IPv4 VR(eigrprulez) Address-family Interfaces for AS(4453)
+Interface              Peers Bandwidth    Delay        Hello   Hold    Mean SRTT
+                             (Kbit/s)     (10us)       (sec)   (sec)   (ms)
+eth"0\u000asecond      1     100000       10           5       15      42
+  Hello interval: 5 seconds
+  Hold time: 15 seconds
+  Bandwidth percent: 60%
+  Bandwidth: 100000 Kbit/s, delay: 10 (10us)
+  MTU: 1500, reliability: 240/255, load: 5/255
+  TLV1 peers: 1, TLV2 peers: 1
+  Passive: no, configured shutdown: no
+  Multicast membership: enabled
+  Authentication: configured (mode 2)
+  Split-horizon: enabled, next-hop-self: enabled
+  Mean SRTT: 42 ms (measured UP neighbors only)
+  Buffered output packets: 0, reliable retransmit entries: 0
+  Next hello: 3 seconds
+  Un/reliable mcasts: 111/222  Un/reliable ucasts: 333/444
+  Mcast exceptions: 5  CR packets: 6  Retransmissions sent: 7
+  Pacing: 8000 bytes sent, 9 deferrals, 10 ms deferred

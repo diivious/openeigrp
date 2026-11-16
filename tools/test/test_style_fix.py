@@ -15,6 +15,7 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parents[1]
 SCENARIO = Path(__file__).resolve().parent / "uut/style-fix.yaml"
+SCOPE_SCENARIO = Path(__file__).resolve().parent / "uut/style-code-only.yaml"
 
 
 class StyleFixTest(unittest.TestCase):
@@ -113,6 +114,32 @@ class StyleFixTest(unittest.TestCase):
                 for path in (untracked, staged, ignored):
                     if path.exists():
                         path.unlink()
+
+    def test_non_code_preserved_with_changed_and_all(self):
+        scenario = json.loads(SCOPE_SCENARIO.read_text())
+        non_code = {}
+        for path in scenario["non_code"]:
+            if path == ".clang-format":
+                continue
+            non_code[path] = self.file(path, "BADFMT  \nexpected trailing spaces  ")
+        original = {path: file.read_bytes() for path, file in non_code.items()}
+        changed = self.file("linux/code/check.c", "int BADFMT;\n")
+        result = self.fix("--all")
+        self.assert_success(result)
+        self.assertEqual(changed.read_text(), "int GOODFMT;\n")
+        self.assertTrue(all(file.read_bytes() == original[path]
+                            for path, file in non_code.items()))
+        self.git("add", "-A")
+        self.git("commit", "-qm", "Fixtures and formatted source")
+        changed.write_text("int GOODFMT;\nint BADFMT;\n")
+        for file in non_code.values():
+            file.write_bytes(file.read_bytes() + b"  ")
+        modified = {path: file.read_bytes() for path, file in non_code.items()}
+        result = self.fix()
+        self.assert_success(result)
+        self.assertEqual(changed.read_text(), "int GOODFMT;\nint GOODFMT;\n")
+        self.assertTrue(all(file.read_bytes() == modified[path]
+                            for path, file in non_code.items()))
 
     def test_idempotence_and_path_with_spaces(self):
         changed = self.file("linux/code/file with spaces.c", "int BADFMT;\n")
