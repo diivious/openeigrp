@@ -1,0 +1,27 @@
+{
+  "schema": "linux-client-build-mismatch-uut/v1",
+  "alternate_versions": ["0.0", "255.255"],
+  "cases": [
+    {
+      "name": "alternate-build-rejected",
+      "client": "alternate",
+      "argv": ["show", "capabilities"],
+      "returncode": 1,
+      "stderr_contains": "incompatible",
+      "stdout_excludes": "kind=capability"
+    },
+    {
+      "name": "alternate-build-version-available",
+      "client": "alternate",
+      "argv": ["--version"],
+      "returncode": 0,
+      "stdout_contains": "Integration build    : ${VERSION}"
+    },
+    {
+      "name": "original-build-still-accepted",
+      "client": "current",
+      "argv": ["show", "capabilities"],
+      "returncode": 0
+    }
+  ]
+}

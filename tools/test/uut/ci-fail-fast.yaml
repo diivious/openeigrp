@@ -1,0 +1,13 @@
+{
+  "schema": "ci-fail-fast-uut/v1",
+  "required_order": ["style", "codeql", "fast", "macos", "ubuntu"],
+  "artifact_jobs": ["docker", "debian"],
+  "cases": [
+    {"name": "style-error", "fail": "style"},
+    {"name": "codeql-error", "fail": "codeql"},
+    {"name": "core-error", "fail": "fast"},
+    {"name": "macos-error", "fail": "macos"},
+    {"name": "ubuntu-error", "fail": "ubuntu"},
+    {"name": "all-checks-pass", "fail": null}
+  ]
+}

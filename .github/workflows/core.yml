@@ -4,8 +4,8 @@
 # Run fast compile/style/portable smoke checks on branch pushes and master PRs.
 # After a merge reaches master, run the complete regression on Linux and macOS.
 # Branch pushes already represented by an open master PR are deduplicated.
-# Gate: fast compile/smoke -> CodeQL -> platform smoke or full regression.
-# Docker and Debian architectures are covered by their dedicated workflows.
+# Gate: style -> CodeQL -> Fast Gate -> macOS -> Ubuntu -> Docker/Debian.
+# Pull-request artifact workflows run only after all earlier gates pass.
 # Use CodeQL advanced setup rather than default setup to avoid duplicate scans.
 
 name: EIGRP Core CI
@@ -55,8 +55,8 @@ jobs:
             }
             core.setOutput('run_tests', String(run));
 
-  fast:
-    name: Fast Gate
+  style:
+    name: Source style gate
     needs: [select]
     if: ${{ needs.select.outputs.run_tests == 'true' }}
     runs-on: ubuntu-latest
@@ -64,24 +64,15 @@ jobs:
       - name: Check out EIGRP
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Complete history is needed for multi-commit push/PR diffs.
-
-      - name: Pin CI build identity across workflow steps
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(./tools/version.sh --ci)"
-          ./tools/build-version.sh --binary "$version" >/dev/null
-          printf 'EIGRP_BUILD_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
-          printf 'OpenEIGRP CI build identity: %s\n' "$version"
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - name: Install style and fast-test dependencies
-        run: python3 -m pip install pytest PyYAML clang-format
+      - name: Install style dependencies
+        run: python3 -m pip install clang-format
 
       - name: Validate changed source style
         shell: bash
@@ -112,21 +103,10 @@ jobs:
           ./tools/python tools/test/test_style_check.py
           ./tools/python tools/test/test_style_fix.py
 
-      - name: Verify local and CI gate parity
-        run: python3 -m unittest -q tools.test.test_ci_parity
-
-      - name: Build native Linux daemon and portable sources
-        run: make linux
-
-      - name: Run native Linux management and IPv6 packet regressions
-        run: python3 -m pytest -q linux/test/test_mgnt.py linux/test/test_ipv6_packet.py
-
-      - name: Run the same PR smoke gate as pre-commit
-        run: make _ci-smoke
 
   codeql:
     name: CodeQL / Analyze (${{ matrix.language }})
-    needs: [fast]
+    needs: [style]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -165,20 +145,51 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
-  core:
-    # Keep the check name stable: GitHub rulesets require "... / make test".
-    name: ${{ matrix.os }} / make test
+
+  fast:
+    name: Fast Gate
     needs: [codeql]
-    strategy:
-      # Collect independent Linux and macOS results even if one fails.
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out EIGRP
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Complete history is needed for multi-commit push/PR diffs.
 
-    runs-on: ${{ matrix.os }}
+      - name: Pin CI build identity across workflow steps
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(./tools/version.sh --ci)"
+          ./tools/build-version.sh --binary "$version" >/dev/null
+          printf 'EIGRP_BUILD_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'OpenEIGRP CI build identity: %s\n' "$version"
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install fast-test dependencies
+        run: python3 -m pip install pytest PyYAML
+
+      - name: Verify local and CI gate parity
+        run: python3 -m unittest -q tools.test.test_ci_parity tools.test.test_ci_fail_fast
+
+      - name: Build native Linux daemon and portable sources
+        run: make linux
+
+      - name: Run native Linux management and IPv6 packet regressions
+        run: python3 -m pytest -q linux/test/test_mgnt.py linux/test/test_ipv6_packet.py
+
+      - name: Run the same PR smoke gate as pre-commit
+        run: make _ci-smoke
+
+
+  macos:
+    name: macos-latest / make test
+    needs: [fast]
+    runs-on: macos-latest
     steps:
       - name: Check out EIGRP
         uses: actions/checkout@v4
@@ -228,7 +239,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: eigrp-core-${{ matrix.os }}-failure-log
+          name: eigrp-core-${{ runner.os }}-failure-log
           path: |
             logs/
             eigrp/test/uut/abort-trace/*.log
@@ -236,23 +247,111 @@ jobs:
             eigrp/test/uut/eigrp-uut-node
           if-no-files-found: warn
 
+
+  ubuntu:
+    name: ubuntu-latest / make test
+    needs: [macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out EIGRP
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # CI version is derived from the checked-out commit.
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install portable test and style dependencies
+        run: python3 -m pip install pytest PyYAML clang-format
+
+      - name: Run PR smoke gate on the target platform
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/master') }}
+        env:
+          EIGRP_PYTHON: python3
+        run: make _ci-smoke
+
+      - name: Run portable and native regression after merge or manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+        shell: bash
+        env:
+          EIGRP_PYTHON: python3
+          RUNNER_OS: ${{ runner.os }}
+        run: |
+          set -o pipefail
+          mkdir -p logs/uut/eigrp/ci
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            make all
+          else
+            make _ci-core
+          fi 2>&1 | tee logs/uut/eigrp/ci/make-core.log
+
+      - name: Trace Linux UUT aborts on failure
+        if: ${{ failure() && runner.os == 'Linux' }}
+        shell: bash
+        env:
+          EIGRP_PYTHON: python3
+        run: |
+          set -o pipefail
+          mkdir -p logs/uut/eigrp/ci
+          python3 eigrp/test/uut/trace_linux_abort.py 2>&1 | tee logs/uut/eigrp/ci/abort-trace.log
+
+      - name: Preserve failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eigrp-core-${{ runner.os }}-failure-log
+          path: |
+            logs/
+            eigrp/test/uut/abort-trace/*.log
+            eigrp/test/uut/abort-trace/*.txt
+            eigrp/test/uut/eigrp-uut-node
+          if-no-files-found: warn
+
+
+  # Reuse release-tested builders without independently triggering on PRs.
+  # Both architectures in each workflow start only after Ubuntu succeeds.
+  docker:
+    name: Docker builds
+    needs: [ubuntu]
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/docker.yml
+
+  debian:
+    name: Debian packages
+    needs: [ubuntu]
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/debian.yml
+
   pipeline:
-    # Only the PR gate should be configured as a required merge check.
     name: ${{ github.event_name == 'pull_request' && 'PR merge gate' || 'Branch regression result' }}
-    needs: [select, fast, codeql, core]
-    # A branch push covered by a PR needs no second pipeline; real gate errors
-    # must still be reported as failures, never as passing/skipped PR checks.
+    needs: [select, style, codeql, fast, macos, ubuntu, docker, debian]
+    # Evaluate every dependency even when an earlier job failed or was skipped.
     if: ${{ always() && !cancelled() && (needs.select.result != 'success' || needs.select.outputs.run_tests == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - name: Require all stages to pass
         env:
           SELECT_RESULT: ${{ needs.select.result }}
-          FAST_RESULT: ${{ needs.fast.result }}
+          STYLE_RESULT: ${{ needs.style.result }}
           CODEQL_RESULT: ${{ needs.codeql.result }}
-          CORE_RESULT: ${{ needs.core.result }}
+          FAST_RESULT: ${{ needs.fast.result }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+          UBUNTU_RESULT: ${{ needs.ubuntu.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          DEBIAN_RESULT: ${{ needs.debian.result }}
         shell: bash
         run: |
-          printf 'Selection: %s\nFast Gate: %s\nCodeQL: %s\nCore CI: %s\n' \
-            "$SELECT_RESULT" "$FAST_RESULT" "$CODEQL_RESULT" "$CORE_RESULT"
-          [[ "$SELECT_RESULT" == success && "$FAST_RESULT" == success && "$CODEQL_RESULT" == success && "$CORE_RESULT" == success ]]
+          set -euo pipefail
+          printf 'Selection: %s\nStyle: %s\nCodeQL: %s\nFast Gate: %s\nmacOS: %s\nUbuntu: %s\nDocker: %s\nDebian: %s\n' \
+            "$SELECT_RESULT" "$STYLE_RESULT" "$CODEQL_RESULT" "$FAST_RESULT" \
+            "$MACOS_RESULT" "$UBUNTU_RESULT" "$DOCKER_RESULT" "$DEBIAN_RESULT"
+          [[ "$SELECT_RESULT" == success && "$STYLE_RESULT" == success && \
+             "$CODEQL_RESULT" == success && "$FAST_RESULT" == success && \
+             "$MACOS_RESULT" == success && "$UBUNTU_RESULT" == success ]]
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            [[ "$DOCKER_RESULT" == success && "$DEBIAN_RESULT" == success ]]
+          else
+            [[ "$DOCKER_RESULT" == skipped && "$DEBIAN_RESULT" == skipped ]]
+          fi

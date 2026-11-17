@@ -88,6 +88,10 @@ class CIVersionTests(unittest.TestCase):
                     self.assertEqual(package["version"], case["version"])
                     self.assertEqual(docker["version"], case["version"])
                     self.assertEqual(docker["release"], case["release"])
+                    self.assertEqual(docker["eigrp_ref"],
+                                     case["ref"].removeprefix("refs/tags/")
+                                     if case["release"] == "yes"
+                                     else self.git("rev-parse", "HEAD"))
                 # Repeated CI selectors must not consume the local counter.
                 current = subprocess.run([str(self.repo / "tools/version.sh"),
                                           "--current", "--repo", str(self.repo)],

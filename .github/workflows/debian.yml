@@ -1,27 +1,11 @@
 # Copyright (C) 2026 Donnie V. Savage
 # Native-architecture Debian packages, built with the same container tooling
 # used on development hosts. No packages are published on PR/manual runs.
+# PR builds are called by core.yml only after style, CodeQL and UUT gates.
 name: OpenEIGRP Debian Packages
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - '.github/workflows/debian.yml'
-      - 'Makefile'
-      - 'eigrp/code/**'
-      - 'libunix/code/**'
-      - 'linux/code/**'
-      - 'linux/man/**'
-      - 'linux/packaging/**'
-      - 'tools/version.sh'
-      - 'tools/build-version.sh'
-      - 'tools/gen-version.py'
-      - 'tools/test/test_version.py'
-      - 'linux/test/uut/**'
-      - 'tools/test/test_package.py'
-      - 'linux/test/test_packaging.py'
-      - 'linux/test/test_package_builds.py'
+  workflow_call:
   workflow_dispatch:
     inputs:
       version:

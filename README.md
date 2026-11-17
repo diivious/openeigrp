@@ -119,9 +119,11 @@ package-lifecycle UUTs. Docker is required for the last two tiers; an
 unavailable engine fails rather than silently skipping a stage. Direct FRR
 host builds and remote Netlab runs remain separate.
 
-See the root `Makefile` for targets and selectors. GitHub Actions runs
-build, style and portable UUT gates on Linux and macOS; the local `make all`
-also performs scale and platform-specific qualification.
+See the root `Makefile` for targets and selectors. GitHub PR validation
+runs source style and CodeQL first, followed by the Linux Fast Gate, macOS and
+Ubuntu tests, and only then Docker and Debian builds. See the
+[CI pipeline diagram and gate ordering](specs/testing.md#github-pull-request-ci-order).
+Local `make all` also performs scale and platform-specific qualification.
 
 For Docker development:
 
