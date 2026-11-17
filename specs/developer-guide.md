@@ -59,4 +59,5 @@ BIRD and OpenWrt are not ready-to-install integrations in this branch.
 Run focused executable tests, then applicable portable UUT YAML scenarios and
 `make all`. For changes to live packet behavior or platform services, use
 integration tests and Cisco/Netlab evidence on a qualified environment.
-Document any skipped checks in the PR. See [testing](testing.md).
+Document any skipped checks in the PR. See [testing](testing.md) and the
+[GitHub PR fail-fast pipeline](testing.md#github-pull-request-ci-order).

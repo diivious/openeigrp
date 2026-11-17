@@ -36,6 +36,33 @@ and Makefile. Start with [the UUT README](../eigrp/test/uut/README.md) for
 schema, topology and execution details. An existing scenario extended with
 additional assertions is still one scenario, not a new scenario count.
 
+## GitHub pull request CI order
+
+![Pull request CI fail-fast pipeline](images/ci-fail-fast.svg)
+
+PR Docker and Debian builds invoke the read-only `docker-ci.yml` and
+`debian-ci.yml` reusable workflows only after the Ubuntu gate succeeds.
+Tagged releases enter through `docker.yml` and `debian.yml`, reuse those
+same build jobs, and grant publishing permissions only to the release jobs.
+This keeps PR validation unable to publish images or release assets.
+
+
+The PR validation workflow runs sequential gates: changed-source style checks,
+CodeQL, the native Linux Fast Gate (including management tests), macOS smoke
+and UUT checks, then Ubuntu smoke and UUT checks. A failure prevents downstream
+jobs from starting. After all five gates pass, the Docker and Debian reusable
+workflows build and test **amd64 and arm64** in parallel. The final `PR merge gate`
+reports failure unless all preceding checks and both artifact workflows succeed.
+
+PR artifact builds are invoked from `core.yml`, not independently triggered by
+`pull_request` in `docker.yml` or `debian.yml`. Tagged `rel-MAJOR.MINOR` production
+builds still trigger the Docker and Debian workflows independently, with their
+existing publication gates. Manual workflow dispatch remains available.
+
+The repository branch ruleset must also require the `PR merge gate` status if
+Docker and Debian completion is intended to be a merge prerequisite. Required
+status checks prevent merging; they do not schedule workflow jobs.
+
 ## Integration-specific tests
 
 - Native Linux: `python3 linux/test/test_daemon.py`, `test_config.py`,

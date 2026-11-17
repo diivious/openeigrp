@@ -667,6 +667,11 @@ class ControlTests(unittest.TestCase):
         self.assertIn("1  event", self.ctl("show", "events").stdout)
 
     def test_mismatched_build_is_blocked_but_local_version_remains_available(self):
+        scenario = json.loads((TEST / "uut/client-build-mismatch.yaml").read_text())
+        self.assertEqual(scenario["schema"], "linux-client-build-mismatch-uut/v1")
+        version = next((value for value in scenario["alternate_versions"]
+                        if value != self.release), None)
+        self.assertIsNotNone(version, "No distinct alternate build identity")
         alternate = Path(self.tmp.name) / "eigrp-alternate"
         # Compile a genuine second OpenEIGRP build identity rather than
         # overriding the canonical generated header on the command line.
@@ -674,7 +679,7 @@ class ControlTests(unittest.TestCase):
             (ROOT / "eigrp/code/eigrp_features.h").read_text())
         generated = subprocess.run([
             sys.executable, str(ROOT / "tools/gen-version.py"),
-            "--version", "0.9.9", "--output",
+            "--version", version, "--output",
             str(Path(self.tmp.name) / "eigrp_build_version.h"),
         ], capture_output=True, text=True)
         self.assertEqual(generated.returncode, 0, generated.stderr)
@@ -690,14 +695,20 @@ class ControlTests(unittest.TestCase):
         def invoke(*args):
             return subprocess.run([str(alternate), "--socket", str(self.path),
                                    *args], capture_output=True, text=True)
-        refused = invoke("show", "capabilities")
-        self.assertEqual(refused.returncode, 1)
-        self.assertIn("incompatible", refused.stderr)
-        self.assertNotIn("kind=capability", refused.stdout)
-        version = invoke("--version")
-        self.assertEqual(version.returncode, 0)
-        self.assertIn("Integration build    : 0.9.9", version.stdout)
-        self.assertEqual(self.ctl("show", "capabilities").returncode, 0)
+        for case in scenario["cases"]:
+            with self.subTest(case=case["name"]):
+                result = (self.ctl(*case["argv"])
+                          if case["client"] == "current"
+                          else invoke(*case["argv"]))
+                self.assertEqual(result.returncode, case["returncode"],
+                                 result.stderr)
+                if "stderr_contains" in case:
+                    self.assertIn(case["stderr_contains"], result.stderr)
+                if "stdout_contains" in case:
+                    self.assertIn(case["stdout_contains"].replace(
+                        "${VERSION}", version), result.stdout)
+                if "stdout_excludes" in case:
+                    self.assertNotIn(case["stdout_excludes"], result.stdout)
 
     def test_version_option_order(self):
         earlier = self.ctl("--json", "--version")

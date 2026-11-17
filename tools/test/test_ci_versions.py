@@ -81,13 +81,17 @@ class CIVersionTests(unittest.TestCase):
         for case in self.cases["cases"]:
             with self.subTest(case=case["name"]):
                 for number in (1, 999999):
-                    package = self.run_selector("debian.yml", "Select package version",
+                    package = self.run_selector("debian-ci.yml", "Select package version",
                                                 case, number)
-                    docker = self.run_selector("docker.yml", "Select immutable source refs",
+                    docker = self.run_selector("docker-ci.yml", "Select immutable source refs",
                                                case, number)
                     self.assertEqual(package["version"], case["version"])
                     self.assertEqual(docker["version"], case["version"])
                     self.assertEqual(docker["release"], case["release"])
+                    self.assertEqual(docker["eigrp_ref"],
+                                     case["ref"].removeprefix("refs/tags/")
+                                     if case["release"] == "yes"
+                                     else self.git("rev-parse", "HEAD"))
                 # Repeated CI selectors must not consume the local counter.
                 current = subprocess.run([str(self.repo / "tools/version.sh"),
                                           "--current", "--repo", str(self.repo)],

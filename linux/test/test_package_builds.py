@@ -110,7 +110,7 @@ class MultiArchitectureBuildTests(unittest.TestCase):
         """Execute the workflow's version selection and package-build entrypoints."""
         scenario = json.loads((ROOT / "linux/test/uut/ci-package-version.yaml").read_text())
         self.assertEqual(scenario["schema"], "linux-ci-package-version-uut/v1")
-        workflow = (ROOT / ".github/workflows/debian.yml").read_text()
+        workflow = (ROOT / ".github/workflows/debian-ci.yml").read_text()
 
         def step_script(name):
             step = workflow.split("      - name: " + name + "\n", 1)[1]

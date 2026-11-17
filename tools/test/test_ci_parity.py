@@ -105,19 +105,26 @@ esac
         package = source.index("OPENEIGRP_PACKAGE_SYSTEM_TEST=1", uut)
         self.assertLess(native, package)
 
-    def test_ci_workflows_watch_versioning_inputs(self):
-        for workflow, required in (
-            ("debian.yml", ("tools/build-version.sh", "tools/gen-version.py",
-                            "linux/test/uut/**")),
-            ("docker.yml", ("tools/build-version.sh", "tools/gen-version.py",
-                            "libunix/code/**")),
-        ):
-            with self.subTest(workflow=workflow):
-                source = (ROOT / ".github/workflows" / workflow).read_text()
-                paths = source.split("  pull_request:", 1)[1].split(
-                    "  workflow_dispatch:", 1)[0]
-                for required_path in required:
-                    self.assertIn("- '" + required_path + "'", paths)
+    def test_ci_artifact_workflows_are_called_only_after_gates(self):
+        # PR builds must call read-only reusable builders after every gate;
+        # release publication stays in separately triggered workflows.
+        import yaml
+
+        root = ROOT / ".github/workflows"
+        core = yaml.load((root / "core.yml").read_text(), Loader=yaml.BaseLoader)
+        for name in ("docker", "debian"):
+            with self.subTest(workflow=name):
+                path = root / (name + "-ci.yml")
+                artifact = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+                self.assertIn("workflow_call", artifact["on"])
+                self.assertNotIn("pull_request", artifact["on"])
+                self.assertEqual(core["jobs"][name]["needs"], ["ubuntu"])
+                self.assertEqual(core["jobs"][name]["uses"],
+                                 "./.github/workflows/" + name + "-ci.yml")
+                self.assertNotIn("push", artifact["on"])
+                self.assertEqual(artifact["permissions"], {"contents": "read"})
+                self.assertEqual(core["jobs"][name]["permissions"],
+                                 {"contents": "read"})
 
 
 if __name__ == "__main__":
