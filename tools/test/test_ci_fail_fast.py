@@ -4,6 +4,9 @@
 """Exercise fail-fast PR scheduling from the actual GitHub Actions job graph."""
 
 import json
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET
@@ -155,6 +158,67 @@ class CIFailFastTests(unittest.TestCase):
         doc = (ROOT / "specs/testing.md").read_text()
         self.assertIn("![Pull request CI fail-fast pipeline](images/ci-fail-fast.svg)", doc)
         self.assertIn("`PR merge gate`", doc)
+
+
+    def test_post_merge_ubuntu_can_execute_both_docker_architectures(self):
+        # The merge job builds both architectures on one runner. PR builders
+        # instead use native amd64 and arm64 runners in their own matrix.
+        ubuntu = self.core["jobs"]["ubuntu"]["steps"]
+        names = [step.get("name") for step in ubuntu]
+        setup = names.index("Enable non-native Docker architectures")
+        check = names.index("Verify Docker platform execution")
+        build = names.index("Run portable and native regression after merge or manual dispatch")
+        self.assertLess(setup, check)
+        self.assertLess(check, build)
+        self.assertEqual(ubuntu[setup]["uses"], "docker/setup-qemu-action@v3")
+        self.assertEqual(ubuntu[setup]["with"]["platforms"], "arm64")
+        self.assertEqual(ubuntu[check]["run"], "./tools/check-docker-platforms.sh")
+        self.assertEqual(ubuntu[setup]["if"], ubuntu[check]["if"])
+        self.assertEqual(ubuntu[check]["if"], ubuntu[build]["if"])
+        self.assertNotIn("Enable non-native Docker architectures",
+                         [step.get("name") for step in
+                          self.core["jobs"]["macos"]["steps"]])
+
+    def test_docker_platform_preflight_executes_both_architectures(self):
+        # Execute the real preflight with an isolated Docker CLI fixture.
+        for case in self.scenario["docker_platform_cases"]:
+            with self.subTest(case=case["name"]):
+                with tempfile.TemporaryDirectory(prefix="docker-platform-") as tmp:
+                    work = Path(tmp)
+                    fake_docker = work / "docker"
+                    fake_docker.write_text(
+                        '#!/bin/sh\n'
+                        'printf "%s\\n" "$*" >> "$MOCK_LOG"\n'
+                        'test "$1" = run && test "$2" = --rm && '
+                        'test "$3" = --platform && test "$5" = alpine:3.22 && '
+                        'test "$6" = uname && test "$7" = -m || exit 99\n'
+                        'case "$4" in\n'
+                        '  linux/amd64) value=$MOCK_AMD64 ;;\n'
+                        '  linux/arm64) value=$MOCK_ARM64 ;;\n'
+                        '  *) exit 99 ;;\n'
+                        'esac\n'
+                        'if test "$value" = exec-error; then\n'
+                        '  echo "exec /bin/sh: exec format error" >&2\n'
+                        '  exit 255\n'
+                        'fi\n'
+                        'printf "%s\\n" "$value"\n'
+                    )
+                    fake_docker.chmod(0o755)
+                    log = work / "calls"
+                    env = dict(os.environ, PATH=tmp + os.pathsep + os.environ["PATH"],
+                               MOCK_LOG=str(log), MOCK_AMD64=case["amd64"],
+                               MOCK_ARM64=case["arm64"])
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "tools/check-docker-platforms.sh")],
+                        env=env, capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode == 0, case["pass"],
+                                     result.stdout + result.stderr)
+                    self.assertIn(case["message"], result.stdout + result.stderr)
+                    calls = log.read_text().splitlines()
+                    expected = ["run --rm --platform linux/amd64 alpine:3.22 uname -m"]
+                    if case["amd64"] == "x86_64":
+                        expected.append("run --rm --platform linux/arm64 alpine:3.22 uname -m")
+                    self.assertEqual(calls, expected)
 
 
 if __name__ == "__main__":

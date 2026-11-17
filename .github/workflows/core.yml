@@ -272,6 +272,18 @@ jobs:
           EIGRP_PYTHON: python3
         run: make _ci-smoke
 
+      # The post-merge make all runs amd64 and arm64 Docker/apt builds on
+      # one Ubuntu runner. PR builds use native per-architecture runners.
+      - name: Enable non-native Docker architectures
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Verify Docker platform execution
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+        run: ./tools/check-docker-platforms.sh
+
       - name: Run portable and native regression after merge or manual dispatch
         if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
         shell: bash

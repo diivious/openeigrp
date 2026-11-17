@@ -50,5 +50,35 @@
       "publish_job": "release",
       "publish_scope": "contents"
     }
+  ],
+  "docker_platform_cases": [
+    {
+      "name": "amd64-and-arm64-ready",
+      "amd64": "x86_64",
+      "arm64": "aarch64",
+      "pass": true,
+      "message": "Docker linux/arm64: aarch64"
+    },
+    {
+      "name": "arm64-binfmt-not-installed",
+      "amd64": "x86_64",
+      "arm64": "exec-error",
+      "pass": false,
+      "message": "Docker cannot execute linux/arm64"
+    },
+    {
+      "name": "arm64-wrong-architecture",
+      "amd64": "x86_64",
+      "arm64": "x86_64",
+      "pass": false,
+      "message": "expected aarch64"
+    },
+    {
+      "name": "amd64-not-executable",
+      "amd64": "exec-error",
+      "arm64": "aarch64",
+      "pass": false,
+      "message": "Docker cannot execute linux/amd64"
+    }
   ]
 }

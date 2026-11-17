@@ -55,3 +55,6 @@ eigrp/code/eigrp_build_version.h
 .build-count
 .build-count.lock
 .build-count.tmp
+/linux/code/eigrp
+/linux/code/openeigrpd
+/linux/code/openeigrpd-config
