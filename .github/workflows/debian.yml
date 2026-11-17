@@ -15,6 +15,10 @@ on:
       - 'linux/man/**'
       - 'linux/packaging/**'
       - 'tools/version.sh'
+      - 'tools/build-version.sh'
+      - 'tools/gen-version.py'
+      - 'tools/test/test_version.py'
+      - 'linux/test/uut/**'
       - 'tools/test/test_package.py'
       - 'linux/test/test_packaging.py'
       - 'linux/test/test_package_builds.py'
@@ -44,6 +48,8 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Select package version
         id: version
         shell: bash
@@ -55,18 +61,17 @@ jobs:
           set -euo pipefail
           if [[ "$EVENT_NAME" == push && "$GIT_REF" == refs/tags/* ]]; then
             tag="${GIT_REF#refs/tags/}"
-            [[ "$tag" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            [[ "$tag" =~ ^rel-[0-9]+\.[0-9]+$ ]] || {
               echo 'invalid Debian release tag' >&2; exit 1;
             }
             version="${tag#rel-}"
           elif [[ -n "$REQUESTED_VERSION" ]]; then
             version="$REQUESTED_VERSION"
           else
-            version="0.0.0~ci.${GITHUB_RUN_NUMBER}+${GITHUB_SHA:0:12}"
+            base="$(./tools/version.sh --latest)"
+            version="$base.${GITHUB_RUN_NUMBER}-merge.dev"
           fi
-          [[ "$version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]] || {
-            echo 'invalid Debian test version' >&2; exit 1;
-          }
+          ./tools/build-version.sh --package "$version" >/dev/null || exit 1
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Verify package builder and wrapper invocation
         run: |
@@ -76,10 +81,16 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           ARCH: ${{ matrix.arch }}
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
         shell: bash
         run: |
           set -euo pipefail
-          linux/packaging/build-packages.sh --version "$VERSION" --arch "$ARCH"
+          if [[ "$EVENT_NAME" == push && "$GIT_REF" == refs/tags/rel-* ]]; then
+            linux/packaging/build-packages.sh --version "$VERSION" --arch "$ARCH" --release
+          else
+            linux/packaging/build-packages.sh --version "$VERSION" --arch "$ARCH"
+          fi
           package="dist/openeigrpd_${VERSION}_${ARCH}.deb"
           test "$(dpkg-deb -f "$package" Architecture)" = "$ARCH"
           dpkg-deb --info "$package"
@@ -134,7 +145,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$RELEASE_TAG" =~ ^rel-[0-9]+\.[0-9]+$ ]] || exit 1
           version="${RELEASE_TAG#rel-}"
           for arch in amd64 arm64; do
             package="dist/openeigrpd_${version}_${arch}.deb"

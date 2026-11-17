@@ -1,0 +1,24 @@
+{
+  "schema": "linux-make-help-uut/v1",
+  "help_output": [
+    "Usage: make [target] [options]",
+    "  help          Show this target list",
+    "  all           Build and run fast tests/UUT/quick scale; build images and packages",
+    "  pre-commit    Run full qualification, including heavy scale and container/package UUTs",
+    "Selectors:",
+    "make uut SUITE=rtp-core",
+    "make scale CASE=internal"
+  ],
+  "documentation": {
+    "README.md": [
+      "make all",
+      "make help"
+    ],
+    "specs/quickstart.md": [
+      "make all"
+    ],
+    "specs/developer-guide.md": [
+      "make all"
+    ]
+  }
+}

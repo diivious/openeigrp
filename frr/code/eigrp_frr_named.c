@@ -5366,14 +5366,13 @@ DEFPY(show_eigrp_tech_support, show_eigrp_tech_support_cmd,
 
 	vty_out(vty, "EIGRP features:\n\n");
 	vty_out(vty, "  release              : %s\n", capabilities.release);
+	vty_out(vty, "  vendor-version       : %s\n", EIGRP_VENDOR_VERSION);
 	{
 		eigrp_integration_version_t version;
 
 		eigrp_frr_version_read(&version);
 		vty_out(vty, "  integration          : %s\n",
 			version.integration);
-		vty_out(vty, "  integration-version  : %s\n",
-			version.integration_version);
 		vty_out(vty, "  framework            : %s %s\n",
 			version.framework, version.framework_version);
 		if (version.operating_system[0])

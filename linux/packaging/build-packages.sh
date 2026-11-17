@@ -51,38 +51,24 @@ while [ "$#" -gt 0 ]; do
         *) usage >&2; fail "unknown argument: $1" ;;
     esac
 done
-# Accept the portable development identity as well as Debian metadata.
-# Do this before the numeric-leading Debian check: the -dev form starts
-# with the developer name rather than the numeric release.
-if [ "$release" -eq 0 ]; then
-    case "$version" in
-        *-dev) version=$("$root/tools/build-version.sh" --package "$version") || exit 1 ;;
-    esac
-fi
-case "$version" in
-    [0-9]*) ;;
-    *) fail 'a Debian --version beginning with a digit is required' ;;
-esac
-case "$version" in
-    *[!A-Za-z0-9.+:~_-]*|'') fail 'invalid Debian package version' ;;
-esac
-# Release mode is only available at the exact, clean, selected Git tag.
-# A bare X.Y.Z requested locally is a development build by default.
-if [ "$release" -eq 1 ]; then
-    case "$version" in *[!0-9.]*|'') fail 'release requires X.Y.Z' ;; esac
-    git -C "$root" rev-parse --verify "refs/tags/rel-$version^{commit}" >/dev/null 2>&1 ||
-        fail "missing release tag rel-$version"
-    [ "$(git -C "$root" rev-parse HEAD)" =       "$(git -C "$root" rev-parse "refs/tags/rel-$version^{commit}")" ] ||
-        fail 'release build requires the selected tag at HEAD'
-    [ -z "$(git -C "$root" status --porcelain)" ] ||
-        fail 'release build requires a clean checkout'
-else
-    case "$version" in
-        *'~'*) ;; # Already a Debian-qualified development version.
-        *) version="$version~${USER:-$(id -un)}.dev" ;;
-    esac
-fi
+# Both the daemon binary and package metadata use the same version.
+# Only exact two-component release versions may be published.
 build_version=$("$root/tools/build-version.sh" --binary "$version") || exit 1
+case "$version" in
+    *-*.dev)
+        [ "$release" -eq 0 ] || fail 'release requires MAJOR.MINOR'
+        ;;
+    *)
+        [ "$release" -eq 1 ] || fail 'local builds require a development version'
+        git -C "$root" rev-parse --verify "refs/tags/rel-$version^{commit}" >/dev/null 2>&1 ||
+            fail "missing release tag rel-$version"
+        [ "$(git -C "$root" rev-parse HEAD)" = \
+          "$(git -C "$root" rev-parse "refs/tags/rel-$version^{commit}")" ] ||
+            fail 'release build requires the selected tag at HEAD'
+        [ -z "$(git -C "$root" status --porcelain)" ] ||
+            fail 'release build requires a clean checkout'
+        ;;
+esac
 case "$image" in
     *[!A-Za-z0-9._/:@-]*|'') fail 'invalid Docker build image' ;;
 esac
@@ -151,6 +137,9 @@ for arch in $archs; do
             rm -f linux/code/openeigrpd
             make linux EIGRP_BUILD_VERSION="$EIGRP_BUILD_VERSION"
             if [ "$PACKAGE_UUT" = 1 ]; then
+                # Linux-native PR management/packet tests must also run
+                # under macOS pre-commit, using both actual package architectures.
+                python3 -m unittest -v linux.test.test_mgnt linux.test.test_ipv6_packet
                 OPENEIGRP_PACKAGE_SYSTEM_TEST=1 python3 linux/test/test_packaging.py
                 exit 0
             fi

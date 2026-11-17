@@ -29,12 +29,12 @@ class BuildIdentityTests(unittest.TestCase):
 
     def test_versions_and_boundaries(self):
         cases = (
-            ("diivious-0.5.0-dev", 0, 5),
-            ("diivious-0.6.15-dev", 0, 6),
-            ("diivious-0.100.10-dev", 0, 100),
-            ("diivious-100.10.0-dev", 100, 10),
-            ("0.5.0", 0, 5),
-            ("255.255.999", 255, 255),
+            ("0.5.1-diivious.dev", 0, 5),
+            ("0.6.15-diivious.dev", 0, 6),
+            ("0.100.10-diivious.dev", 0, 100),
+            ("100.10.1-diivious.dev", 100, 10),
+            ("0.5", 0, 5),
+            ("255.255.999999-JOE.dev", 255, 255),
         )
         for release, major, minor in cases:
             with self.subTest(release=release):
@@ -42,22 +42,23 @@ class BuildIdentityTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 content = (self.path / "eigrp_build_version.h").read_text()
                 self.assertIn(f'#define EIGRP_RELEASE "{release}"', content)
+                self.assertIn(f'#define EIGRP_VENDOR_VERSION "{major}.{minor}"', content)
                 self.assertIn(f"#define EIGRP_VENDOR_MAJOR {major}", content)
                 self.assertIn(f"#define EIGRP_VENDOR_MINOR {minor}", content)
 
     def test_rejects_overflow_and_unidentified_build(self):
-        for release in ("diivious-256.0.0-dev", "0.256.0", "development",
-                        "diivious-0.5.0", "0.5", "testdev-0.6.15-staging",
-                        "diivious-0.5.0-dev\";", "-0.5.0-dev"):
+        for release in ("256.0.1-diivious.dev", "0.256", "development",
+                        "0.5.0", "0.5.0-JOE.dev", "0.6.15-testdev.staging",
+                        "0.5.1-diivious.dev\";", "-0.5.0-dev"):
             with self.subTest(release=release):
                 result = self.generate(release)
                 self.assertNotEqual(result.returncode, 0)
 
     def test_header_is_stable_across_identical_generation(self):
-        self.assertEqual(self.generate("testdev-0.5.0-dev").returncode, 0)
+        self.assertEqual(self.generate("0.5.1-testdev.dev").returncode, 0)
         destination = self.path / "eigrp_build_version.h"
         stat = destination.stat().st_mtime_ns
-        self.assertEqual(self.generate("testdev-0.5.0-dev").returncode, 0)
+        self.assertEqual(self.generate("0.5.1-testdev.dev").returncode, 0)
         self.assertEqual(stat, destination.stat().st_mtime_ns)
 
     @unittest.skipUnless(shutil.which("cc") and shutil.which("make"),
@@ -66,8 +67,8 @@ class BuildIdentityTests(unittest.TestCase):
         # Compile the real Unix host implementation. Link only the live
         # eigrp_sys_software_version() section to avoid stubbing unrelated
         # sockets, timers and UUT services.
-        for version, major, minor in (("diivious-0.5.0-dev", 0, 5),
-                                      ("diivious-100.10.0-dev", 100, 10)):
+        for version, major, minor in (("0.5.1-diivious.dev", 0, 5),
+                                      ("100.10.1-diivious.dev", 100, 10)):
             with self.subTest(version=version):
                 self.assertEqual(self.generate(version).returncode, 0)
                 code = self.path / "probe.c"

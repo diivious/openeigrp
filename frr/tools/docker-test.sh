@@ -74,7 +74,17 @@ wait_ready
 version="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image")"
 [[ -n "$version" && "$version" != '<no value>' ]] || fail 'missing image version label'
 tech="$(docker exec "$container" vtysh -d eigrpd -c 'show eigrp tech-support')"
-grep -Fq "$version" <<< "$tech" || fail "tech-support does not report build version $version"
+grep -Fq "  release              : $version" <<< "$tech" ||
+    fail "tech-support does not report build version $version"
+base="${version%%.*}"
+minor="${version#*.}"
+minor="${minor%%.*}"
+base="$base.$minor"
+grep -Fqx "  vendor-version       : $base" <<< "$tech" ||
+    fail "tech-support does not report vendor version $base"
+if grep -Fq "  integration-version  :" <<< "$tech"; then
+    fail "tech-support redundantly reports integration-version"
+fi
 
 # Apply a minimal named-mode IPv4/4453 configuration. Parse errors and failed
 # commands are fatal; having vtysh connect is not sufficient.

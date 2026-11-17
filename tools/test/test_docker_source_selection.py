@@ -103,7 +103,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         (self.eigrp / "frr/tools/docker.sh").write_bytes(SCRIPT.read_bytes())
         # The packaged-source fixture must include the same build helper as
         # the real tree.  The package entrypoint invokes it at runtime.
-        for name in ("version.sh", "build-version.sh"):
+        for name in ("version.sh", "build-version.sh", "build-count.py"):
             target = self.eigrp / "tools" / name
             target.write_bytes((ROOT / "tools" / name).read_bytes())
             target.chmod(0o755)
@@ -115,11 +115,11 @@ class DockerSourceSelectionTest(unittest.TestCase):
         (self.eigrp / "docker/Dockerfile").write_text("ARG ALPINE_VERSION=3.21\nRUN echo TAGGED_OLD\n")
         self.write_config("frr-10.7.1", self.frr_old_sha)
         self.commit(self.eigrp)
-        self.git(self.eigrp, "tag", "-a", "rel-1.9.0", "-m", "old")
+        self.git(self.eigrp, "tag", "-a", "rel-1.9", "-m", "old")
         (self.eigrp / "docker/Dockerfile").write_text("ARG ALPINE_VERSION=3.22\nRUN echo TAGGED_NEW\n")
         self.write_config("frr-10.7.2", self.frr_new_sha)
         self.commit(self.eigrp)
-        self.git(self.eigrp, "tag", "-a", "rel-1.10.0", "-m", "new")
+        self.git(self.eigrp, "tag", "-a", "rel-1.10", "-m", "new")
         # Current development images pin a native FRR source commit, while
         # historical release tags retain their original tag-based pins.
         self.write_config(self.frr_new_sha, self.frr_new_sha)
@@ -148,6 +148,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         env = dict(os.environ, HOME=str(self.root),
                    PATH=str(self.bin) + ":" + os.environ["PATH"],
                    DOCKER_TEST_LOG=str(self.log), USER="testdev")
+        env.pop("EIGRP_BUILD_VERSION", None)
         result = subprocess.run(["bash", str(script or self.eigrp / "frr/tools/docker.sh"), mode, *args],
                                 cwd=self.eigrp,
                                 env=env, text=True, capture_output=True, timeout=40)
@@ -155,7 +156,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         return result, log
 
     def test_old_release_uses_old_config_and_old_frr(self):
-        result, log = self.build("--build", "1.9.0")
+        result, log = self.build("--build", "1.9")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("TAGGED_OLD", log)
         self.assertIn("FRR_OLD", log)
@@ -167,7 +168,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
     def test_latest_uses_numerically_highest_release(self):
         result, log = self.build("--build", "latest")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Selected latest OpenEIGRP release: rel-1.10.0", result.stdout)
+        self.assertIn("Selected latest OpenEIGRP release: rel-1.10", result.stdout)
         self.assertIn("TAGGED_NEW", log)
         self.assertIn("FRR_NEW", log)
         self.assertIn("ALPINE_VERSION=3.22", log)
@@ -182,7 +183,7 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertIn("WORKING_BRANCH", log)
         self.assertIn("EIGRP_UNCOMMITTED", log)
         self.assertIn("FRR_UNCOMMITTED", log)
-        self.assertIn("EIGRP_VERSION=dev-test-1.10.0-dev", log)
+        self.assertIn("EIGRP_VERSION=1.10.1-dev-test.dev", log)
         self.assertIn("Image:     openeigrp:dev-test", result.stdout)
 
     def test_local_build_uses_pinned_frr_without_checkout(self):
@@ -197,6 +198,25 @@ class DockerSourceSelectionTest(unittest.TestCase):
         self.assertIn("EIGRP_UNCOMMITTED", log)
         self.assertIn("FRR_NEW", log)
         self.assertNotIn("FRR_OLD", log)
+
+    def test_pinned_local_build_ignores_sibling_frr(self):
+        # CI always fetches docker.cfg's pinned FRR, even if this developer
+        # also maintains another checkout in the usual sibling directory.
+        (self.frr / "revision.txt").write_text("FRR_LOCAL_EDIT\n")
+        self.commit(self.frr)
+        result, log = self.build("--local", "dev-test", "--pinned-frr",
+                                 "--eigrp-root", str(self.eigrp))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Using pinned FRR", result.stderr)
+        self.assertIn("FRR_NEW", log)
+        self.assertNotIn("FRR_LOCAL_EDIT", log)
+
+    def test_pinned_local_rejects_explicit_checkout(self):
+        result, log = self.build("--local", "dev-test", "--pinned-frr",
+                                 "--frr-root", str(self.frr))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot be combined", result.stderr)
+        self.assertNotIn("buildx build", log)
 
     def test_local_pin_mismatch_stops_before_docker(self):
         (self.frr / "bootstrap.sh").unlink()
@@ -217,13 +237,13 @@ class DockerSourceSelectionTest(unittest.TestCase):
         result, log = self.build("--local", "--eigrp-root", str(self.eigrp),
                                  "--frr-root", str(self.frr))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("EIGRP_VERSION=testdev-1.10.0-dev", log)
+        self.assertIn("EIGRP_VERSION=1.10.1-testdev.dev", log)
 
     def test_remote_development_build_uses_shared_version(self):
         result, log = self.build("--build", "dev-test", "--eigrp-ref",
                                  "refs/heads/master")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("EIGRP_VERSION=dev-test-1.10.0-dev", log)
+        self.assertIn("EIGRP_VERSION=1.10.1-dev-test.dev", log)
         self.assertIn("Image:     ghcr.io/diivious/openeigrp-frr:dev-test", result.stdout)
 
     def test_unmerged_higher_tag_not_selected_locally(self):
@@ -234,15 +254,15 @@ class DockerSourceSelectionTest(unittest.TestCase):
         result, log = self.build("--local", "dev-test", "--eigrp-root", str(self.eigrp),
                                  "--frr-root", str(self.frr))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("EIGRP_VERSION=dev-test-1.10.0-dev", log)
+        self.assertIn("EIGRP_VERSION=1.10.1-dev-test.dev", log)
 
-    def test_docker_and_debian_embed_the_same_version(self):
+    def test_separate_docker_and_debian_builds_advance_counter(self):
         result, log = self.build("--local", "diivious-test",
                                  "--eigrp-root", str(self.eigrp),
                                  "--frr-root", str(self.frr),
                                  "--image", "openeigrp:diivious-test")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("EIGRP_VERSION=diivious-test-1.10.0-dev", log)
+        self.assertIn("EIGRP_VERSION=1.10.1-diivious-test.dev", log)
         output = self.root / "dist"
         env = dict(os.environ, HOME=str(self.root),
                    PATH=str(self.bin) + ":" + os.environ["PATH"],
@@ -253,13 +273,13 @@ class DockerSourceSelectionTest(unittest.TestCase):
              "--output", str(output)],
             cwd=self.eigrp, env=env, text=True, capture_output=True, timeout=40)
         self.assertEqual(package.returncode, 0, package.stderr)
-        self.assertTrue((output / "openeigrpd_1.10.0~diivious-test.dev_amd64.deb").exists())
-        self.assertIn("PACKAGE_VERSION=1.10.0~diivious-test.dev", self.log.read_text())
-        self.assertIn("EIGRP_BUILD_VERSION=diivious-test-1.10.0-dev",
+        self.assertTrue((output / "openeigrpd_1.10.2-diivious-test.dev_amd64.deb").exists())
+        self.assertIn("PACKAGE_VERSION=1.10.2-diivious-test.dev", self.log.read_text())
+        self.assertIn("EIGRP_BUILD_VERSION=1.10.2-diivious-test.dev",
                       self.log.read_text())
 
     def test_release_ref_cannot_override_its_frr(self):
-        result, log = self.build("--build", "1.9.0", "--frr-ref", "refs/heads/main")
+        result, log = self.build("--build", "1.9", "--frr-ref", "refs/heads/main")
         self.assertNotEqual(result.returncode, 0)
         # The read-only daemon probe is permitted; no Docker build may occur.
         self.assertEqual(log, "info\n")
@@ -273,8 +293,8 @@ class DockerSourceSelectionTest(unittest.TestCase):
             f"pinned_frr_sha={self.frr_old_sha}\n"
         )
         self.commit(self.eigrp)
-        self.git(self.eigrp, "tag", "rel-1.8.0")
-        result, log = self.build("--build", "1.8.0", script=SCRIPT)
+        self.git(self.eigrp, "tag", "rel-1.8")
+        result, log = self.build("--build", "1.8", script=SCRIPT)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("historical FRR pin", result.stderr)
         self.assertIn("FRR_OLD", log)
@@ -284,8 +304,8 @@ class DockerSourceSelectionTest(unittest.TestCase):
         # Alter the SHA in the release fixture and create a new tag.
         self.write_config("frr-10.7.2", "0" * 40)
         self.commit(self.eigrp)
-        self.git(self.eigrp, "tag", "rel-1.11.0")
-        result, log = self.build("--build", "1.11.0")
+        self.git(self.eigrp, "tag", "rel-1.11")
+        result, log = self.build("--build", "1.11")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("FRR ref", result.stderr)
         # The read-only daemon probe is permitted; no Docker build may occur.

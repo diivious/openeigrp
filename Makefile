@@ -16,14 +16,51 @@ UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topolo
   basic-core md5-mixed-lan md5-security dual-diamond kite-topology \
   active-topology summary-topology
 
-.PHONY: _default _base _portable _unit-tests _all _pre-commit all pre-commit \
-  uut linux frr packages package-uut docker docker-uut clean distclean scale
+# Allocate one build number per top-level build; never for help, cleanup or
+# verification of already-built images. Submakes inherit the selected identity.
+BUILD_GOALS := $(if $(strip $(MAKECMDGOALS)),$(MAKECMDGOALS),_default)
+ifneq ($(filter-out help clean distclean docker-uut,$(BUILD_GOALS)),)
+ifeq ($(strip $(EIGRP_BUILD_VERSION)),)
+EIGRP_BUILD_VERSION := $(shell ./tools/version.sh --local '$(TAG)')
+endif
+endif
+export EIGRP_BUILD_VERSION
+
+.PHONY: _default _base _portable _unit-tests _ci-smoke _ci-core \
+  _all _pre-commit all pre-commit uut linux frr packages package-uut \
+  docker docker-uut clean distclean scale help
+
+# Keep help side-effect-free, including on hosts without Docker or a compiler.
+help:
+	@printf '%s\n' 'Usage: make [target] [options]' '' 'Targets:'
+	@printf '  %-13s %s\n' \
+	  '(default)' 'Build host code and check style (no Docker)' \
+	  'help' 'Show this target list' \
+	  'all' 'Build and run fast tests/UUT/quick scale; build images and packages' \
+	  'pre-commit' 'Run full qualification, including heavy scale and container/package UUTs' \
+	  'uut' 'Run portable pytest and YAML UUT scenarios' \
+	  'scale' 'Run quick pacing and backpressure tests' \
+	  'linux' 'Build native daemon and CLI (Linux hosts only)' \
+	  'frr' 'Build the FRR integration' \
+	  'packages' 'Build Debian packages for amd64 and arm64' \
+	  'package-uut' 'Test Debian package installation and runtime' \
+	  'docker' 'Build FRR Docker images for amd64 and arm64' \
+	  'docker-uut' 'Verify built images: CLI, config, restarts and adjacency' \
+	  'clean' 'Remove build outputs and Python caches (keep test logs)' \
+	  'distclean' 'Also reset the local build counter and remove test logs'
+	@printf '%s\n' '' 'Selectors:' \
+	  '  make uut SUITE=rtp-core              Run a named UUT suite' \
+	  '  make uut SCENARIO=path/to/test.yaml  Run one YAML scenario' \
+	  '  make scale SUITE=100k               Run volume scale (also: stress, auth, all)' \
+	  '  make scale CASE=internal            Run one scale case' \
+	  '  make docker ARCH=arm64              Build one architecture (also: amd64)' \
+	  '  make packages ARCH=amd64            Build one package architecture'
 
 # Each tier resolves one development identity and forwards it to all submakes.
 # Neither caller-provided RELEASE/VERSION nor ARCH/GITHUB changes the gate.
 define qualification
-version="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
-  case "$$version" in *-dev) ;; *) echo 'error: local build needs a -dev version' >&2; exit 1 ;; esac; \
+version='$(EIGRP_BUILD_VERSION)'; \
+  case "$$version" in *-*.dev) ;; *) echo 'error: invalid development build version' >&2; exit 1 ;; esac; \
   printf 'OpenEIGRP qualification version: %s\n' "$$version"; \
   $(MAKE) $(1) EIGRP_BUILD_VERSION="$$version" TAG='$(TAG)' ARCH=all GITHUB= VERSION= RELEASE=0
 endef
@@ -62,38 +99,63 @@ _unit-tests:
 	  tools.test.test_frr_release_selection tools.test.test_docker_source_selection \
 	  tools.test.test_version tools.test.test_package tools.test.test_log_results \
 	  tools.test.test_docker_preflight \
-	  tools.test.test_tool_ownership tools.test.test_backup tools.test.test_uut_make \
+	  tools.test.test_tool_ownership tools.test.test_backup tools.test.test_uut_make tools.test.test_ci_parity \
+	  tools.test.test_build_identity \
 	  linux.test.test_install_make linux.test.test_package_builds \
 	  frr.test.setup.test_frr_setup_clone frr.test.setup.test_frr_setup_tag
 	$(PYTHON) -m unittest -q linux.test.test_docs
+
+# These are the same PR smoke cases used by GitHub Core CI. Run the real
+# pytest and YAML runners rather than validating workflow text alone.
+_ci-smoke: _portable
+	$(PYTHON) -m pytest -q eigrp/test/packet/pacing.py \
+	  eigrp/test/scale/test_table_index.py \
+	  eigrp/test/uut/test_process_limit_low_uptime.py
+	$(MAKE) -C eigrp/test/uut eigrp-uut-node
+	@set -e; \
+	for scenario in \
+	  examples/ipv4-basic-core-gate.yaml \
+	  examples/ipv6-basic-core-gate.yaml \
+	  rtp/lost-ack.yaml \
+	  dual-diamond/feasible-successor.yaml; do \
+	  $(PYTHON) eigrp/test/uut/run_all.py --scenario "$$scenario" || exit $$?; \
+	done
+
+# Portable/core CI must not depend on Docker, especially on hosted macOS.
+# Docker and package builds have separate PR checks; pre-commit runs both.
+_ci-core:
+	$(MAKE) _base
+	$(MAKE) _unit-tests
+	$(MAKE) uut
+	$(MAKE) scale
+	$(MAKE) _ci-smoke
+ifeq ($(HOST_OS),Linux)
+	$(PYTHON) tools/test-log.py linux -- $(PYTHON) -m pytest -q linux/test
+else
+	@printf '%s\n' 'Native Linux executable tests run inside the Debian package UUTs ($(HOST_OS))'
+endif
 
 # Keep the gate sequential even when make -j is used. Check Docker before
 # running long UUT suites; missing Docker fails rather than silently skipping.
 _all:
 	@command -v docker >/dev/null 2>&1 || { echo 'error: make all requires Docker CLI' >&2; exit 1; }
 	@docker info >/dev/null 2>&1 || { echo 'error: make all requires a running Docker Engine/Desktop' >&2; exit 1; }
-	$(MAKE) _base
-	$(MAKE) _unit-tests
-	$(MAKE) uut
-	$(MAKE) scale
-ifeq ($(HOST_OS),Linux)
-	$(PYTHON) tools/test-log.py linux -- $(PYTHON) -m pytest -q linux/test
-else
-	@printf '%s\n' 'Native Linux executable tests run inside the Debian package UUTs ($(HOST_OS))'
-endif
+	$(MAKE) _ci-core
 	$(MAKE) docker ARCH=all GITHUB=
 	$(MAKE) packages ARCH=all VERSION='$(EIGRP_BUILD_VERSION)' RELEASE=0
 
+# Local qualification uses one developer identity for core, Docker and .deb.
+# CI's merge identity is covered by the separate workflow version tests.
 _pre-commit:
-	$(MAKE) _all
+	$(MAKE) _all CI_PINNED_FRR=1 FRR=
 	$(MAKE) scale SUITE=all
 	$(MAKE) docker-uut ARCH=all
-	$(MAKE) package-uut ARCH=all
+	$(MAKE) package-uut ARCH=all VERSION='$(EIGRP_BUILD_VERSION)'
 
 # The platform check must precede ALL compilation, including portable archives.
 linux:
 	@test "$(HOST_OS)" = Linux || { echo 'error: make linux requires a Linux host' >&2; exit 1; }
-	$(MAKE) -C linux
+	$(MAKE) -C linux EIGRP_BUILD_VERSION="$(EIGRP_BUILD_VERSION)"
 
 frr:
 	EIGRP_BUILD_VERSION="$(EIGRP_BUILD_VERSION)" ./frr/tools/frr.sh --build
@@ -102,15 +164,12 @@ frr:
 # Without it, package metadata matches Docker's TAG release baseline.
 packages:
 	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
-	@version='$(VERSION)'; \
-	if [ -z "$$version" ]; then \
-	  version="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
-	fi; \
+	@version='$(or $(VERSION),$(EIGRP_BUILD_VERSION))'; \
 	linux/packaging/build-packages.sh --version "$$version" --arch '$(ARCH)' $(if $(filter 1,$(RELEASE)),--release)
 
 package-uut:
 	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
-	linux/packaging/build-packages.sh --version 0.0.0~uut --arch '$(ARCH)' --uut
+	linux/packaging/build-packages.sh --version '$(or $(VERSION),$(EIGRP_BUILD_VERSION))' --arch '$(ARCH)' --uut
 
 uut: _portable
 	@$(if $(and $(SUITE),$(SCENARIO)),echo 'error: select either SUITE or SCENARIO' >&2; exit 2;,true)
@@ -171,20 +230,21 @@ docker:
 	@$(if $(and $(GITHUB),$(FRR)),echo 'error: GITHUB and FRR cannot be combined' >&2; exit 2;,true)
 	@case '$(ARCH)' in all|amd64|arm64) ;; *) echo 'error: ARCH must be all, amd64 or arm64' >&2; exit 2 ;; esac
 	@set -e; \
+	version='$(EIGRP_BUILD_VERSION)'; \
 	if [ '$(ARCH)' = all ]; then archs='amd64 arm64'; else archs='$(ARCH)'; fi; \
 	for arch in $$archs; do \
 	  if [ -n '$(GITHUB)' ]; then \
 	    ./frr/tools/docker.sh --build '$(GITHUB)' --platform "linux/$$arch" \
 	      --image 'ghcr.io/diivious/openeigrp-frr:$(GITHUB)'-"$$arch"; \
 	  else \
-	    ./frr/tools/docker.sh --local '$(TAG)' --platform "linux/$$arch" \
-	      --image 'openeigrp:$(TAG)'-"$$arch" $(if $(FRR),--frr-root '$(FRR)'); \
+	    EIGRP_BUILD_VERSION="$$version" ./frr/tools/docker.sh --local '$(TAG)' --platform "linux/$$arch" \
+	      --image 'openeigrp:'"$$version"-"$$arch" $(if $(CI_PINNED_FRR),--pinned-frr) $(if $(FRR),--frr-root '$(FRR)'); \
 	  fi; \
 	done; \
 	if [ -z '$(GITHUB)' ]; then \
 	  case "$$(uname -m)" in x86_64|amd64) native=amd64 ;; aarch64|arm64) native=arm64 ;; *) native= ;; esac; \
 	  if [ -n "$$native" ]; then \
-	    case " $$archs " in *" $$native "*) docker tag 'openeigrp:$(TAG)'-"$$native" 'openeigrp:$(TAG)' ;; esac; \
+	    case " $$archs " in *" $$native "*) docker tag 'openeigrp:'"$$version"-"$$native" 'openeigrp:$(TAG)' ;; esac; \
 	  fi; \
 	fi
 
@@ -196,11 +256,11 @@ docker-uut:
 	@set -e; \
 	  expected='$(EIGRP_BUILD_VERSION)'; \
 	  if [ -z "$$expected" ]; then \
-	    expected="$$(./tools/version.sh --local '$(TAG)')" || exit $$?; \
+	    expected="$$(./tools/version.sh --current '$(TAG)')" || exit $$?; \
 	  fi; \
 	  if [ '$(ARCH)' = all ]; then archs='amd64 arm64'; else archs='$(ARCH)'; fi; \
 	  for arch in $$archs; do \
-	    image='openeigrp:$(TAG)'-"$$arch"; \
+	    image='openeigrp:'"$$expected"-"$$arch"; \
 	    actual="$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$$image")" || exit $$?; \
 	    if [ "$$actual" != "$$expected" ]; then \
 	      printf 'error: %s reports %s, expected %s\n' "$$image" "$$actual" "$$expected" >&2; \
@@ -220,6 +280,7 @@ clean:
 	  \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf -- {} +
 
 distclean: clean
+	python3 tools/build-count.py reset
 	$(MAKE) -C eigrp/test/uut distclean
 	$(MAKE) -C frr/test/build distclean
 	$(MAKE) -C linux distclean

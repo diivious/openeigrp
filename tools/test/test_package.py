@@ -61,7 +61,7 @@ class PackageCommandTests(unittest.TestCase):
         (self.repo / "tools").mkdir(parents=True)
         (self.repo / "linux/packaging").mkdir(parents=True)
         for source in (SCRIPT, ROOT / "tools/version.sh",
-                       ROOT / "tools/build-version.sh",
+                       ROOT / "tools/build-version.sh", ROOT / "tools/build-count.py",
                        ROOT / "linux/packaging/build-packages.sh"):
             target = self.repo / source.relative_to(ROOT)
             shutil.copy2(source, target)
@@ -71,7 +71,7 @@ class PackageCommandTests(unittest.TestCase):
         self.git("config", "user.email", "package@example.invalid")
         self.git("add", ".")
         self.git("commit", "-qm", "fixture")
-        self.git("tag", "-a", "rel-0.5.0", "-m", "0.5")
+        self.git("tag", "-a", "rel-0.5", "-m", "0.5")
         self.git("remote", "add", "origin", str(self.repo))
         self.script = self.repo / "linux/packaging/package.sh"
         self.env = {**os.environ, "USER": "diivious", "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
@@ -95,13 +95,13 @@ class PackageCommandTests(unittest.TestCase):
                              "--image", "openeigrp:1.2.3", "--builder-image", "ubuntu:24.04", "--output", str(self.output))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([p.name for p in self.output.glob("*.deb")],
-                         ["openeigrpd_1.2.3~diivious.dev_arm64.deb"])
+                         ["openeigrpd_0.5.1-1.2.3.dev_arm64.deb"])
         call, = self.calls()
         self.assertEqual(call[call.index("--platform") + 1], "linux/arm64")
         self.assertEqual(call[-4], "ubuntu:24.04")
         self.assertIn("PACKAGE_UUT=0", call)
-        self.assertIn("PACKAGE_VERSION=1.2.3~diivious.dev", call)
-        self.assertIn("EIGRP_BUILD_VERSION=diivious-1.2.3-dev", call)
+        self.assertIn("PACKAGE_VERSION=0.5.1-1.2.3.dev", call)
+        self.assertIn("EIGRP_BUILD_VERSION=0.5.1-1.2.3.dev", call)
         self.assertIn("linux/packaging/verify-deb.sh", call[-1])
         self.assertIn("readonly", " ".join(call))
 
@@ -109,31 +109,31 @@ class PackageCommandTests(unittest.TestCase):
         result = self.invoke("--local", "diivious-test", "--platform", "linux/amd64",
                              "--image", "openeigrp:diivious-test", "--output", str(self.output))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.output / "openeigrpd_0.5.0~diivious-test.dev_amd64.deb").exists())
+        self.assertTrue((self.output / "openeigrpd_0.5.1-diivious-test.dev_amd64.deb").exists())
         call, = self.calls()
-        self.assertIn("PACKAGE_VERSION=0.5.0~diivious-test.dev", call)
-        self.assertIn("EIGRP_BUILD_VERSION=diivious-test-0.5.0-dev", call)
-        self.assertIn("diivious-test-0.5.0-dev", result.stderr)
+        self.assertIn("PACKAGE_VERSION=0.5.1-diivious-test.dev", call)
+        self.assertIn("EIGRP_BUILD_VERSION=0.5.1-diivious-test.dev", call)
+        self.assertIn("0.5.1-diivious-test.dev", result.stderr)
 
     def test_named_local_tag_other_architecture(self):
         result = self.invoke("--local", "dev.alpha", "--platform", "linux/arm64",
                              "--output", str(self.output))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.output / "openeigrpd_0.5.0~dev.alpha.dev_arm64.deb").exists())
-        self.assertIn("PACKAGE_VERSION=0.5.0~dev.alpha.dev", self.calls()[0])
-        self.assertIn("EIGRP_BUILD_VERSION=dev.alpha-0.5.0-dev", self.calls()[0])
+        self.assertTrue((self.output / "openeigrpd_0.5.1-dev.alpha.dev_arm64.deb").exists())
+        self.assertIn("PACKAGE_VERSION=0.5.1-dev.alpha.dev", self.calls()[0])
+        self.assertIn("EIGRP_BUILD_VERSION=0.5.1-dev.alpha.dev", self.calls()[0])
 
     def test_new_master_release_changes_package_version(self):
         (self.repo / "release-note").write_text("0.6\n")
         self.git("add", "release-note")
         self.git("commit", "-qm", "release")
-        self.git("tag", "-a", "rel-0.6.0", "-m", "0.6")
+        self.git("tag", "-a", "rel-0.6", "-m", "0.6")
         result = self.invoke("--local", "X-Y", "--platform", "linux/amd64",
                              "--image", "openeigrp:X-Y", "--output", str(self.output))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.output / "openeigrpd_0.6.0~X-Y.dev_amd64.deb").exists())
-        self.assertIn("PACKAGE_VERSION=0.6.0~X-Y.dev", self.calls()[0])
-        self.assertIn("EIGRP_BUILD_VERSION=X-Y-0.6.0-dev", self.calls()[0])
+        self.assertTrue((self.output / "openeigrpd_0.6.1-X-Y.dev_amd64.deb").exists())
+        self.assertIn("PACKAGE_VERSION=0.6.1-X-Y.dev", self.calls()[0])
+        self.assertIn("EIGRP_BUILD_VERSION=0.6.1-X-Y.dev", self.calls()[0])
 
     def test_invalid_named_local_tag_fails_without_docker(self):
         for tag in ("diivious_test", "dev/slash", "dev:tag", "../bad", "bad space"):
@@ -164,7 +164,7 @@ class PackageCommandTests(unittest.TestCase):
             self.skipTest("unknown build host architecture")
         result = self.invoke("--local", "--output", str(self.output))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.output / f"openeigrpd_0.5.0~diivious.dev_{expected}.deb").exists())
+        self.assertTrue((self.output / f"openeigrpd_0.5.1-diivious.dev_{expected}.deb").exists())
         self.assertEqual(self.calls()[0][self.calls()[0].index("--platform") + 1],
                          "linux/" + expected)
 

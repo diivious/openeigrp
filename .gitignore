@@ -50,3 +50,8 @@ netlabs/remote-lab.cfg
 
 # Generated version header for native portable/core builds
 eigrp/code/eigrp_build_version.h
+
+# Persistent local build identity (make distclean resets it).
+.build-count
+.build-count.lock
+.build-count.tmp

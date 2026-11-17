@@ -48,8 +48,8 @@ class ReleaseIdentityTests(unittest.TestCase):
                                            "--json", "version"))
                 return daemon, client
 
-            for version, vendor in (("testdev-0.5.0-dev", (0, 5)),
-                                    ("testdev-0.6.0-dev", (0, 6))):
+            for version, vendor in (("0.5.1-testdev.dev", (0, 5)),
+                                    ("0.6.1-testdev.dev", (0, 6))):
                 invoke("make", "linux", f"EIGRP_BUILD_VERSION={version}")
                 daemon, client = versions()
                 self.assertEqual(daemon, f"openeigrpd {version}")
@@ -64,19 +64,19 @@ class ReleaseIdentityTests(unittest.TestCase):
 
             output = work / "dist"
             invoke(str(work / "linux/packaging/build-deb.sh"),
-                   "--version", "0.6.0~testdev.dev", "--output", str(output))
+                   "--version", "0.6.1-testdev.dev", "--output", str(output))
             arch = invoke("dpkg-architecture", "-qDEB_HOST_ARCH")
-            package = output / f"openeigrpd_0.6.0~testdev.dev_{arch}.deb"
+            package = output / f"openeigrpd_0.6.1-testdev.dev_{arch}.deb"
             self.assertTrue(package.exists())
             self.assertEqual(invoke("dpkg-deb", "-f", str(package), "Version"),
-                             "0.6.0~testdev.dev")
+                             "0.6.1-testdev.dev")
             extract = work / "extract"
             invoke("dpkg-deb", "-x", str(package), str(extract))
             self.assertEqual(invoke(str(extract / "usr/sbin/openeigrpd"), "-V"),
-                             "openeigrpd testdev-0.6.0-dev")
+                             "openeigrpd 0.6.1-testdev.dev")
             self.assertEqual(json.loads(invoke(str(extract / "usr/bin/eigrp"),
                                              "--json", "version"))["build"],
-                             "testdev-0.6.0-dev")
+                             "0.6.1-testdev.dev")
 
 
 if __name__ == "__main__":

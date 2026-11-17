@@ -3,30 +3,30 @@
   "cases": [
     {
       "name": "numeric-initial",
-      "package_version": "0.0.11",
-      "daemon_version": "0.0.11",
-      "expected_build": "0.0.11",
+      "package_version": "0.11",
+      "daemon_version": "0.11",
+      "expected_build": "0.11",
       "result": "build"
     },
     {
       "name": "qualified-development",
-      "package_version": "0.6.0~testdev.dev",
-      "daemon_version": "testdev-0.6.0-dev",
-      "expected_build": "testdev-0.6.0-dev",
+      "package_version": "0.6.1-testdev.dev",
+      "daemon_version": "0.6.1-testdev.dev",
+      "expected_build": "0.6.1-testdev.dev",
       "result": "build"
     },
     {
       "name": "reject-mismatched-daemon",
-      "package_version": "0.0.12",
-      "daemon_version": "0.0.11",
-      "expected_build": "0.0.12",
+      "package_version": "0.12",
+      "daemon_version": "0.11",
+      "expected_build": "0.12",
       "result": "daemon-rejected"
     },
     {
       "name": "numeric-after-change",
-      "package_version": "0.0.13",
-      "daemon_version": "0.0.13",
-      "expected_build": "0.0.13",
+      "package_version": "0.13",
+      "daemon_version": "0.13",
+      "expected_build": "0.13",
       "result": "build"
     }
   ]

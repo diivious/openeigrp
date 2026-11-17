@@ -1,0 +1,15 @@
+{
+  "schema": "eigrp-build-identity-uut/v1",
+  "cases": [
+    {"name": "release", "version": "1.100", "major": 1, "minor": 100, "valid": true},
+    {"name": "first-dev-build", "version": "1.100.1-JOE.dev", "major": 1, "minor": 100, "valid": true},
+    {"name": "large-build-counter", "version": "255.255.999999-JOE.dev", "major": 255, "minor": 255, "valid": true},
+    {"name": "custom-label", "version": "0.5.123-dev.alpha.dev", "major": 0, "minor": 5, "valid": true},
+    {"name": "major-overflow", "version": "256.0", "valid": false},
+    {"name": "minor-overflow", "version": "1.256.1-JOE.dev", "valid": false},
+    {"name": "zero-build", "version": "1.100.0-JOE.dev", "valid": false},
+    {"name": "legacy-release", "version": "1.100.0", "valid": false},
+    {"name": "legacy-developer", "version": "JOE-1.100.0-dev", "valid": false},
+    {"name": "injection", "version": "1.100.1-JOE.dev\";", "valid": false}
+  ]
+}

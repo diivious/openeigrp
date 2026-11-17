@@ -1,0 +1,11 @@
+{
+  "schema": "linux-ci-package-version-uut/v1",
+  "cases": [
+    {"name": "pull-request-validation", "event": "pull_request", "ref": "refs/pull/27/merge", "requested_version": "", "package_version": "0.5.4-merge.dev", "build_version": "0.5.4-merge.dev", "release": false},
+    {"name": "manual-validation-default", "event": "workflow_dispatch", "ref": "refs/heads/cli-formatting", "requested_version": "", "package_version": "0.5.4-merge.dev", "build_version": "0.5.4-merge.dev", "release": false},
+    {"name": "manual-validation-override", "event": "workflow_dispatch", "ref": "refs/heads/cli-formatting", "requested_version": "0.5.15-review.dev", "package_version": "0.5.15-review.dev", "build_version": "0.5.15-review.dev", "release": false},
+    {"name": "tagged-release", "event": "push", "ref": "refs/tags/rel-0.5", "requested_version": "", "package_version": "0.5", "build_version": "0.5", "release": true},
+    {"name": "tag-overrides-manual-version", "event": "push", "ref": "refs/tags/rel-0.5", "requested_version": "0.5.15-review.dev", "package_version": "0.5", "build_version": "0.5", "release": true},
+    {"name": "invalid-release-tag", "event": "push", "ref": "refs/tags/rel-invalid", "requested_version": "", "error": "invalid Debian release tag"}
+  ]
+}

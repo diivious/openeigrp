@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+# The executable test compiles the actual FRR DEFPY tech-support body with
+# build-version headers generated for each case, and checks the rendered CLI.
+schema: frr-tech-support-version-uut/v1
+cases:
+  - name: release
+    version: "1.100"
+    vendor: "1.100"
+  - name: development
+    version: "1.100.42-JOE.dev"
+    vendor: "1.100"
+  - name: maximum-vendor-and-large-build
+    version: "255.255.999999-JOE.dev"
+    vendor: "255.255"
+  - name: zero-vendor
+    version: "0.0"
+    vendor: "0.0"

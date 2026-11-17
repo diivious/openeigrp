@@ -5,6 +5,7 @@
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -48,14 +49,15 @@ class MakeTargetsTest(unittest.TestCase):
         shutil.copy2(ROOT / "linux/Makefile", linux / "Makefile")
         tools = self.root / "tools"
         tools.mkdir(exist_ok=True)
+        shutil.copy2(ROOT / "tools/build-count.py", self.root / "tools/build-count.py")
         self._script("tools/python", "printf 'PY %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         self._script("frr/tools/docker.sh", "printf 'DOCKER %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         self._script("frr/tools/frr.sh", "printf 'FRR %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         self._script("tools/version.sh", "printf 'VERSION %s\n' \"$*\" >> \"$LOG_FILE\"\n"
-                     "printf 'testdev-1.2.3-dev\n'\n")
+                     "printf '1.2.3-testdev.dev\n'\n")
         self._script("bin/docker", "printf 'TAG %s\\n' \"$*\" >> \"$LOG_FILE\"\n"
                      "if [ \"$1 $2\" = 'image inspect' ]; then "
-                     "printf 'testdev-1.2.3-dev\\n'; fi\n")
+                     "printf '1.2.3-testdev.dev\\n'; fi\n")
         self._script("linux/packaging/build-packages.sh",
                      "printf 'PACKAGES %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         for directory in ("eigrp/test/packet", "eigrp/test/rtp",
@@ -72,7 +74,8 @@ class MakeTargetsTest(unittest.TestCase):
         env = os.environ.copy()
         for key in ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEOVERRIDES",
                     "SOURCE", "STYLE_CHECK_BASE", "SUITE", "SCENARIO", "CASE",
-                    "GITHUB", "FRR", "HOST_OS", "ARCH", "TAG", "VERSION"):
+                    "GITHUB", "FRR", "HOST_OS", "ARCH", "TAG", "VERSION",
+                    "CI_PACKAGE_VERSION", "EIGRP_BUILD_VERSION"):
 
             env.pop(key, None)
         env.update(PATH=str(self.root / "bin") + os.pathsep + env.get("PATH", ""),
@@ -84,6 +87,31 @@ class MakeTargetsTest(unittest.TestCase):
                                    capture_output=True)
         events = self.log.read_text().splitlines() if self.log.exists() else []
         return completed, events
+
+    def test_help_lists_every_public_target(self):
+        result, events = self.make("help")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(events, [])
+        self.assertIn("Usage: make [target] [options]", result.stdout)
+        self.assertIn("(default)", result.stdout)
+        section = result.stdout.split("Targets:", 1)[1].split("Selectors:", 1)[0]
+        entries = re.findall(r"^  ([a-z][a-z0-9-]*) {2,}(.+)$", section,
+                             flags=re.MULTILINE)
+        public = re.findall(r"^([a-z][a-z0-9-]*):", (ROOT / "Makefile").read_text(),
+                            flags=re.MULTILINE)
+        self.assertCountEqual([name for name, _ in entries], public)
+        self.assertTrue(all(description.strip() for _, description in entries))
+
+    def test_help_documents_selectors_without_running_tests(self):
+        result, events = self.make("help", "HOST_OS=Darwin")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(events, [])
+        for selector in ("uut SUITE=rtp-core", "uut SCENARIO=",
+                         "scale SUITE=100k", "scale CASE=internal",
+                         "docker ARCH=arm64", "packages ARCH=amd64"):
+            self.assertIn(selector, result.stdout)
+        self.assertIn("no Docker", result.stdout)
+        self.assertIn("keep test logs", result.stdout)
 
     def test_default_is_compilation_and_style_without_docker(self):
         for host in ("Linux", "Darwin"):
@@ -121,7 +149,7 @@ class MakeTargetsTest(unittest.TestCase):
             self.assertEqual(sum(e.startswith("DOCKER --local") for e in events), 2)
             self.assertEqual(sum(e.startswith("DOCKER --verify") for e in events), 0)
             self.assertEqual(sum(e.startswith("PACKAGES ") for e in events), 1)
-            self.assertIn("PACKAGES --version testdev-1.2.3-dev --arch all", events)
+            self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all", events)
             self.assertFalse(any("--uut" in e and e.startswith("PACKAGES ")
                                  for e in events))
             self.assertFalse(any("netlabs" in e or e.startswith("FRR ")
@@ -182,17 +210,17 @@ class MakeTargetsTest(unittest.TestCase):
         result, events = self.make("packages")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("VERSION --local testdev", events)
-        self.assertIn("PACKAGES --version testdev-1.2.3-dev --arch all", events)
+        self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all", events)
         self.log.unlink()
         result, events = self.make("docker")
         self.assertEqual(result.returncode, 0, result.stderr)
         for arch in ("amd64", "arm64"):
             self.assertTrue(any(f"--platform linux/{arch}" in e and
-                                f"--image openeigrp:testdev-{arch}" in e
+                                f"--image openeigrp:1.2.3-testdev.dev-{arch}" in e
                                 for e in events))
         host_arch = ("arm64" if platform.machine().lower() in ("aarch64", "arm64")
                      else "amd64")
-        self.assertIn(f"TAG tag openeigrp:testdev-{host_arch} "
+        self.assertIn(f"TAG tag openeigrp:1.2.3-testdev.dev-{host_arch} "
                       "openeigrp:testdev", events)
         self.log.unlink()
         result, events = self.make("docker", "GITHUB=latest")
@@ -205,7 +233,7 @@ class MakeTargetsTest(unittest.TestCase):
                      "else /usr/bin/uname \"$@\"; fi\n")
         result, events = self.make("docker")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("TAG tag openeigrp:testdev-arm64 openeigrp:testdev", events)
+        self.assertIn("TAG tag openeigrp:1.2.3-testdev.dev-arm64 openeigrp:testdev", events)
 
     def test_arch_selection_and_invalid_arch(self):
         for target in ("docker", "packages", "package-uut"):
@@ -247,6 +275,15 @@ class MakeTargetsTest(unittest.TestCase):
                            lambda e: e.startswith("PACKAGES ") and "--uut" in e)]
             self.assertEqual(indices, sorted(indices))
 
+    def test_pre_commit_passes_one_version_to_both_docker_architectures(self):
+        self._script("frr/tools/docker.sh",
+                     "printf 'DOCKER %s\\n' \"$*\" >> \"$LOG_FILE\"\n"
+                     "printf 'DOCKER_VERSION %s\\n' \"$EIGRP_BUILD_VERSION\" >> \"$LOG_FILE\"\n")
+        result, events = self.make("pre-commit", "HOST_OS=Darwin")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([event for event in events if event.startswith("DOCKER_VERSION ")],
+                         ["DOCKER_VERSION 1.2.3-testdev.dev"] * 4)
+
     def test_pre_commit_builds_once_and_resolves_one_version(self):
         for host in ("Linux", "Darwin"):
             if self.log.exists():
@@ -272,11 +309,50 @@ class MakeTargetsTest(unittest.TestCase):
 
     def test_pre_commit_uses_local_build_even_with_release_overrides(self):
         result, events = self.make("pre-commit", "HOST_OS=Darwin",
-                                   "GITHUB=latest", "VERSION=3.2.1", "ARCH=amd64")
+                                   "GITHUB=latest", "VERSION=3.2.1", "ARCH=amd64",
+                                   "CI_PACKAGE_VERSION=1.2.42-merge.dev")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(sum(e.startswith("DOCKER --local") for e in events), 2)
         self.assertEqual(sum(e.startswith("DOCKER --build") for e in events), 0)
-        self.assertIn("PACKAGES --version testdev-1.2.3-dev --arch all", events)
+        self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all", events)
+        self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all --uut", events)
+        self.assertTrue(all("--pinned-frr" in event for event in events
+                            if event.startswith("DOCKER --local")))
+
+    def test_pre_commit_packages_match_local_build_identity(self):
+        for host in ("Linux", "Darwin"):
+            if self.log.exists():
+                self.log.unlink()
+            result, events = self.make("pre-commit", f"HOST_OS={host}",
+                                       "CI_PACKAGE_VERSION=1.2.42-merge.dev")
+            self.assertEqual(result.returncode, 0, (host, result.stderr))
+            self.assertEqual(events.count("VERSION --local testdev"), 1)
+            self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all",
+                          events)
+            self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all --uut",
+                          events)
+            self.assertFalse(any("1.2.42-merge.dev" in event for event in events),
+                             "CI validation identity must not replace local identity")
+            self.assertEqual(sum(event.startswith("DOCKER --local testdev ")
+                                 for event in events), 2)
+
+    def test_pre_commit_respects_local_tag_identity(self):
+        self._script("tools/version.sh",
+                     "printf 'VERSION %s\\n' \"$*\" >> \"$LOG_FILE\"\n"
+                     "printf '1.2.3-%s.dev\\n' \"$2\"\n")
+        self._script("bin/docker",
+                     "printf 'TAG %s\\n' \"$*\" >> \"$LOG_FILE\"\n"
+                     "if [ \"$1 $2\" = 'image inspect' ]; then "
+                     "printf '1.2.3-reviewer.dev\\n'; fi\n")
+        result, events = self.make("pre-commit", "HOST_OS=Darwin", "TAG=reviewer")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(events.count("VERSION --local reviewer"), 1)
+        self.assertIn("PACKAGES --version 1.2.3-reviewer.dev --arch all", events)
+        self.assertIn("PACKAGES --version 1.2.3-reviewer.dev --arch all --uut", events)
+        self.assertEqual(sum(event.startswith("DOCKER --local reviewer ")
+                             for event in events), 2)
+        self.assertEqual(sum(event.startswith("DOCKER --verify")
+                             for event in events), 2)
 
     def test_all_forces_both_architectures(self):
         result, events = self.make("all", "HOST_OS=Darwin", "ARCH=amd64")

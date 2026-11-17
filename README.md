@@ -61,15 +61,15 @@ Portable APIs use EIGRP-owned types and structured results. Host-specific object
 <details open>
 <summary><strong>Using Docker Images</strong></summary>
 
-Pull a **published** multi-platform release from GHCR (example version `0.2.0`; availability depends on publication). Git tag `rel-0.2.0` is the publishing trigger; the Docker image tag is `0.2.0`.
+Pull a **published** multi-platform release from GHCR (example version `0.2`; availability depends on publication). Git tag `rel-0.2` is the publishing trigger; the Docker image tag is `0.2`.
 
 ```sh
-docker pull ghcr.io/diivious/openeigrp-frr:0.2.0
+docker pull ghcr.io/diivious/openeigrp-frr:0.2
 docker volume create openeigrp-vol
 docker run -d --name openeigrp \
   --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_ADMIN \
   -v openeigrp-vol:/etc/frr \
-  ghcr.io/diivious/openeigrp-frr:0.2.0
+  ghcr.io/diivious/openeigrp-frr:0.2
 
 docker exec -it openeigrp vtysh
 ```
@@ -96,6 +96,7 @@ The default target compiles the portable EIGRP core and Unix support (and the na
 From the repository root:
 
 ```sh
+make help                  # List public targets, descriptions and selectors
 make                       # Host compilation and full-tree style checks
 make all                   # Fast tests, 107 YAML UUTs, quick scale, both image/package builds
 make pre-commit            # Full scale, Docker integration and dpkg lifecycle UUTs
@@ -128,7 +129,7 @@ For Docker development:
 make docker                 # Local OpenEIGRP and FRR checkouts
 make docker FRR=../frr      # Choose a different FRR checkout
 make docker GITHUB=latest   # Latest OpenEIGRP release tag
-make docker GITHUB=1.2.3   # Specific rel-1.2.3 plus its FRR pin
+make docker GITHUB=1.2     # Specific rel-1.2 plus its FRR pin
 ```
 
 See [Docker development](docker/README.md) for source selection and advanced

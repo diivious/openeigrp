@@ -9,16 +9,16 @@ import re
 import sys
 
 
-RELEASE = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)\Z")
+RELEASE = re.compile(r"([0-9]+)\.([0-9]+)\Z")
 DEVELOPMENT = re.compile(
-    r"[A-Za-z0-9][A-Za-z0-9.-]*-([0-9]+)\.([0-9]+)\.([0-9]+)-dev\Z"
+    r"([0-9]+)\.([0-9]+)\.[1-9][0-9]*-[A-Za-z0-9][A-Za-z0-9.-]*\.dev\Z"
 )
 
 
 def render(version):
     match = RELEASE.fullmatch(version) or DEVELOPMENT.fullmatch(version)
     if not match:
-        raise ValueError("expected X.Y.Z or developer-X.Y.Z-dev")
+        raise ValueError("expected MAJOR.MINOR or MAJOR.MINOR.BUILD-LABEL.dev")
     major, minor = map(int, match.group(1, 2))
     if major > 255 or minor > 255:
         raise ValueError("OpenEIGRP vendor major/minor must fit in one byte")
@@ -27,6 +27,7 @@ def render(version):
         "#ifndef EIGRPD_EIGRP_BUILD_VERSION_H_\n"
         "#define EIGRPD_EIGRP_BUILD_VERSION_H_\n"
         f'#define EIGRP_RELEASE "{version}"\n'
+        f'#define EIGRP_VENDOR_VERSION "{major}.{minor}"\n'
         f"#define EIGRP_VENDOR_MAJOR {major}\n"
         f"#define EIGRP_VENDOR_MINOR {minor}\n"
         "#endif /* EIGRPD_EIGRP_BUILD_VERSION_H_ */\n"

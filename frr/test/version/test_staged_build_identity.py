@@ -27,8 +27,8 @@ class StagedBuildIdentityTests(unittest.TestCase):
                 'install_element(EIGRP_NODE, &router_eigrp_cmd);\n')
             subprocess.run(["git", "init", "-q", str(frr)], check=True)
             features = (ROOT / "eigrp/code/eigrp_features.h").read_bytes()
-            for release, major, minor in (("diivious-0.5.0-dev", 0, 5),
-                                          ("diivious-100.10.0-dev", 100, 10)):
+            for release, major, minor in (("0.5.1-diivious.dev", 0, 5),
+                                          ("100.10.1-diivious.dev", 100, 10)):
                 with self.subTest(release=release):
                     result = subprocess.run(
                         ["bash", str(INSTALL), "--no-tests", "--frr-root", str(frr)],
@@ -39,6 +39,7 @@ class StagedBuildIdentityTests(unittest.TestCase):
                     self.assertEqual((stage / "eigrp_features.h").read_bytes(), features)
                     header = (stage / "eigrp_build_version.h").read_text()
                     self.assertIn(f'#define EIGRP_RELEASE "{release}"', header)
+                    self.assertIn(f'#define EIGRP_VENDOR_VERSION "{major}.{minor}"', header)
                     self.assertIn(f"#define EIGRP_VENDOR_MAJOR {major}", header)
                     self.assertIn(f"#define EIGRP_VENDOR_MINOR {minor}", header)
                     self.assertEqual((frr / "yang/frr-eigrpd.yang").read_bytes(),

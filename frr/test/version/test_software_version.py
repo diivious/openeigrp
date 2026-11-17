@@ -78,16 +78,16 @@ class SoftwareVersionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_framework_version_does_not_change_hello_vendor_bytes(self):
-        self.compile_and_run("10.4.1-test", "diivious-0.5.0-dev", 0, 5)
-        self.compile_and_run("99.99-test", "diivious-0.5.0-dev", 0, 5)
+        self.compile_and_run("10.4.1-test", "0.5.1-diivious.dev", 0, 5)
+        self.compile_and_run("99.99-test", "0.5.1-diivious.dev", 0, 5)
 
     def test_large_and_patch_release_components(self):
-        self.compile_and_run("unstable", "diivious-0.100.10-dev", 0, 100)
-        self.compile_and_run("unstable", "diivious-100.10.0-dev", 100, 10)
-        self.compile_and_run("10.4", "0.6.15", 0, 6)
+        self.compile_and_run("unstable", "0.100.10-diivious.dev", 0, 100)
+        self.compile_and_run("unstable", "100.10.1-diivious.dev", 100, 10)
+        self.compile_and_run("10.4", "0.6", 0, 6)
 
     def test_zero_version(self):
-        self.compile_and_run("10.4", "0.0.0", 0, 0)
+        self.compile_and_run("10.4", "0.0", 0, 0)
 
 
 if __name__ == "__main__":

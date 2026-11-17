@@ -10,6 +10,7 @@ OPENEIGRP_DOCS_REQUIRE_RENDERER=1 for mandatory man rendering.
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Donnie V. Savage
 
+import json
 import os
 from pathlib import Path
 import re
@@ -159,12 +160,25 @@ class DocumentationTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('build-packages.sh --version "$version" --arch', result.stdout)
-        for name in ("README.md", "specs/quickstart.md", "specs/developer-guide.md"):
+        scenario = json.loads(
+            (LINUX / "test/uut/documented-make-targets.yaml").read_text()
+        )
+        self.assertEqual(scenario["schema"], "linux-make-help-uut/v1")
+        help_result = subprocess.run(
+            [make, "help"], cwd=ROOT, capture_output=True,
+            text=True, timeout=15, check=False,
+        )
+        self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        for line in scenario["help_output"]:
+            with self.subTest(help_line=line):
+                self.assertIn(line, help_result.stdout)
+        for name, required in scenario["documentation"].items():
             text = (ROOT / name).read_text(encoding="utf-8")
-            self.assertIn("make all", text)
+            for command in required:
+                with self.subTest(document=name, command=command):
+                    self.assertIn(command, text)
             self.assertNotIn("make portable-build", text)
             self.assertNotIn("make check", text)
-            self.assertNotIn("make help", text)
 
     def test_native_configuration_examples(self):
         validator = self.binary("openeigrpd-config")

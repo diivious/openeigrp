@@ -1,0 +1,57 @@
+{
+  "schema": "ci-precommit-parity-uut/v1",
+  "cases": [
+    {
+      "name": "macos-pr-gate",
+      "target": "pre-commit",
+      "host": "Darwin",
+      "local_version": "1.2.3-testdev.dev",
+      "docker": true,
+      "linux_native": false
+    },
+    {
+      "name": "linux-pr-gate",
+      "target": "pre-commit",
+      "host": "Linux",
+      "local_version": "1.2.3-testdev.dev",
+      "docker": true,
+      "linux_native": true
+    },
+    {
+      "name": "macos-post-merge-core",
+      "target": "_ci-core",
+      "host": "Darwin",
+      "docker": false,
+      "linux_native": false
+    },
+    {
+      "name": "linux-post-merge-core",
+      "target": "_ci-core",
+      "host": "Linux",
+      "docker": false,
+      "linux_native": true
+    },
+    {
+      "name": "standalone-smoke",
+      "target": "_ci-smoke",
+      "host": "Darwin",
+      "docker": false,
+      "linux_native": false
+    }
+  ],
+  "pytest": [
+    "eigrp/test/packet/pacing.py",
+    "eigrp/test/scale/test_table_index.py",
+    "eigrp/test/uut/test_process_limit_low_uptime.py"
+  ],
+  "scenarios": [
+    "examples/ipv4-basic-core-gate.yaml",
+    "examples/ipv6-basic-core-gate.yaml",
+    "rtp/lost-ack.yaml",
+    "dual-diamond/feasible-successor.yaml"
+  ],
+  "native": [
+    "linux.test.test_mgnt",
+    "linux.test.test_ipv6_packet"
+  ]
+}

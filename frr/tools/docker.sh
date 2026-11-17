@@ -29,11 +29,13 @@ Usage:
 
   --local   Build from local EIGRP edits and FRR checkout or pinned commit.
             Default label: $USER; image: openeigrp:LABEL.
-            EIGRP version: LABEL-X.Y.Z-dev from the latest origin/master tag.
-            For a release, VERSION=X.Y.Z is preserved unchanged.
+            EIGRP version: MAJOR.MINOR.BUILD-LABEL.dev from the latest origin/master tag.
+            For a release, VERSION=MAJOR.MINOR is preserved unchanged.
             FRR source: local checkout if found; otherwise docker/docker.cfg pin.
+  --pinned-frr  For --local, force docker/docker.cfg FRR pin, ignoring a
+            sibling or HOME FRR checkout; incompatible with --frr-root.
   --build   Fetch both repositories from GitHub. VERSION=latest selects the
-            highest rel-X.Y.Z tag on origin/master. X.Y.Z selects rel-X.Y.Z.
+            highest rel-MAJOR.MINOR tag on origin/master. MAJOR.MINOR selects rel-MAJOR.MINOR.
             FRR is pinned by docker/docker.cfg in that OpenEIGRP checkout.
             Nonrelease labels require --eigrp-ref; --frr-ref may override
             FRR only for development builds.
@@ -54,8 +56,9 @@ USAGE
 }
 
 die() { echo "error: $*" >&2; exit 1; }
-release_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
-release_git_tag() { [[ "$1" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+release_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+$ ]]; }
+development_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[1-9][0-9]*-[A-Za-z0-9][A-Za-z0-9.-]*\.dev$ ]]; }
+release_git_tag() { [[ "$1" =~ ^rel-[0-9]+\.[0-9]+$ ]]; }
 frr_git_tag() { [[ "$1" =~ ^frr-[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 source_git_tag() { release_git_tag "$1" || frr_git_tag "$1"; }
 version_valid() { [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]; }
@@ -282,13 +285,13 @@ fi
 version_valid "$version" || die "invalid image version: $version"
 if [[ "$operation" == --build && "$version" == latest ]]; then
     version="$(latest_version)" || die 'cannot query OpenEIGRP release tags'
-    release_version "$version" || die 'no rel-X.Y.Z OpenEIGRP tags found'
+    release_version "$version" || die 'no rel-MAJOR.MINOR OpenEIGRP tags found'
     printf 'Selected latest OpenEIGRP release: rel-%s\n' "$version"
 fi
 # Image references keep the developer's short label; the embedded version
 # is release-qualified, including for remote development builds.
 image_tag="$version"
-if [[ "$operation" == --build ]] && ! release_version "$version"; then
+if [[ "$operation" == --build ]] && ! release_version "$version" && ! development_version "$version"; then
     version="$("$root/tools/version.sh" --local "$image_tag" --repo "$root")" ||
         die 'cannot resolve development version from origin/master'
 fi
@@ -302,7 +305,7 @@ jobs=4
 pull_base=0
 eigrp_ref="$version"; frr_ref=""
 eigrp_ref_set=0; frr_ref_set=0
-eigrp_root="$root"; frr_root=""
+eigrp_root="$root"; frr_root=""; pinned_only=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform) [[ $# -ge 2 ]] || die 'missing --platform'; platform="$2"; shift 2 ;;
@@ -312,6 +315,7 @@ while [[ $# -gt 0 ]]; do
         --frr-ref) [[ $# -ge 2 ]] || die 'missing --frr-ref'; frr_ref="$2"; frr_ref_set=1; shift 2 ;;
         --eigrp-root) [[ $# -ge 2 ]] || die 'missing --eigrp-root'; eigrp_root="$2"; shift 2 ;;
         --frr-root) [[ $# -ge 2 ]] || die 'missing --frr-root'; frr_root="$2"; shift 2 ;;
+        --pinned-frr) pinned_only=1; shift ;;
         --pull-base) pull_base=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
@@ -326,9 +330,10 @@ command -v git >/dev/null 2>&1 || die 'git is required'
 
 if [[ "$operation" == --local ]]; then
     [[ "$eigrp_ref_set" == 0 && "$frr_ref_set" == 0 ]] || die '--local does not accept remote refs'
+    [[ "$pinned_only" == 0 || -z "$frr_root" ]] || die '--pinned-frr cannot be combined with --frr-root'
     [[ -d "$eigrp_root" ]] || die "local EIGRP checkout not found: $eigrp_root"
     eigrp_root="$(cd "$eigrp_root" && pwd)"
-    if [[ -z "$frr_root" ]]; then
+    if [[ -z "$frr_root" && "$pinned_only" == 0 ]]; then
         for candidate in "$eigrp_root/../frr" "$HOME/projects/frr"; do
             if [[ -f "$candidate/bootstrap.sh" && -d "$candidate/tests" ]]; then
                 frr_root="$candidate"
@@ -353,8 +358,13 @@ if [[ "$operation" == --local ]]; then
     fi
     if ! release_version "$version"; then
         label="$version"
-        version="$("$root/tools/version.sh" --local "$label" --repo "$eigrp_root")" ||
-            die 'cannot resolve local OpenEIGRP version from origin/master'
+        if [[ -n "${EIGRP_BUILD_VERSION:-}" ]]; then
+            version="$EIGRP_BUILD_VERSION"
+            development_version "$version" || die "invalid EIGRP_BUILD_VERSION: $version"
+        else
+            version="$("$root/tools/version.sh" --local "$label" --repo "$eigrp_root")" ||
+                die 'cannot resolve local OpenEIGRP version from origin/master'
+        fi
         printf 'OpenEIGRP development version: %s\n' "$version"
     fi
     [[ -f "$eigrp_root/frr/tools/frr.sh" ]] || die 'incorrect local EIGRP root'
@@ -369,10 +379,11 @@ if [[ "$operation" == --local ]]; then
         if [[ "$frr_source" == local ]]; then verify_local_clean "$frr_root" FRR; fi
     fi
 else
+    [[ "$pinned_only" == 0 ]] || die '--pinned-frr applies only to --local'
     [[ -z "$frr_root" && "$eigrp_root" == "$root" ]] || die 'source roots apply only to --local'
     if release_version "$version"; then
         [[ "$eigrp_ref_set" == 0 && "$frr_ref_set" == 0 ]] || \
-            die 'release builds use the OpenEIGRP rel-X.Y.Z tag and its pinned FRR tag'
+            die 'release builds use the OpenEIGRP rel-MAJOR.MINOR tag and its pinned FRR tag'
         eigrp_ref="rel-$version"
     else
         [[ "$eigrp_ref_set" == 1 ]] || die 'development builds require --eigrp-ref'

@@ -26,7 +26,7 @@ class DockerReleaseSelectionTest(unittest.TestCase):
         self.assertIn("load_frr_config()", self.source)
         (self.root / "tools").mkdir()
         helper = self.root / "tools/version.sh"
-        helper.write_text("#!/bin/sh\nprintf '1.10.0\\n'\n")
+        helper.write_text("#!/bin/sh\nprintf '1.10\\n'\n")
         helper.chmod(0o755)
         self.config = self.root / "docker.cfg"
         self.config.write_text(
@@ -38,9 +38,9 @@ class DockerReleaseSelectionTest(unittest.TestCase):
             "#!/bin/sh\n"
             "case \"$*\" in\n"
             "  'ls-remote --tags https://github.com/diivious/openeigrp.git refs/tags/rel-*')\n"
-            "    printf '%s\\trefs/tags/rel-1.9.0\\n' " + "a" * 40 + "\n"
-            "    printf '%s\\trefs/tags/rel-1.10.0\\n' " + "b" * 40 + "\n"
-            "    printf '%s\\trefs/tags/rel-1.10.0^{}\\n' " + "c" * 40 + "\n"
+            "    printf '%s\\trefs/tags/rel-1.9\\n' " + "a" * 40 + "\n"
+            "    printf '%s\\trefs/tags/rel-1.10\\n' " + "b" * 40 + "\n"
+            "    printf '%s\\trefs/tags/rel-1.10^{}\\n' " + "c" * 40 + "\n"
             "    printf '%s\\trefs/tags/rel-testing\\n' " + "d" * 40 + "\n"
             "    ;;\n"
             "  *) exit 9 ;;\n"
@@ -64,7 +64,7 @@ class DockerReleaseSelectionTest(unittest.TestCase):
     def test_latest_selects_numeric_version_not_lexical_sort(self):
         result = self.execute('latest_version')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), '1.10.0')
+        self.assertEqual(result.stdout.strip(), '1.10')
 
     def test_configuration_requires_commit_sha(self):
         self.config.write_text('FRR_REPO=https://github.com/FRRouting/frr.git\n'
