@@ -9,10 +9,12 @@ die() { printf 'version: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'USAGE'
 Usage: tools/version.sh --latest [--repo PATH]
+       tools/version.sh --ci [--repo PATH]
        tools/version.sh --local [LABEL] [--repo PATH]
        tools/version.sh --current [LABEL] [--repo PATH]
 
 --latest returns the highest rel-MAJOR.MINOR release on origin/master.
+--ci returns MAJOR.MINOR.0-merge.dev at the checked-out commit without allocating.
 --local allocates the next local build: MAJOR.MINOR.BUILD-LABEL.dev.
 --current returns the last allocated local build without incrementing it.
 An existing rel-MAJOR.MINOR.0 tag can seed the first two-component release.
@@ -23,7 +25,7 @@ USAGE
 [[ $# -gt 0 ]] || { usage >&2; exit 2; }
 mode="$1"; shift
 case "$mode" in
-    --latest|--local|--current) ;;
+    --latest|--ci|--local|--current) ;;
     --help|-h) usage; exit 0 ;;
     *) die "unknown mode: $mode" ;;
 esac
@@ -41,7 +43,7 @@ while [[ $# -gt 0 ]]; do
         *) die "unknown argument: $1" ;;
     esac
 done
-if [[ "$mode" != --latest ]]; then
+if [[ "$mode" == --local || "$mode" == --current ]]; then
     [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] ||
         die 'invalid development label (letters, digits, dot or hyphen only)'
 fi
@@ -56,6 +58,17 @@ git -C "$repo" fetch --quiet --tags --no-recurse-submodules origin \
 
 remote_tags="$(git -C "$repo" ls-remote --refs --tags origin 'refs/tags/rel-*')" ||
     die 'unable to read origin release tags'
+# CI resolves the release baseline against its immutable checkout, not a
+# moving origin/master, so parallel jobs and architectures use one identity.
+release_ref=refs/remotes/origin/master
+if [[ "$mode" == --ci ]]; then
+    release_ref=HEAD
+    # Pull-request checkouts point at a synthetic merge commit. Its first
+    # parent is the immutable target-branch baseline, not PR-added tags.
+    if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
+        release_ref=HEAD^1
+    fi
+fi
 version="$(
     while IFS=$'\t' read -r sha ref; do
         tag="${ref#refs/tags/rel-}"
@@ -74,13 +87,15 @@ version="$(
             exit 1
         }
         if git -C "$repo" merge-base --is-ancestor \
-            "refs/tags/rel-$tag^{commit}" refs/remotes/origin/master; then
+            "refs/tags/rel-$tag^{commit}" "$release_ref"; then
             printf '%s.%s\n' "$major" "$minor"
         fi
     done <<< "$remote_tags" | sort -u -t . -k1,1n -k2,2n | tail -1
 )" || die 'unable to verify release tags on origin/master'
-[[ -n "$version" ]] || die 'no rel-MAJOR.MINOR release tag reachable from origin/master'
-if [[ "$mode" == --latest ]]; then
+[[ -n "$version" ]] || die "no rel-MAJOR.MINOR release tag reachable from $release_ref"
+if [[ "$mode" == --ci ]]; then
+    printf '%s.0-merge.dev\n' "$version"
+elif [[ "$mode" == --latest ]]; then
     printf '%s\n' "$version"
 else
     if [[ "$mode" == --local ]]; then

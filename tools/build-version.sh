@@ -11,7 +11,7 @@ version=$2
 # Numeric release identity or numbered development build. Build numbers are
 # decimal strings, not limited by the 8-bit EIGRP vendor fields.
 if ! printf '%s\n' "$version" | grep -Eq \
-    '^([0-9]+\.[0-9]+|[0-9]+\.[0-9]+\.[1-9][0-9]*-[A-Za-z0-9][A-Za-z0-9.-]*\.dev)$'; then
+    '^([0-9]+\.[0-9]+|[0-9]+\.[0-9]+\.(0|[1-9][0-9]*)-[A-Za-z0-9][A-Za-z0-9.-]*\.dev)$'; then
     fail 'expected MAJOR.MINOR or MAJOR.MINOR.BUILD-LABEL.dev'
 fi
 # The 8-bit on-wire vendor fields cannot encode values greater than 255.

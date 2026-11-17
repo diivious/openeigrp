@@ -46,7 +46,7 @@ class VersionTest(unittest.TestCase):
     def version(self, *args, repo=None, user="JOE"):
         return subprocess.run([str(SCRIPT), *args, "--repo", str(repo or self.repo)],
                               capture_output=True, text=True,
-                              env={**os.environ, "USER": user})
+                              env={**os.environ, "GITHUB_EVENT_NAME": "push", "USER": user})
 
     def test_latest_release_and_counter(self):
         self.assertEqual(self.version("--latest").stdout.strip(), "0.5")
@@ -60,6 +60,43 @@ class VersionTest(unittest.TestCase):
                          "0.5.3-dev.alpha.dev")
         self.assertEqual(self.version("--latest").stdout.strip(), "0.5")
         self.assertEqual(self.version("--current").stdout.strip(), "0.5.3-JOE.dev")
+
+    def test_ci_is_fixed_and_does_not_allocate_a_local_counter(self):
+        for run in range(1, 4):
+            with self.subTest(run=run):
+                result = self.version("--ci", user="invalid/user")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), "0.5.0-merge.dev")
+        self.assertNotEqual(self.version("--current").returncode, 0)
+        self.assertEqual(self.version("--local").stdout.strip(), "0.5.1-JOE.dev")
+        self.assertEqual(self.version("--ci").stdout.strip(), "0.5.0-merge.dev")
+        self.assertEqual(self.version("--local").stdout.strip(), "0.5.2-JOE.dev")
+
+    def test_ci_is_anchored_to_commit_not_moving_origin_master(self):
+        previous = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        (self.repo / "README").write_text("0.6\n")
+        self.commit()
+        self.git(self.repo, "tag", "-a", "rel-0.6", "-m", "0.6")
+        self.git(self.repo, "push", "-q", "origin", "master", "--tags")
+        self.git(self.repo, "checkout", "-q", "--detach", previous)
+        self.assertEqual(self.version("--latest").stdout.strip(), "0.6")
+        self.assertEqual(self.version("--ci").stdout.strip(), "0.5.0-merge.dev")
+
+    def test_pr_ci_uses_merge_target_parent_not_unreleased_pr_tag(self):
+        # Construct a pull_request-style merge: HEAD^1 is master, while
+        # HEAD^2 includes a release-looking tag that master does not contain.
+        self.git(self.repo, "checkout", "-qb", "feature")
+        (self.repo / "feature").write_text("new feature\n")
+        self.commit()
+        self.git(self.repo, "tag", "-a", "rel-0.6", "-m", "not released")
+        self.git(self.repo, "push", "-q", "origin", "feature", "--tags")
+        self.git(self.repo, "checkout", "-q", "master")
+        self.git(self.repo, "merge", "-q", "--no-ff", "feature", "-m", "PR merge")
+        result = subprocess.run([str(SCRIPT), "--ci", "--repo", str(self.repo)],
+                                capture_output=True, text=True,
+                                env={**os.environ, "GITHUB_EVENT_NAME": "pull_request"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "0.5.0-merge.dev")
 
     def test_reset_and_new_release_reset_counter(self):
         self.assertIn("0.5.1-JOE.dev", self.version("--local").stdout)

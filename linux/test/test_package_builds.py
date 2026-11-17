@@ -144,8 +144,19 @@ class MultiArchitectureBuildTests(unittest.TestCase):
                             ("tag", "rel-0.5"), ("remote", "add", "origin", str(repo))):
                     subprocess.run(["git", "-C", str(repo), *cmd], check=True,
                                    text=True, capture_output=True)
+                if case["event"] != "push":
+                    # Emulate the synthetic PR merge checkout used by GitHub.
+                    subprocess.run(["git", "-C", str(repo), "checkout", "-qb", "feature"],
+                                   check=True, capture_output=True)
+                    (repo / "pr-change").write_text("source\n")
+                    for cmd in (("add", "pr-change"), ("commit", "-qm", "PR change"),
+                                ("checkout", "-q", "master"),
+                                ("merge", "-q", "--no-ff", "feature", "-m", "PR merge")):
+                        subprocess.run(["git", "-C", str(repo), *cmd], check=True,
+                                       capture_output=True, text=True)
                 output = work / "version-output"
-                env = {**self.env, "EVENT_NAME": case["event"],
+                env = {**self.env, "GITHUB_EVENT_NAME": case["event"],
+                       "EVENT_NAME": case["event"],
                        "GIT_REF": case["ref"],
                        "REQUESTED_VERSION": case["requested_version"],
                        "GITHUB_RUN_NUMBER": "4",

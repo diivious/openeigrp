@@ -57,7 +57,7 @@ USAGE
 
 die() { echo "error: $*" >&2; exit 1; }
 release_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+$ ]]; }
-development_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[1-9][0-9]*-[A-Za-z0-9][A-Za-z0-9.-]*\.dev$ ]]; }
+development_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.(0|[1-9][0-9]*)-[A-Za-z0-9][A-Za-z0-9.-]*\.dev$ ]]; }
 release_git_tag() { [[ "$1" =~ ^rel-[0-9]+\.[0-9]+$ ]]; }
 frr_git_tag() { [[ "$1" =~ ^frr-[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 source_git_tag() { release_git_tag "$1" || frr_git_tag "$1"; }

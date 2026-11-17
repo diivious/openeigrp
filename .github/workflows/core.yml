@@ -66,6 +66,15 @@ jobs:
         with:
           fetch-depth: 0 # Complete history is needed for multi-commit push/PR diffs.
 
+      - name: Pin CI build identity across workflow steps
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(./tools/version.sh --ci)"
+          ./tools/build-version.sh --binary "$version" >/dev/null
+          printf 'EIGRP_BUILD_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'OpenEIGRP CI build identity: %s\n' "$version"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -138,6 +147,8 @@ jobs:
     steps:
       - name: Check out EIGRP
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # CI version is derived from the checked-out commit.
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -171,6 +182,8 @@ jobs:
     steps:
       - name: Check out EIGRP
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # CI version is derived from the checked-out commit.
 
       - name: Set up Python
         uses: actions/setup-python@v5

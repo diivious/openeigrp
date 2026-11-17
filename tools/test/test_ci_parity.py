@@ -63,6 +63,15 @@ class CIPreCommitTests(unittest.TestCase):
                 self.assertEqual(any("-m pytest -q linux/test" in event
                                      for event in events), case["linux_native"])
 
+    def test_github_fast_gate_pins_identity_before_separate_test_step(self):
+        workflow = (ROOT / ".github/workflows/core.yml").read_text()
+        setup = workflow.index("      - name: Pin CI build identity across workflow steps")
+        build = workflow.index("      - name: Build native Linux daemon and portable sources")
+        tests = workflow.index("      - name: Run native Linux management and IPv6 packet regressions")
+        self.assertLess(setup, build)
+        self.assertLess(build, tests)
+        self.assertIn("EIGRP_BUILD_VERSION=%s", workflow)
+
     def test_smoke_failure_stops_before_docker_build(self):
         harness = self.harness()
         harness._script("tools/python", """

@@ -413,10 +413,18 @@ for op, data in ((10, body), (12, body + bytes(128)),
         self.assertEqual(talk(self.path, 5)[3][0]["kind"], "prefix")
 
     def test_archive_boundary(self):
+        # Building the archive must not allocate another version. The fixture
+        # was compiled with this header, and its identity gate must still
+        # accept the same client after the nested make finishes.
+        header = ROOT / "eigrp/code/eigrp_build_version.h"
+        original = header.read_text()
+        release = re.search(r'#define EIGRP_RELEASE "([^"]+)"', original).group(1)
+        env = dict(os.environ, EIGRP_BUILD_VERSION=release)
         built = subprocess.run(["make", "-C", str(CODE),
                                 "libeigrp_linux_mgnt.a"],
-                               text=True, capture_output=True)
+                               text=True, capture_output=True, env=env)
         self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertEqual(header.read_text(), original)
         symbols = subprocess.run(["nm", "--defined-only",
                                   str(CODE / "libeigrp_linux_mgnt.a")],
                                  text=True, capture_output=True)
@@ -424,6 +432,24 @@ for op, data in ((10, body), (12, body + bytes(128)),
         self.assertIn("eigrp_linux_mgnt_start", symbols.stdout)
         self.assertIn("eigrp_linux_mgnt_stop", symbols.stdout)
         self.assertNotIn("eigrp_uut_", symbols.stdout)
+
+        scenario = json.loads(
+            (TEST / "uut/management-build-identity.yaml").read_text())
+        self.assertEqual(scenario["schema"],
+                         "linux-management-build-identity-uut/v1")
+        for case in scenario["cases"]:
+            with self.subTest(case=case["name"]):
+                identity = (release.encode() if case["identity"] == "built"
+                            else b"not-a-build")
+                with socket.socket(socket.AF_UNIX) as conn:
+                    conn.settimeout(2)
+                    conn.connect(str(self.path))
+                    _, status, _, rows = identify(conn, identity)
+                    self.assertEqual(status, case["status"])
+                    if status == 0:
+                        self.assertEqual(rows[0]["release"], release)
+                        conn.sendall(frame(1))
+                        self.assertEqual(get_reply(conn)[1], 0)
 
     def test_format(self):
         formatter = shutil.which("clang-format")

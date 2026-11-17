@@ -75,7 +75,7 @@ class MakeTargetsTest(unittest.TestCase):
         for key in ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEOVERRIDES",
                     "SOURCE", "STYLE_CHECK_BASE", "SUITE", "SCENARIO", "CASE",
                     "GITHUB", "FRR", "HOST_OS", "ARCH", "TAG", "VERSION",
-                    "CI_PACKAGE_VERSION", "EIGRP_BUILD_VERSION"):
+                    "CI_PACKAGE_VERSION", "EIGRP_BUILD_VERSION", "GITHUB_ACTIONS"):
 
             env.pop(key, None)
         env.update(PATH=str(self.root / "bin") + os.pathsep + env.get("PATH", ""),

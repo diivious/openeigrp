@@ -34,6 +34,7 @@ class BuildIdentityTests(unittest.TestCase):
             ("0.100.10-diivious.dev", 0, 100),
             ("100.10.1-diivious.dev", 100, 10),
             ("0.5", 0, 5),
+            ("0.5.0-merge.dev", 0, 5),
             ("255.255.999999-JOE.dev", 255, 255),
         )
         for release, major, minor in cases:
@@ -48,7 +49,7 @@ class BuildIdentityTests(unittest.TestCase):
 
     def test_rejects_overflow_and_unidentified_build(self):
         for release in ("256.0.1-diivious.dev", "0.256", "development",
-                        "0.5.0", "0.5.0-JOE.dev", "0.6.15-testdev.staging",
+                        "0.5.0", "0.5.00-JOE.dev", "0.6.15-testdev.staging",
                         "0.5.1-diivious.dev\";", "-0.5.0-dev"):
             with self.subTest(release=release):
                 result = self.generate(release)

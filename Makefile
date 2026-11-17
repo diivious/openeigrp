@@ -21,7 +21,11 @@ UUT_SUITES := ipv4-basic-core ipv6-basic-core rtp-core core-topology mesh-topolo
 BUILD_GOALS := $(if $(strip $(MAKECMDGOALS)),$(MAKECMDGOALS),_default)
 ifneq ($(filter-out help clean distclean docker-uut,$(BUILD_GOALS)),)
 ifeq ($(strip $(EIGRP_BUILD_VERSION)),)
+ifeq ($(GITHUB_ACTIONS),true)
+EIGRP_BUILD_VERSION := $(shell ./tools/version.sh --ci)
+else
 EIGRP_BUILD_VERSION := $(shell ./tools/version.sh --local '$(TAG)')
+endif
 endif
 endif
 export EIGRP_BUILD_VERSION
@@ -100,7 +104,7 @@ _unit-tests:
 	  tools.test.test_version tools.test.test_package tools.test.test_log_results \
 	  tools.test.test_docker_preflight \
 	  tools.test.test_tool_ownership tools.test.test_backup tools.test.test_uut_make tools.test.test_ci_parity \
-	  tools.test.test_build_identity \
+	  tools.test.test_build_identity tools.test.test_ci_versions \
 	  linux.test.test_install_make linux.test.test_package_builds \
 	  frr.test.setup.test_frr_setup_clone frr.test.setup.test_frr_setup_tag
 	$(PYTHON) -m unittest -q linux.test.test_docs

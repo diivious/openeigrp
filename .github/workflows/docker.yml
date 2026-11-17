@@ -90,8 +90,7 @@ jobs:
             version="${eigrp_ref#rel-}"
             release=no
           else
-            base="$(./tools/version.sh --latest)"
-            version="$base.${GITHUB_RUN_NUMBER}-merge.dev"
+            version="$(./tools/version.sh --ci)"
             if [[ "$EVENT_NAME" == pull_request ]]; then
               eigrp_ref="refs/pull/$PR_NUMBER/merge"
             else

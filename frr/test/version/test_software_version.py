@@ -85,6 +85,7 @@ class SoftwareVersionTests(unittest.TestCase):
         self.compile_and_run("unstable", "0.100.10-diivious.dev", 0, 100)
         self.compile_and_run("unstable", "100.10.1-diivious.dev", 100, 10)
         self.compile_and_run("10.4", "0.6", 0, 6)
+        self.compile_and_run("10.4", "0.6.0-merge.dev", 0, 6)
 
     def test_zero_version(self):
         self.compile_and_run("10.4", "0.0", 0, 0)

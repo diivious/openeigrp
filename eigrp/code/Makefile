@@ -3,7 +3,7 @@ CC ?= cc
 AR ?= ar
 CFLAGS ?= -O2 -g
 CPPFLAGS += -DEIGRP_DISABLE_SNMP -I. -include eigrp_build_version.h
-EIGRP_BUILD_VERSION ?= $(shell ../../tools/version.sh --local)
+EIGRP_BUILD_VERSION ?= $(shell ../../tools/version.sh $(if $(filter true,$(GITHUB_ACTIONS)),--ci,--local))
 CFLAGS += -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -pthread
 
 # eigrp_dump.c is legacy presentation/debug support and is not part of the
