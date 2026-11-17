@@ -63,7 +63,7 @@ class CIFailFastTests(unittest.TestCase):
                 self.assertEqual(jobs[name]["if"],
                                  "github.event_name == 'pull_request'")
                 self.assertEqual(jobs[name]["uses"],
-                                 f"./.github/workflows/{name}.yml")
+                                 f"./.github/workflows/{name}-ci.yml")
         self.assertEqual(set(dependencies(jobs["pipeline"])),
                          set(jobs) - {"pipeline"})
         self.assertIn("always()", jobs["pipeline"]["if"])
@@ -85,23 +85,65 @@ class CIFailFastTests(unittest.TestCase):
                     for later in chain[chain.index(case["fail"]) + 1:]:
                         self.assertEqual(status[later], "skipped")
 
-    def test_release_workflows_do_not_start_on_independent_pr_events(self):
+    def test_pr_nested_jobs_cannot_escalate_token_permissions(self):
+        # Model the GitHub validation that failed in PR #60. Every job of a
+        # called workflow is checked, including an 'if'-guarded publish job.
         for name in self.scenario["artifact_jobs"]:
+            caller = self.core["jobs"][name]
+            called = workflow(caller["uses"].rsplit("/", 1)[-1])
+            granted = caller.get("permissions", self.core["permissions"])
+            for job_name, job in called["jobs"].items():
+                requested = job.get("permissions", called.get("permissions", granted))
+                for scope, access in requested.items():
+                    with self.subTest(workflow=name, job=job_name, scope=scope):
+                        ceiling = granted.get(scope, "none")
+                        order = {"none": 0, "read": 1, "write": 2}
+                        self.assertLessEqual(order[access], order[ceiling],
+                                             f"{name}/{job_name} requests {scope}: {access} "
+                                             f"but PR caller grants {ceiling}")
+
+    def test_release_and_pr_permission_boundaries(self):
+        # GitHub validates all jobs in a reusable workflow even when an 'if'
+        # would skip its release-publishing job. Only call build-only workflows.
+        jobs = self.core["jobs"]
+        for case in self.scenario["permission_cases"]:
+            name = case["workflow"]
             with self.subTest(workflow=name):
-                artifact = workflow(f"{name}.yml")
-                events = artifact["on"]
-                self.assertIn("workflow_call", events)
-                self.assertNotIn("pull_request", events)
-                self.assertIn("workflow_dispatch", events)
-                self.assertEqual(events["push"]["tags"], ["rel-*"])
-                jobs = artifact["jobs"]
-                if name == "docker":
-                    self.assertEqual(len(jobs["build"]["strategy"]["matrix"]["include"]), 2)
-                    self.assertEqual(dependencies(jobs["publish"]), ["build"])
-                else:
-                    self.assertEqual(len(jobs["packages"]["strategy"]["matrix"]["include"]), 2)
-                    self.assertEqual(set(dependencies(jobs["release"])),
-                                     {"packages", "regression"})
+                artifact = workflow(f"{name}-ci.yml")
+                release = workflow(f"{name}.yml")
+                self.assertEqual(artifact["on"].keys(), {"workflow_call"})
+                self.assertEqual(artifact["permissions"], {"contents": "read"})
+                self.assertEqual(jobs[name]["permissions"], {"contents": "read"})
+                self.assertEqual(jobs[name]["uses"],
+                                 f"./.github/workflows/{name}-ci.yml")
+                # Calculate the effective token permission ceilings for every
+                # nested job, not just the job that executes on a PR.
+                caller = jobs[name]["permissions"]
+                for nested in artifact["jobs"].values():
+                    for scope, permission in nested.get("permissions", artifact["permissions"]).items():
+                        self.assertIn(scope, caller)
+                        self.assertEqual(permission, "read")
+                self.assertEqual(set(artifact["jobs"]), {case["builder_job"]})
+                self.assertEqual(len(artifact["jobs"][case["builder_job"]]
+                                     ["strategy"]["matrix"]["include"]), 2)
+                self.assertNotIn("workflow_call", release["on"])
+                self.assertNotIn("pull_request", release["on"])
+                self.assertEqual(release["on"]["push"]["tags"], ["rel-*"])
+                self.assertEqual(release["jobs"][case["builder_job"]]["uses"],
+                                 f"./.github/workflows/{name}-ci.yml")
+                self.assertEqual(release["jobs"][case["builder_job"]]
+                                 ["permissions"], {"contents": "read"})
+                publisher = release["jobs"][case["publish_job"]]
+                self.assertEqual(publisher["permissions"],
+                                 {case["publish_scope"]: "write",
+                                  **({"contents": "read"} if name == "docker" else {})})
+                self.assertIn("github.event_name == 'push'", publisher["if"])
+                self.assertIn("refs/tags/", publisher["if"])
+                self.assertIn(case["builder_job"], dependencies(publisher))
+                if name == "debian":
+                    self.assertIn("regression", dependencies(publisher))
+                    self.assertIn("github.event_name == 'push'",
+                                  release["jobs"]["regression"]["if"])
 
     def test_required_check_names_and_build_documentation(self):
         jobs = self.core["jobs"]

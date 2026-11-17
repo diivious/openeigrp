@@ -106,22 +106,25 @@ esac
         self.assertLess(native, package)
 
     def test_ci_artifact_workflows_are_called_only_after_gates(self):
-        # Cross-workflow PR jobs cannot use `needs`; the core workflow must
-        # call the release-capable builders as reusable workflows.
+        # PR builds must call read-only reusable builders after every gate;
+        # release publication stays in separately triggered workflows.
         import yaml
 
         root = ROOT / ".github/workflows"
         core = yaml.load((root / "core.yml").read_text(), Loader=yaml.BaseLoader)
         for name in ("docker", "debian"):
             with self.subTest(workflow=name):
-                path = root / (name + ".yml")
+                path = root / (name + "-ci.yml")
                 artifact = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
                 self.assertIn("workflow_call", artifact["on"])
                 self.assertNotIn("pull_request", artifact["on"])
                 self.assertEqual(core["jobs"][name]["needs"], ["ubuntu"])
                 self.assertEqual(core["jobs"][name]["uses"],
-                                 "./.github/workflows/" + name + ".yml")
-                self.assertEqual(artifact["on"]["push"]["tags"], ["rel-*"])
+                                 "./.github/workflows/" + name + "-ci.yml")
+                self.assertNotIn("push", artifact["on"])
+                self.assertEqual(artifact["permissions"], {"contents": "read"})
+                self.assertEqual(core["jobs"][name]["permissions"],
+                                 {"contents": "read"})
 
 
 if __name__ == "__main__":

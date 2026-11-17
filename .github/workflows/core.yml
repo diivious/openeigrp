@@ -316,13 +316,17 @@ jobs:
     name: Docker builds
     needs: [ubuntu]
     if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/docker.yml
+    uses: ./.github/workflows/docker-ci.yml
+    permissions:
+      contents: read
 
   debian:
     name: Debian packages
     needs: [ubuntu]
     if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/debian.yml
+    uses: ./.github/workflows/debian-ci.yml
+    permissions:
+      contents: read
 
   pipeline:
     name: ${{ github.event_name == 'pull_request' && 'PR merge gate' || 'Branch regression result' }}

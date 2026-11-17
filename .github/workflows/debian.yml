@@ -1,11 +1,10 @@
 # Copyright (C) 2026 Donnie V. Savage
 # Native-architecture Debian packages, built with the same container tooling
 # used on development hosts. No packages are published on PR/manual runs.
-# PR builds are called by core.yml only after style, CodeQL and UUT gates.
+# PR verification calls debian-ci.yml; release publishing stays here.
 name: OpenEIGRP Debian Packages
 
 on:
-  workflow_call:
   workflow_dispatch:
     inputs:
       version:
@@ -20,70 +19,12 @@ permissions:
 
 jobs:
   packages:
-    name: Debian 12 / ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Select package version
-        id: version
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GIT_REF: ${{ github.ref }}
-          REQUESTED_VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          if [[ "$EVENT_NAME" == push && "$GIT_REF" == refs/tags/* ]]; then
-            tag="${GIT_REF#refs/tags/}"
-            [[ "$tag" =~ ^rel-[0-9]+\.[0-9]+$ ]] || {
-              echo 'invalid Debian release tag' >&2; exit 1;
-            }
-            version="${tag#rel-}"
-          elif [[ -n "$REQUESTED_VERSION" ]]; then
-            version="$REQUESTED_VERSION"
-          else
-            version="$(./tools/version.sh --ci)"
-          fi
-          ./tools/build-version.sh --package "$version" >/dev/null || exit 1
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Verify package builder and wrapper invocation
-        run: |
-          python3 linux/test/test_package_builds.py
-          python3 -m unittest -q tools.test.test_package
-      - name: Build and test native architecture in Debian 12
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          ARCH: ${{ matrix.arch }}
-          EVENT_NAME: ${{ github.event_name }}
-          GIT_REF: ${{ github.ref }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$EVENT_NAME" == push && "$GIT_REF" == refs/tags/rel-* ]]; then
-            linux/packaging/build-packages.sh --version "$VERSION" --arch "$ARCH" --release
-          else
-            linux/packaging/build-packages.sh --version "$VERSION" --arch "$ARCH"
-          fi
-          package="dist/openeigrpd_${VERSION}_${ARCH}.deb"
-          test "$(dpkg-deb -f "$package" Architecture)" = "$ARCH"
-          dpkg-deb --info "$package"
-          dpkg-deb --contents "$package"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: deb-${{ matrix.arch }}
-          path: dist/*.deb
-          if-no-files-found: error
-          retention-days: 14
+    name: Build both Debian architectures
+    uses: ./.github/workflows/debian-ci.yml
+    with:
+      version: ${{ inputs.version }}
+    permissions:
+      contents: read
 
   regression:
     name: Release portable UUT gate

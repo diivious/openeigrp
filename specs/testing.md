@@ -40,6 +40,13 @@ additional assertions is still one scenario, not a new scenario count.
 
 ![Pull request CI fail-fast pipeline](images/ci-fail-fast.svg)
 
+PR Docker and Debian builds invoke the read-only `docker-ci.yml` and
+`debian-ci.yml` reusable workflows only after the Ubuntu gate succeeds.
+Tagged releases enter through `docker.yml` and `debian.yml`, reuse those
+same build jobs, and grant publishing permissions only to the release jobs.
+This keeps PR validation unable to publish images or release assets.
+
+
 The PR validation workflow runs sequential gates: changed-source style checks,
 CodeQL, the native Linux Fast Gate (including management tests), macOS smoke
 and UUT checks, then Ubuntu smoke and UUT checks. A failure prevents downstream
