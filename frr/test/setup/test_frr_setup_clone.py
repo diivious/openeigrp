@@ -9,7 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
 SETUP = ROOT / "frr" / "tools" / "frr-setup.sh"
-SHA = "f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1"
+SHA = "d63396451886705ad7beaf136ce457ed8f8cde36"
 
 
 def _script(path, contents):
@@ -35,9 +35,9 @@ def _run_setup(existing_frr=False, existing_orig=False, skip_clone=False):
         _script(bindir / "apt", "echo 'libyang2 2.1.128'\n")
         _script(bindir / "git",
                 'printf "%s\\n" "$*" >> "$SETUP_GIT_LOG"\n'
-                'if [ "$1" = clone ]; then\n'
+                'if [ "$1" = init ]; then\n'
                 '  for target do :; done\n'
-                '  mkdir -p "$target"\n'
+                '  mkdir -p "$target/.git"\n'
                 'elif [ "$1" = -C ] && [ "$3" = rev-parse ]; then\n'
                 '  if [ "$4" = HEAD ]; then\n'
                 f'    printf "%s\\n" "{SHA}"\n'
@@ -71,7 +71,7 @@ def _run_setup(existing_frr=False, existing_orig=False, skip_clone=False):
         if skip_clone:
             cmd.append("--skip-clone")
         result = subprocess.run(cmd, cwd=base, env=env, capture_output=True, text=True, **kwargs)
-        clones = [s for s in log.read_text().splitlines() if s.startswith("clone ")]
+        clones = [s for s in log.read_text().splitlines() if s.startswith("init -q ")]
         orig_unchanged = (
             not (devel / "frr-orig").exists()
             if not existing_orig
@@ -84,7 +84,7 @@ def test_missing_frr_clones_official_repository_once():
     result, clones, found_frr, orig_unchanged = _run_setup()
     assert result.returncode == 0, result.stderr
     assert len(clones) == 1
-    assert clones[0].startswith("clone --branch frr-10.7.1 --depth 1 --single-branch https://github.com/FRRouting/frr.git")
+    assert clones[0].startswith("init -q ")
     assert found_frr
     assert orig_unchanged
 

@@ -117,10 +117,11 @@ The Docker integration test checks both configurations before boot.
 ## Development
 
 **Before committing, run `make pre-commit`** from the repository root.
-`make all` performs the non-Docker build and regression gate, including all
-portable YAML UUTs and scale suites. `make pre-commit` additionally builds
-both Docker architectures and both Debian packages with lifecycle tests.
-Live FRR UUT and Netlab remain separate.
+`make` compiles host code and checks style; `make all` runs portable unit/YAML
+UUTs, quick scale checks and builds both FRR Docker architectures and Debian
+packages. `make pre-commit` additionally runs extended scale, Docker image
+integration/two-router adjacency UUTs and Debian package lifecycle tests.
+Direct FRR host build/UUT and remote Netlab remain separate.
 
 **Requirements:** Docker Engine/Desktop with Buildx, Git and `rsync`.
 All commands below build a local image only; none pushes to GHCR.
@@ -130,7 +131,7 @@ All commands below build a local image only; none pushes to GHCR.
 ```sh
 make docker                   # amd64 and arm64, including working edits
 make docker FRR=../frr        # Optional local FRR checkout
-make docker GITHUB=latest     # Highest numeric rel-X.Y.Z OpenEIGRP tag
+make docker GITHUB=latest     # Highest numeric rel-MAJOR.MINOR OpenEIGRP tag
 make docker GITHUB=1.2.3      # Exact OpenEIGRP rel-1.2.3 release
 ```
 
@@ -138,14 +139,14 @@ Local builds use the current working OpenEIGRP checkout, including
 uncommitted changes. The FRR checkout at `../frr` is used if present, or
 `FRR=/path/to/frr` may specify one explicitly; otherwise FRR is fetched
 at the exact commit recorded in `docker/docker.cfg`. Both images are tagged
-`openeigrp:${USER}-test-amd64` and `openeigrp:${USER}-test-arm64`.
-The unqualified `openeigrp:${USER}-test` tag aliases the native host
+`openeigrp:${USER}-amd64` and `openeigrp:${USER}-arm64`.
+The unqualified `openeigrp:${USER}` tag aliases the native host
 architecture, preserving existing deployment commands. `GITHUB` and `FRR`
 cannot be combined.
 
-GitHub builds use the selected OpenEIGRP `rel-X.Y.Z` commit, **including that
-revision's Dockerfile, patches, and `docker/docker.cfg`**. The config pins
-`FRR_REPO`, `FRR_TAG` and `FRR_SHA`; FRR is fetched and checked against the
+GitHub builds use the selected OpenEIGRP `rel-MAJOR.MINOR` commit, **including that
+revision's Dockerfile and `docker/docker.cfg`**. The config pins
+`FRR_REPO`, `FRR_REF` and `FRR_SHA`; FRR is fetched and checked against the
 specified immutable commit. Releases predating `docker.cfg` use the FRR
 pin recorded in **their own tagged `tools/docker.sh`** (legacy releases only, never the
 developer's current pin). The Alpine minor-version default also comes from the selected
@@ -175,23 +176,27 @@ The native script retains platform, image tag, job count, and source overrides:
 The optional `--frr-ref` applies only to a nonrelease GitHub development
 build. An exact release build never accepts a different FRR ref.
 
-Numeric local `--local X.Y.Z` is a special reproducibility check: it requires
-both clean working trees, the matching `rel-X.Y.Z` OpenEIGRP tag at HEAD,
-and FRR HEAD equal to the `FRR_SHA` pinned in the current `docker/docker.cfg`.
-Normal `make docker` intentionally uses a nonrelease `${USER}-test` tag and
-does not impose those restrictions. Both the Docker OCI version label and the
-native Debian package version are derived from the highest `rel-X.Y.Z` tag
-reachable from `origin/master` plus `-LABEL` for development builds. Thus
-`--local diivious-test --image openeigrp:diivious-test` yields image tag
-`diivious-test` while its embedded version is `0.5.0-diivious-test` when
-`rel-0.5.0` is the latest release on master. Once `rel-0.6.0` is merged to
-master, the embedded version becomes `0.6.0-diivious-test`. The local mode
-refreshes release metadata from Git and fails if it cannot do so; `--build latest` also uses the master-reachable release set. Tags on branches not yet
-merged into master cannot advance the shared baseline.
+Numeric local `--local MAJOR.MINOR` is a release reproducibility check: it
+requires clean working trees, the matching `rel-MAJOR.MINOR` tag at HEAD,
+and FRR HEAD equal to the pinned commit. Normal `make docker` uses a
+numbered, developer-qualified build, `MAJOR.MINOR.BUILD-LABEL.dev`.
+The local build number advances once per top-level build and resets with
+`make distclean`. For example, with `rel-0.5.0` as the historical baseline,
+the first build for `diivious` embeds `0.5.1-diivious.dev` in the binary,
+Docker OCI label, and Debian metadata. Subsequent builds use `.2`, `.3`, etc.
+`show eigrp tech-support` also reports vendor version `0.5` separately.
+Published releases use `rel-MAJOR.MINOR` and version `MAJOR.MINOR` without
+a build counter. Docker image tags cannot contain `~`; the numbered build
+identity is valid directly in Docker and Debian. Release metadata is fetched
+from the master-reachable tag set, including old `rel-X.Y.0` tags as a
+migration baseline. Local builds fail if origin/master cannot be checked.
 
-All modes use the same managed FRR patch/install/configure/build pipeline.
-Patch drift stops the build. Labels retain EIGRP/FRR commit identities;
-locally uncommitted changes are not represented by those SHAs.
+All modes use the same FRR schema-validation/install/configure/build pipeline.
+The current development pin is an immutable upstream FRR master revision with
+integrated named-mode YANG and vtysh support. No FRR-wide changes are applied.
+Incompatible upstream source stops the build before staging. Labels retain
+EIGRP/FRR commit identities; locally uncommitted changes are not represented
+by those SHAs.
 
 ### Alpine image caching
 
@@ -223,7 +228,7 @@ docker image inspect openeigrp:docker-test --format '{{json .Config.Labels}}'
 
 ### Best practices
 
-- Use one OpenEIGRP Git tag `rel-X.Y.Z` for each publication, regardless of
+- Use one OpenEIGRP Git tag `rel-MAJOR.MINOR` for each publication, regardless of
   whether the project is in beta, gamma, or general availability. `rel-0.1.0`
   produces `ghcr.io/diivious/openeigrp-frr:0.1.0`; the `rel-` prefix is **not**
   part of the Docker image tag.
@@ -524,10 +529,10 @@ git tag -a rel-0.1.0 -m 'OpenEIGRP Docker release 0.1.0'
 git push origin refs/tags/rel-0.1.0
 ```
 
-A `rel-X.Y.Z` tag push runs `.github/workflows/docker.yml` **from the tagged
+A `rel-MAJOR.MINOR` tag push runs `.github/workflows/docker.yml` **from the tagged
 commit**, building native `amd64` and `arm64` images. Both jobs run
 `./frr/tools/docker.sh --verify`; only if both succeed does the publish job push
-`X.Y.Z-amd64`, `X.Y.Z-arm64`, and the combined `X.Y.Z` manifest to
+`MAJOR.MINOR-amd64`, `MAJOR.MINOR-arm64`, and the combined `MAJOR.MINOR` manifest to
 `ghcr.io/diivious/openeigrp-frr`. Ordinary pushes to `master` or `docker` affecting the workflow's watched
 paths, pull requests, and manual workflow runs are build-and-test-only; they
 never publish. Manual dispatch is

@@ -24,7 +24,7 @@ help:
 	  '  auth-md5     Authenticated 100K-route redistribution'
 
 build:
-	$(MAKE) -C ../../.. portable-build
+	$(MAKE) -C ../../.. _portable
 	$(MAKE) -C ../uut eigrp-uut-node
 
 peers: build

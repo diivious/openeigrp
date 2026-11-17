@@ -14,9 +14,9 @@ Contribution rules are in `../../CONTRIBUTING.md`. The FRR file map is in
 ## Scripts
 
 ```text
-frr.sh          Primary FRR development driver: smoke, install, patch, configure, build, check, UUT, clean.
+frr.sh          Primary FRR development driver: smoke, install, configure, build, check, UUT, clean.
 frr-named-uut.sh  Live named-mode config/writeback test using sudo vtysh -d eigrpd.
-frr-install.sh  Assemble eigrp/code/ + frr/code/ into FRR, install FRR-native tests, and apply frr/patch/.
+frr-install.sh  Validate upstream FRR YANG/VTY, then stage eigrpd and FRR-native tests.
 frr-setup.sh    Debian development-machine setup helper.
 frr-uut.sh      Build the FRR UUT, then run EIGRP tests; can drive a remote Linux UUT.
 docker.sh       Build, test, verify and deploy the FRR Docker integration.
@@ -36,23 +36,12 @@ frr/tools/frr.sh --install --frr-root ~/devel/frr
 ```
 
 This assembles portable `eigrp/code/` source plus the FRR adapter files in
-`frr/code/` into FRR's single `eigrpd/` directory and stages `frr/test/eigrpd/`. Staging is
-always performed with `--no-patches`.
-
-Patch ownership is explicit. `frr/tools/frr.sh --patch` is the only primary-driver
-action that applies the managed FRR-wide patch series. Install, configure,
-build, check, all, and UUT actions only restage the EIGRP source/test payloads
-and never modify FRR-wide source. Patch application itself remains idempotent:
-an already-applied patch is detected with a reverse `git apply --check`, while
-an FRR source conflict stops the patch action for review. The patch
-series is for FRR `frr-10.7.1` only; the changes are included upstream on
-`master` (FRRouting/frr#23767).
-
-```sh
-frr/tools/frr.sh --install --frr-root ~/devel/frr
-# For frr-10.7.1 only, not FRR master:
-frr/tools/frr.sh --patch --frr-root ~/devel/frr
-```
+`frr/code/` into FRR's single `eigrpd/` directory and stages `frr/test/eigrpd/`.
+Before staging, the installer validates that the chosen upstream FRR source
+already provides the EIGRP named-mode YANG and VTY integration. It does not
+modify FRR-wide source files. Use the immutable `FRR_REF` in `docker/docker.cfg`
+for a reproducible source baseline. An older FRR checkout without native support
+is rejected rather than altered.
 
 Run the standalone compile smoke:
 

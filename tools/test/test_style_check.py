@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "style-check.py"
 SCENARIO = Path(__file__).resolve().parent / "uut/clang-format.yaml"
+SCOPE_SCENARIO = Path(__file__).resolve().parent / "uut/style-code-only.yaml"
 
 
 class StyleCheckTest(unittest.TestCase):
@@ -142,6 +143,38 @@ class StyleCheckTest(unittest.TestCase):
         self.assert_fails_with("trailing whitespace")
         self.file("tools/misc.py", "a = 1")
         self.assert_fails_with("missing newline at EOF")
+
+    def test_non_code_is_ignored_in_all_selection_modes(self):
+        scenario = json.loads(SCOPE_SCENARIO.read_text())
+        old = self.git("rev-parse", "HEAD").decode().strip()
+        for path in scenario["non_code"]:
+            if path == ".clang-format":
+                continue
+            self.file(path, "fixture output with spaces   \nlast line  ")
+        result = self.run_check("--all")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.git("add", "-A")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.git("commit", "-qm", "Non-code fixtures")
+        result = self.run_check("--base", old)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.run_check("--all").returncode, 0)
+
+    def test_source_code_still_checked(self):
+        scenario = json.loads(SCOPE_SCENARIO.read_text())
+        for path in scenario["whitespace_code"]:
+            with self.subTest(path=path):
+                p = self.file(path, "line with trailing spaces  \n")
+                self.assert_fails_with(f"{path}:1: trailing whitespace", "--all")
+                p.unlink()
+        for path in scenario["formatted_code"]:
+            with self.subTest(path=path):
+                p = self.file(path, "BADFMT\n")
+                self.assert_fails_with(f"{path}:1: clang-format mismatch", "--all")
+                p.unlink()
 
     def test_frr_rule_scoped_to_adapter(self):
         self.file("eigrp/code/check.c", "snprintf(buf, n, \"x\");\n")

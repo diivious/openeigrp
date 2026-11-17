@@ -13,8 +13,8 @@ invocation_dir="$(pwd -P)"
 devel_root="$(cd "$invocation_dir/.." && pwd -P)"
 frr_root=""
 frr_url=https://github.com/FRRouting/frr.git
-frr_tag=frr-10.7.1
-frr_sha=f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1
+frr_ref=d63396451886705ad7beaf136ce457ed8f8cde36
+frr_sha=d63396451886705ad7beaf136ce457ed8f8cde36
 skip_clone=0
 skip_build=0
 
@@ -30,9 +30,8 @@ options:
   --help               Show this help.
 
 This script is intentionally Debian-focused. Run it from an existing EIGRP
-checkout. It installs FRR build packages, clones the official FRR 10.7.1
-release if needed, stages this EIGRP tree into FRR, and creates config files.
-An existing checkout must already be at the pinned release commit.
+checkout. It installs FRR build packages, fetches an immutable upstream FRR master commit if needed, stages this EIGRP tree into FRR, and creates config files.
+An existing checkout must already be at the pinned upstream commit.
 USAGE
 }
 
@@ -102,7 +101,7 @@ sudo apt-get install -y \
 	libreadline-dev texinfo libjson-c-dev pkg-config bison flex \
 	libc-ares-dev python3-dev python3-pytest python3-sphinx \
 	libsnmp-dev libcap-dev libelf-dev libunwind-dev \
-	libprotobuf-c-dev protobuf-c-compiler rsync patch
+	libprotobuf-c-dev protobuf-c-compiler rsync
 
 # Debian 12 often needs newer libyang2 than the base repo provides for FRR.
 echo "Checking libyang2"
@@ -140,8 +139,11 @@ sudo usermod -a -G frr "$USER"
 sudo usermod -a -G frrvty "$USER"
 
 if [[ "$skip_clone" -eq 0 && ! -e "$frr_root" ]]; then
-	echo "Cloning official FRR release $frr_tag"
-	git clone --branch "$frr_tag" --depth 1 --single-branch "$frr_url" "$frr_root"
+	echo "Fetching upstream FRR revision $frr_ref"
+	git init -q "$frr_root"
+	git -C "$frr_root" remote add origin "$frr_url"
+	git -C "$frr_root" fetch -q --no-tags --depth 1 origin "$frr_ref"
+	git -C "$frr_root" checkout -q --detach FETCH_HEAD
 fi
 
 [[ -d "$frr_root" ]] || fail "FRR checkout not found: $frr_root"
@@ -149,7 +151,7 @@ git -C "$frr_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
 	fail "FRR path is not a Git checkout: $frr_root"
 actual_sha="$(git -C "$frr_root" rev-parse HEAD)"
 [[ "$actual_sha" == "$frr_sha" ]] || \
-	fail "FRR checkout is at $actual_sha, expected $frr_tag ($frr_sha); checkout is unchanged"
+	fail "FRR checkout is at $actual_sha, expected upstream FRR revision $frr_ref; checkout is unchanged"
 
 "$script_dir/frr-install.sh" --frr-root "$frr_root"
 

@@ -13,11 +13,11 @@ To explore the code, no routing stack checkout, root privileges, or network lab 
 ```sh
 git clone https://github.com/diivious/openeigrp.git
 cd openeigrp
-make portable-build          # build portable core and shared Unix support
+make                         # compile and run style checks
 make uut SUITE=ipv4-basic-core  # run a small portable EIGRP scenario suite
 ```
 
-On Linux, `make linux` also builds the native `openeigrpd` and `oectl` tools; starting a real routing daemon requires additional permissions and configuration. See the [quickstart](specs/quickstart.md) for prerequisites and your first contribution. The default `make` runs the full developer gate, while `make uut` runs portable unit tests and YAML scenarios.
+On Linux, `make linux` also builds the native `openeigrpd` and `eigrp` tools; starting a real routing daemon requires additional permissions and configuration. See the [quickstart](specs/quickstart.md) for prerequisites and your first contribution. The default `make` compiles host-compatible code and checks style; `make all` adds unit/UUT coverage and both-architecture Docker and Debian builds.
 
 ## Architecture and code overview
 
@@ -61,15 +61,15 @@ Portable APIs use EIGRP-owned types and structured results. Host-specific object
 <details open>
 <summary><strong>Using Docker Images</strong></summary>
 
-Pull a **published** multi-platform release from GHCR (example version `0.2.0`; availability depends on publication). Git tag `rel-0.2.0` is the publishing trigger; the Docker image tag is `0.2.0`.
+Pull a **published** multi-platform release from GHCR (example version `0.2`; availability depends on publication). Git tag `rel-0.2` is the publishing trigger; the Docker image tag is `0.2`.
 
 ```sh
-docker pull ghcr.io/diivious/openeigrp-frr:0.2.0
+docker pull ghcr.io/diivious/openeigrp-frr:0.2
 docker volume create openeigrp-vol
 docker run -d --name openeigrp \
   --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_ADMIN \
   -v openeigrp-vol:/etc/frr \
-  ghcr.io/diivious/openeigrp-frr:0.2.0
+  ghcr.io/diivious/openeigrp-frr:0.2
 
 docker exec -it openeigrp vtysh
 ```
@@ -81,24 +81,25 @@ The Docker package uses Alpine Linux and FRR with OpenEIGRP. For local/GitHub bu
 <details>
 <summary><strong>Build and Test local</strong></summary>
 
-### Portable/Unix build
+### Compile and check
 
 From the repository root:
 
 ```sh
-make portable-build
+make
 ```
 
-The lightweight portable build compiles the portable EIGRP core and Unix host support without requiring an FRR checkout, BIRD checkout, VM, root privileges, or host VLAN configuration.
+The default target compiles the portable EIGRP core and Unix support (and the native integration on Linux) and runs full-tree style validation. It needs no Docker, FRR checkout, VM, or root privileges.
 
 ### Build, test and pre-merge qualification
 
 From the repository root:
 
 ```sh
-make portable-build         # Build portable EIGRP and shared Unix support
-make check                  # Changed-file style check + checker unit tests
-make check SOURCE=all       # Full-tree style check + checker unit tests
+make help                  # List public targets, descriptions and selectors
+make                       # Host compilation and full-tree style checks
+make all                   # Fast tests, 107 YAML UUTs, quick scale, both image/package builds
+make pre-commit            # Full scale, Docker integration and dpkg lifecycle UUTs
 
 make uut                    # All portable pytest and YAML UUT scenarios
 make uut SUITE=rtp-core     # Named scenario group
@@ -107,16 +108,16 @@ make uut SCENARIO=prefix-limit-lifecycle/peer-timers-ipv6.yaml
 make scale                  # Quick pacing/backpressure qualification
 make scale SUITE=100k       # Heavy scale qualification when needed
 
-make all                   # Full developer gate (including all scale suites)
-make pre-commit            # Also qualify FRR Docker and Debian packages
 ```
 
-**Run `make all` before opening a pull request for merge.** It builds the
-platform, checks the complete source tree, executes portable UUT, runs the
-quick and full scale suites, and runs native Linux tests on Linux hosts. It
-stops at the first failure. Plain `make` invokes this same developer gate.
-`make pre-commit` additionally builds both FRR Docker images and both Debian
-packages and runs package-lifecycle tests.
+**Run `make pre-commit` before opening a pull request for merge.** `make` compiles
+host-compatible sources and checks style without Docker. `make all` adds fast
+unit tests, all portable YAML UUT scenarios, quick scale regressions and builds
+FRR Docker images and Debian packages for amd64 and arm64. `make pre-commit`
+adds full scale/stress suites, Docker image/adjacency integration UUTs and dpkg
+package-lifecycle UUTs. Docker is required for the last two tiers; an
+unavailable engine fails rather than silently skipping a stage. Direct FRR
+host builds and remote Netlab runs remain separate.
 
 See the root `Makefile` for targets and selectors. GitHub Actions runs
 build, style and portable UUT gates on Linux and macOS; the local `make all`
@@ -128,7 +129,7 @@ For Docker development:
 make docker                 # Local OpenEIGRP and FRR checkouts
 make docker FRR=../frr      # Choose a different FRR checkout
 make docker GITHUB=latest   # Latest OpenEIGRP release tag
-make docker GITHUB=1.2.3   # Specific rel-1.2.3 plus its FRR pin
+make docker GITHUB=1.2     # Specific rel-1.2 plus its FRR pin
 ```
 
 See [Docker development](docker/README.md) for source selection and advanced
@@ -331,8 +332,8 @@ This is the project-wide Cisco EIGRP / OpenEIGRP feature assessment, updated for
 | Debug packet / neighbor / DUAL | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | minimal logs |
 | Event logging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | DUAL state transition logging | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
-| Clear neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `oectl` command on native Linux |
-| Clear topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `oectl` command on native Linux |
+| Clear neighbors | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `eigrp` command on native Linux |
+| Clear topology | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> | Portable capability; not supported as an `eigrp` command on native Linux |
 | Clear event logs | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #16803c; font-weight: 700;">Yes</span> |  |
 | SNMP EIGRP MIB | <span style="color: #16803c; font-weight: 700;">Yes</span> | <span style="color: #1769c2; font-weight: 700;">Partial</span> | Conditional on host SNMP |
 
@@ -368,7 +369,6 @@ eigrp/
     test/          Portable protocol and UUT tests
   frr/
     code/          FRR adapters and integration
-    patch/         Managed FRR-wide patches
     specs/         FRR-specific integration specifications
     test/          FRR-native integration/UUT material
   bird/
@@ -388,7 +388,7 @@ eigrp/
   netlabs/         Cisco interoperability and packet evidence
   specs/           Repository-wide developer and integration contracts
   docker/          Alpine FRR/OpenEIGRP image, container startup, and deployment guide
-  tools/           Build, staging, patch, UUT, and packaging helpers
+  tools/           Build, staging, UUT, and packaging helpers
   CONTRIBUTING.md Contribution, style, AI, and test rules
 ```
 

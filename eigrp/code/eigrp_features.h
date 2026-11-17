@@ -15,10 +15,7 @@
 
 #include <stdbool.h>
 #include "eigrp.h"
-
-#ifndef EIGRP_RELEASE
-#define EIGRP_RELEASE "development"
-#endif
+#include "eigrp_build_version.h"
 
 /* Features not implemented by the current common image. */
 #ifndef EIGRP_ENABLE_BFD

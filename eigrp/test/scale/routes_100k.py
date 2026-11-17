@@ -629,7 +629,7 @@ def main():
                         help="1=internal, 2=external, 3=line, 4=kite, 5=2048 peers")
     opts = parser.parse_args()
     if not NODE.is_file():
-        raise SystemExit(f"Missing {NODE}; run `make portable-build && make -C eigrp/test/uut eigrp-uut-node`")
+        raise SystemExit(f"Missing {NODE}; run `make && make -C eigrp/test/uut eigrp-uut-node`")
     print(f"START scale test {opts.test}: watchdog={WATCHDOG}s", flush=True)
     scenario(opts.test)
 

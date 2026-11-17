@@ -396,19 +396,18 @@ under-branding the project and incorrectly renaming the protocol.
 
 ## 19. Pre-commit style validation
 
-Run `make check` before committing. This runs the style checker over the
-Git index, working tree and untracked files, followed by the checker's own
-executable regression tests. It never changes source, the index, or history.
+Run `make` for host compilation and full-tree style validation. For a
+changed-file-only style check, run `tools/python tools/style-check.py`
+without `--all`; these checks never change the source, index, or history.
 
-Run `make check SOURCE=all` for a full-tree audit. **Run `make pre-commit` before
-committing or opening a pull request**: `make all` (build, full-tree style
-checks, portable UUTs, quick and extended scale) followed by both Docker
-architectures, both Debian packages, and package lifecycle UUTs. A failing
-stage must not be reported as success.
+**Run `make pre-commit` before committing or opening a pull request**: the
+full gate includes the builds and portable tests in `make all`, followed by
+extended scale, Docker integration/adjacency UUTs, and Debian package
+lifecycle UUTs. A failing stage must not be reported as success.
 
-CI uses the same changed-file checker with `STYLE_CHECK_BASE` selecting the
-committed comparison revision: `make check STYLE_CHECK_BASE=<git-revision>`.
-This handles multi-commit pushes and proposed merges.
+CI checks the committed comparison revision with
+`tools/python tools/style-check.py --base <git-revision>` so multi-commit
+pushes and proposed merges are checked against the correct base.
 
 Enforced checks include trailing whitespace, missing final newlines, formatting
 against `.clang-format` for changed C/C++ lines, and unsafe C calls such as

@@ -3,6 +3,7 @@
 # Copyright (C) 2026 Donnie V. Savage
 """Executable .deb tests. Optional root-gated dpkg lifecycle test is intrusive."""
 
+import json
 import os
 from pathlib import Path
 import pwd
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "linux/packaging/build-deb.sh"
@@ -29,6 +31,10 @@ static void stop(int sig) { (void)sig; running = 0; }
 int main(int argc, char **argv)
 {
     FILE *config;
+    if (argc == 2 && strcmp(argv[1], "-V") == 0) {
+        printf("openeigrpd %s\n", FIXTURE_VERSION);
+        return 0;
+    }
     if (argc != 3 || strcmp(argv[1], "-f") != 0)
         return 2;
     config = fopen(argv[2], "r");
@@ -62,16 +68,22 @@ class PackagingTests(unittest.TestCase):
         cls.work = Path(cls.temp.name)
         source = cls.work / "fixture.c"
         source.write_text(FIXTURE)
-        cls.daemon = cls.work / "fixture-openeigrpd"
-        run("cc", "-O2", "-Wall", "-Wextra", "-Werror", source,
-            "-o", cls.daemon)
+        cls.source = source
+        cls.daemons = {}
+        for version in ("0.1", "0.2"):
+            daemon = cls.work / ("fixture-openeigrpd-" + version)
+            run("cc", "-O2", "-Wall", "-Wextra", "-Werror",
+                '-DFIXTURE_VERSION="' + version + '"', source,
+                "-o", daemon)
+            cls.daemons[version] = daemon
+        cls.daemon = cls.daemons["0.1"]
         cls.arch = run("dpkg-architecture", "-qDEB_HOST_ARCH").stdout.strip()
         assert cls.arch in ("amd64", "arm64"), cls.arch
         cls.other_arch = "arm64" if cls.arch == "amd64" else "amd64"
         cls.out = cls.work / "dist"
         cls.out.mkdir()
-        cls.first = cls.build("0.0.1")
-        cls.second = cls.build("0.0.2")
+        cls.first = cls.build("0.1")
+        cls.second = cls.build("0.2")
         cls.dest = cls.work / "extract"
         cls.ctrl = cls.work / "control"
         cls.dest.mkdir()
@@ -80,31 +92,77 @@ class PackagingTests(unittest.TestCase):
         run("dpkg-deb", "-e", cls.first, cls.ctrl)
 
     @classmethod
+    def fixture_for(cls, version):
+        daemon = cls.daemons.get(version)
+        if daemon is None:
+            daemon = cls.work / ("fixture-openeigrpd-" + version)
+            run("cc", "-O2", "-Wall", "-Wextra", "-Werror",
+                '-DFIXTURE_VERSION="' + version + '"', cls.source,
+                "-o", daemon)
+            cls.daemons[version] = daemon
+        return daemon
+
+    @classmethod
     def tearDownClass(cls):
         cls.temp.cleanup()
 
     @classmethod
     def build(cls, version):
-        result = run(BUILDER, "--version", version, "--daemon", cls.daemon,
+        result = run(BUILDER, "--version", version, "--daemon", cls.fixture_for(version),
                      "--output", cls.out)
         archive = Path(result.stdout.strip().splitlines()[-1])
         assert archive.is_file(), result.stdout
         return archive
 
+    def test_version_identity_uut(self):
+        # Exercise the real .deb builder and packaged CLI for version changes.
+        # JSON is a YAML 1.2 subset. Keep the matrix readable by the stdlib:
+        # minimal Debian package builders only install python3, not PyYAML.
+        scenario = json.loads((ROOT / "linux/test/uut/package-version.yaml").read_text())
+        self.assertEqual(scenario["schema"], "linux-package-version-uut/v1")
+        for case in scenario["cases"]:
+            with self.subTest(case=case["name"]):
+                version = case["package_version"]
+                daemon = self.fixture_for(case["daemon_version"])
+                result = run(BUILDER, "--version", version, "--daemon", daemon,
+                             "--output", self.out, check=False)
+                package = self.out / f"openeigrpd_{version}_{self.arch}.deb"
+                if case["result"] == "daemon-rejected":
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("daemon version mismatch", result.stderr)
+                    self.assertFalse(package.exists(),
+                                     "rejected version must not publish a .deb")
+                    continue
+                self.assertEqual(case["result"], "build")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(package.is_file())
+                run(VERIFIER, package, version, self.arch)
+                dest = self.work / ("uut-" + case["name"])
+                dest.mkdir()
+                run("dpkg-deb", "-x", package, dest)
+                client = dest / "usr/bin/eigrp"
+                identity = json.loads(run(client, "--json", "version").stdout)
+                self.assertEqual(identity["kind"], "integration")
+                self.assertEqual(identity["build"], case["expected_build"])
+                human = run(client, "version").stdout
+                self.assertIn("Host Version:", human)
+                self.assertIn("  Integration build    : " + case["expected_build"],
+                              human)
+
     def test_production_build_fails_without_daemon(self):
         # No fallback to a fake daemon, a library, or a bundled UUT broker.
-        result = run(BUILDER, "--version", "0.0.3", "--daemon",
+        result = run(BUILDER, "--version", "0.3", "--daemon",
                      self.work / "missing", "--output", self.out,
                      check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("real daemon executable missing", result.stderr)
-        self.assertEqual(list(self.out.glob("openeigrpd_0.0.3_*.deb")), [])
+        self.assertEqual(list(self.out.glob("openeigrpd_0.3_*.deb")), [])
 
     def test_reject_non_elf_daemon(self):
         fake = self.work / "script"
         fake.write_text("#!/bin/sh\nexit 0\n")
         fake.chmod(0o755)
-        result = run(BUILDER, "--version", "0.0.3", "--daemon", fake,
+        result = run(BUILDER, "--version", "0.3", "--daemon", fake,
                      "--output", self.out, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("non-native or non-ELF", result.stderr)
@@ -120,7 +178,7 @@ class PackagingTests(unittest.TestCase):
         linked = self.work / "linked-daemon"
         run("cc", linked_source, "-L", self.work, "-Wl,-rpath,$ORIGIN",
             "-lfrr", "-o", linked)
-        result = run(BUILDER, "--version", "0.0.3", "--daemon", linked,
+        result = run(BUILDER, "--version", "0.3", "--daemon", linked,
                      "--output", self.out, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("external routing framework", result.stderr)
@@ -137,17 +195,17 @@ class PackagingTests(unittest.TestCase):
         paths = sorted("/" + str(path.relative_to(dest)) for path in
                        dest.rglob("*") if path.is_file())
         self.assertEqual(paths, [
-            "/etc/openeigrpd.conf", "/usr/bin/oectl",
+            "/etc/openeigrpd.conf", "/usr/bin/eigrp",
             "/usr/bin/openeigrpd-config", "/usr/lib/systemd/system/openeigrpd.service",
             "/usr/lib/sysusers.d/openeigrpd.conf", "/usr/sbin/openeigrpd",
             "/usr/share/man/man5/openeigrpd.conf.5",
-            "/usr/share/man/man8/oectl.8", "/usr/share/man/man8/openeigrpd.8",
+            "/usr/share/man/man8/eigrp.8", "/usr/share/man/man8/openeigrpd.8",
         ])
         self.assertEqual((ctrl / "conffiles").read_text().strip(),
                          "/etc/openeigrpd.conf")
         self.assertEqual(stat.S_IMODE((dest / "etc/openeigrpd.conf").stat().st_mode),
                          0o600)
-        for name in ("usr/sbin/openeigrpd", "usr/bin/oectl",
+        for name in ("usr/sbin/openeigrpd", "usr/bin/eigrp",
                      "usr/bin/openeigrpd-config"):
             path = dest / name
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o755)
@@ -157,9 +215,9 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("frr", "\n".join(paths))
         info = run("dpkg-deb", "-f", self.first).stdout
         self.assertIn("Package: openeigrpd", info)
-        self.assertIn("Version: 0.0.1", info)
+        self.assertIn("Version: 0.1", info)
         self.assertIn(f"Architecture: {self.arch}", info)
-        self.assertEqual(self.first.name, f"openeigrpd_0.0.1_{self.arch}.deb")
+        self.assertEqual(self.first.name, f"openeigrpd_0.1_{self.arch}.deb")
         self.assertIn("Maintainer: Donnie V. Savage <diivious@hotmail.com>", info)
         self.assertIn("systemd", info)
         self.assertIn("libc6", info)
@@ -173,10 +231,10 @@ class PackagingTests(unittest.TestCase):
         self.assertTrue(os.access(ctrl / "postinst", os.X_OK))
 
     def test_completed_package_verification_rejects_unsafe_artifacts(self):
-        run(VERIFIER, self.first, "0.0.1", self.arch)
+        run(VERIFIER, self.first, "0.1", self.arch)
         for version, arch, error in (
-                ("0.0.2", self.arch, "wrong package version"),
-                ("0.0.1", self.other_arch, "wrong package architecture")):
+                ("0.2", self.arch, "wrong package version"),
+                ("0.1", self.other_arch, "wrong package architecture")):
             with self.subTest(version=version, arch=arch):
                 result = run(VERIFIER, self.first, version, arch, check=False)
                 self.assertNotEqual(result.returncode, 0)
@@ -185,12 +243,12 @@ class PackagingTests(unittest.TestCase):
             root = Path(root)
             bad = root / "truncated.deb"
             bad.write_bytes(b"not a Debian package")
-            result = run(VERIFIER, bad, "0.0.1", self.arch, check=False)
+            result = run(VERIFIER, bad, "0.1", self.arch, check=False)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("invalid package metadata", result.stderr)
 
             defects = {
-                "missing-cli": "missing or unsafe package entry: usr/bin/oectl",
+                "missing-cli": "missing or unsafe package entry: usr/bin/eigrp",
                 "exposed-config": "missing or unsafe package entry: etc/openeigrpd.conf",
                 "setuid-daemon": "missing or unsafe package entry: usr/sbin/openeigrpd",
                 "missing-conffile": "configuration is not a dpkg conffile",
@@ -206,7 +264,7 @@ class PackagingTests(unittest.TestCase):
                     shutil.copytree(self.ctrl, package_dir / "DEBIAN")
                     control = package_dir / "DEBIAN"
                     if defect == "missing-cli":
-                        (package_dir / "usr/bin/oectl").unlink()
+                        (package_dir / "usr/bin/eigrp").unlink()
                     elif defect == "exposed-config":
                         (package_dir / "etc/openeigrpd.conf").chmod(0o644)
                     elif defect == "setuid-daemon":
@@ -222,7 +280,7 @@ class PackagingTests(unittest.TestCase):
                     bad = root / (defect + ".deb")
                     run("dpkg-deb", "--build", "--root-owner-group",
                         package_dir, bad)
-                    result = run(VERIFIER, bad, "0.0.1", self.arch,
+                    result = run(VERIFIER, bad, "0.1", self.arch,
                                  check=False)
                     self.assertNotEqual(result.returncode, 0,
                                         f"{defect} accepted: {result.stdout}")
@@ -231,11 +289,11 @@ class PackagingTests(unittest.TestCase):
     def test_restrictive_umask_creates_traversable_package(self):
         # A 077 administrator umask previously made DEBIAN mode 0700,
         # causing dpkg-deb to refuse to build the package altogether.
-        command = (f'umask 077; exec "{BUILDER}" --version 0.0.9 '
-                   f'--daemon "{self.daemon}" --output "{self.out}"')
+        command = (f'umask 077; exec "{BUILDER}" --version 0.9 '
+                   f'--daemon "{self.fixture_for("0.9")}" --output "{self.out}"')
         result = run("sh", "-c", command)
         package = Path(result.stdout.strip().splitlines()[-1])
-        run(VERIFIER, package, "0.0.9", self.arch)
+        run(VERIFIER, package, "0.9", self.arch)
         contents = run("dpkg-deb", "--contents", package).stdout
         self.assertIn("drwxr-xr-x root/root", contents)
 
@@ -245,10 +303,10 @@ class PackagingTests(unittest.TestCase):
         output = self.work / "setgid-output"
         output.mkdir()
         output.chmod(0o2755)
-        result = run(BUILDER, "--version", "0.0.10", "--daemon",
-                     self.daemon, "--output", output)
+        result = run(BUILDER, "--version", "0.10", "--daemon",
+                     self.fixture_for("0.10"), "--output", output)
         archive = Path(result.stdout.strip().splitlines()[-1])
-        run(VERIFIER, archive, "0.0.10", self.arch)
+        run(VERIFIER, archive, "0.10", self.arch)
         entries = run("dpkg-deb", "--contents", archive).stdout
         self.assertNotIn("drwxr-s", entries)
 
@@ -298,7 +356,7 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o600)
             self.assertEqual(config.stat().st_uid, 0)
             self.assertTrue((Path("/usr/sbin/openeigrpd")).exists())
-            self.assertEqual(run("oectl", "version").returncode, 0)
+            self.assertEqual(run("eigrp", "version").returncode, 0)
             run("openeigrpd-config", "-t", "-f", config)
             self.assertEqual(pwd.getpwnam("openeigrp").pw_name, "openeigrp")
             self.assertEqual(grp.getgrnam("openeigrpctl").gr_name, "openeigrpctl")
@@ -315,7 +373,7 @@ class PackagingTests(unittest.TestCase):
             run("dpkg", "-i", self.second)
             self.assertIn("site-specific preserved config", config.read_text())
             self.assertTrue(wants.is_symlink(), "upgrade must retain enablement")
-            self.assertIn("0.0.2", run("dpkg-query", "-W", "-f=${Version}",
+            self.assertIn("0.2", run("dpkg-query", "-W", "-f=${Version}",
                                        "openeigrpd").stdout)
             run("dpkg", "-r", "openeigrpd")
             self.assertTrue(config.exists())

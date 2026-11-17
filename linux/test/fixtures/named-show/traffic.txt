@@ -1,0 +1,9 @@
+
+EIGRP-IPv4 VR(eigrprulez) Traffic Statistics for AS(4453)
+  Hellos sent/received: 900/0
+  Updates sent/received: 0/12
+  Queries sent/received: 0/0
+  Replies sent/received: 0/0
+  Acks sent/received: 0/0
+  SIA-Queries sent/received: 0/0
+  SIA-Replies sent/received: 0/0

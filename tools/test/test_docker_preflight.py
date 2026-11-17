@@ -54,7 +54,7 @@ class DockerBuildPreflightTest(unittest.TestCase):
     def test_package_build_stops_before_creating_dist(self):
         output = self.root / 'dist'
         result = self.invoke('sh', 'linux/packaging/build-packages.sh',
-                             '--version', '1.2.3', '--output', str(output))
+                             '--version', '1.2.3-testdev.dev', '--output', str(output))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Docker daemon unavailable', result.stderr)
         self.assertEqual(self.docker_log.read_text().splitlines(), ['info'])

@@ -11,8 +11,8 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "frr/tools/docker.sh"
-TAG = "frr-10.7.1"
-SHA = "f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1"
+REF = "d63396451886705ad7beaf136ce457ed8f8cde36"
+SHA = REF
 
 
 class DockerReleaseSelectionTest(unittest.TestCase):
@@ -26,26 +26,22 @@ class DockerReleaseSelectionTest(unittest.TestCase):
         self.assertIn("load_frr_config()", self.source)
         (self.root / "tools").mkdir()
         helper = self.root / "tools/version.sh"
-        helper.write_text("#!/bin/sh\nprintf '1.10.0\\n'\n")
+        helper.write_text("#!/bin/sh\nprintf '1.10\\n'\n")
         helper.chmod(0o755)
         self.config = self.root / "docker.cfg"
         self.config.write_text(
             "FRR_REPO=https://github.com/FRRouting/frr.git\n"
-            f"FRR_TAG={TAG}\nFRR_SHA={SHA}\n"
+            f"FRR_REF={REF}\nFRR_SHA={SHA}\n"
         )
         git = self.bin / "git"
         git.write_text(
             "#!/bin/sh\n"
             "case \"$*\" in\n"
             "  'ls-remote --tags https://github.com/diivious/openeigrp.git refs/tags/rel-*')\n"
-            "    printf '%s\\trefs/tags/rel-1.9.0\\n' " + "a" * 40 + "\n"
-            "    printf '%s\\trefs/tags/rel-1.10.0\\n' " + "b" * 40 + "\n"
-            "    printf '%s\\trefs/tags/rel-1.10.0^{}\\n' " + "c" * 40 + "\n"
+            "    printf '%s\\trefs/tags/rel-1.9\\n' " + "a" * 40 + "\n"
+            "    printf '%s\\trefs/tags/rel-1.10\\n' " + "b" * 40 + "\n"
+            "    printf '%s\\trefs/tags/rel-1.10^{}\\n' " + "c" * 40 + "\n"
             "    printf '%s\\trefs/tags/rel-testing\\n' " + "d" * 40 + "\n"
-            "    ;;\n"
-            f"  'ls-remote https://github.com/FRRouting/frr.git refs/tags/{TAG} refs/tags/{TAG}^{{}}')\n"
-            f"    printf '%s\\trefs/tags/{TAG}\\n%s\\trefs/tags/{TAG}^{{}}\\n' "
-            f"5481ece12b4fbd873f70225ae50d32100bad1b91 {SHA}\n"
             "    ;;\n"
             "  *) exit 9 ;;\n"
             "esac\n"
@@ -58,31 +54,38 @@ class DockerReleaseSelectionTest(unittest.TestCase):
                                f"root='{self.root}'\n" + command],
                               cwd=self.root, env=env, text=True, capture_output=True)
 
-    def test_configuration_selects_official_frr_tag_and_sha(self):
+    def test_configuration_selects_immutable_upstream_frr_revision(self):
         result = self.execute(f'load_frr_config "{self.config}"; '
                               'test "$frr_url" = https://github.com/FRRouting/frr.git; '
-                              'test "$frr_release_tag" = frr-10.7.1; '
-                              'test "$pinned_frr_sha" = "$(resolve_sha "$frr_url" "$frr_release_tag")"')
+                              f'test "$frr_pin_ref" = {REF}; '
+                              'test "$pinned_frr_sha" = "$(resolve_sha "$frr_url" "$frr_pin_ref")"')
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_latest_selects_numeric_version_not_lexical_sort(self):
         result = self.execute('latest_version')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), '1.10.0')
+        self.assertEqual(result.stdout.strip(), '1.10')
 
     def test_configuration_requires_commit_sha(self):
         self.config.write_text('FRR_REPO=https://github.com/FRRouting/frr.git\n'
-                               f'FRR_TAG={TAG}\n')
+                               f'FRR_REF={REF}\n')
         result = self.execute(f'load_frr_config "{self.config}"')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('invalid FRR_SHA', result.stderr)
 
     def test_configuration_rejects_malformed_repo(self):
         self.config.write_text('FRR_REPO=not-a-repository\n'
-                               f'FRR_TAG={TAG}\nFRR_SHA={SHA}\n')
+                               f'FRR_REF={REF}\nFRR_SHA={SHA}\n')
         result = self.execute(f'load_frr_config "{self.config}"')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('invalid FRR_REPO', result.stderr)
+
+    def test_ref_sha_mismatch_is_rejected_before_checkout(self):
+        self.config.write_text('FRR_REPO=https://github.com/FRRouting/frr.git\n'
+                               f'FRR_REF={REF}\nFRR_SHA={"0" * 40}\n')
+        result = self.execute(f'load_frr_config "{self.config}"')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('FRR_REF must match FRR_SHA', result.stderr)
 
     def test_release_tag_and_development_ref_distinct(self):
         result = self.execute('ref_valid frr-10.7.1 && '

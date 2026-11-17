@@ -1,0 +1,38 @@
+schema: eigrp-uut-test/v1
+name: k6-ecmp-withdrawal-retirement
+# ECMP successor loss must retire the dead neighbor's DRDB even if FD
+# and the advertised metric do not change. Re-test after recovery.
+topology: ipv4-dense-mesh-k6.yaml
+steps:
+- start: all
+- validate-convergence:
+    timeout: 20
+    expect:
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: topology, active: false, successors: 2, fd: 26214400}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, count: 5}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, next_hop: 10.12.0.2, successor: true}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, next_hop: 10.13.0.3, successor: true}
+- validate-neighbor: {uut: r1, neighbor: 10.12.0.2, interface: eth12, timeout: 12}
+- links-down:
+  - {uut: r1, interface: eth12}
+  - {uut: r2, interface: eth21}
+- validate-convergence:
+    timeout: 15
+    expect:
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: topology, active: false, successors: 1, fd: 26214400}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, count: 4}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, next_hop: 10.12.0.2, present: false}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, next_hop: 10.13.0.3, successor: true}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: rib, next_hop: 10.13.0.3, metric: 26214400, distance: 90}
+    - route: {uut: r1, prefix: 10.130.0.0/24, table: path, next_hop: 10.12.0.2, present: false}
+- links-up:
+  - {uut: r1, interface: eth12}
+  - {uut: r2, interface: eth21}
+- validate-neighbor: {uut: r1, neighbor: 10.12.0.2, interface: eth12, timeout: 12}
+- validate-convergence:
+    timeout: 15
+    expect:
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: topology, active: false, successors: 2, fd: 26214400}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, count: 5}
+    - route: {uut: r1, prefix: 10.103.0.0/24, table: path, next_hop: 10.12.0.2, successor: true}
+- stop: all

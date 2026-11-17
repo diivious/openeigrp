@@ -1,0 +1,8 @@
+{
+  "schema": "linux-management-build-identity-uut/v1",
+  "cases": [
+    {"name": "matching-after-archive", "identity": "built", "status": 0},
+    {"name": "wrong-build-rejected", "identity": "invalid", "status": 2},
+    {"name": "matching-after-rejection", "identity": "built", "status": 0}
+  ]
+}

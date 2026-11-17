@@ -877,6 +877,14 @@ int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 				eigrp, msg->adv_router, prefix);
 	}
 
+	/* An ECMP successor can disappear without changing the advertised
+	 * metric. No UPDATE is queued in that case, so retire its poisoned
+	 * path here. Pending advertisement still prevents cleanup until the
+	 * packetizer has finished encoding the change set. */
+	if (prefix->state == EIGRP_FSM_STATE_PASSIVE)
+		eigrp_update_topology_table_prefix(eigrp, eigrp->topology_table,
+						   prefix);
+
 	return 1;
 }
 

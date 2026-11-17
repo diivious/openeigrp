@@ -10,10 +10,6 @@ from pathlib import Path
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / "eigrpd" / "code").is_dir())
 CLASSIC = ROOT / "frr" / "code" / "eigrp_frr_classic.c"
 NAMED = ROOT / "frr" / "code" / "eigrp_frr_named.c"
-VTYSH_PATCH = ROOT / "frr" / "patch" / "vtysh-named-eigrp.patch"
-YANG_PATCH = ROOT / "frr" / "patch" / "frr-eigrp-yang.patch"
-PATCH_SERIES = ROOT / "frr" / "patch" / "series"
-INSTALLER = ROOT / "tools" / "frr-install.sh"
 ZEBRA = ROOT / "frr" / "code" / "eigrp_frr_rib.c"
 
 
@@ -24,13 +20,11 @@ def read(path: Path) -> str:
 def test_router_entry_is_available_from_config_and_eigrp_modes():
     classic = read(CLASSIC)
     named = read(NAMED)
-    vtysh = read(VTYSH_PATCH)
 
     assert "install_element(CONFIG_NODE, &router_eigrp_cmd);" in classic
     assert "install_element(EIGRP_NODE, &router_eigrp_cmd);" in classic
     assert "install_element(CONFIG_NODE, &router_eigrp_named_cmd);" in named
     assert "install_element(EIGRP_NODE, &router_eigrp_named_cmd);" in named
-    assert "+\tinstall_element(EIGRP_NODE, &router_eigrp_cmd);" in vtysh
 
 
 def test_router_callbacks_rewind_to_top_level_before_selecting_process():
@@ -62,22 +56,6 @@ def test_named_mode_checks_do_not_dereference_empty_xpath_stack():
 
     assert "return vty && vty->xpath_index > 0" in named
     assert "if (!vty || vty->xpath_index <= 0" in named
-
-
-def test_classic_multi_instance_constraint_is_removed_by_flattened_yang_patch():
-    patch = read(YANG_PATCH)
-    series = [
-        line.strip()
-        for line in read(PATCH_SERIES).splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    installer = read(INSTALLER)
-
-    constraint = 'must "count(../instance[vrf =current()/vrf]) = 1";'
-    assert f"-      {constraint}" in patch
-    assert series == ["vtysh-named-eigrp.patch", "frr-eigrp-yang.patch"]
-    assert constraint in installer
-    assert "eigrp-multi-instance.patch" not in installer
 
 
 def test_zebra_router_id_refresh_covers_all_instances_in_the_vrf():

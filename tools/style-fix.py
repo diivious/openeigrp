@@ -13,11 +13,7 @@ from pathlib import Path
 # Use the same Git diff and formatter selection rules as the read-only checker.
 STYLE = runpy.run_path(str(Path(__file__).with_name("style-check.py")))
 
-EXTENSIONS = {
-    ".c", ".h", ".cpp", ".hpp", ".cc", ".hh", ".cxx", ".hxx",
-    ".m", ".mm", ".java", ".js", ".jsx", ".ts", ".tsx",
-    ".proto", ".cu", ".cuh",
-}
+EXTENSIONS = STYLE["FORMAT_SUFFIXES"]
 
 
 def get_git_root():

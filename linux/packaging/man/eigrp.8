@@ -1,0 +1,186 @@
+.Dd November 15, 2026
+.Dt EIGRP 8
+.Os
+.Sh NAME
+.Nm eigrp
+.Nd inspect and administer the native OpenEIGRP daemon
+.Sh SYNOPSIS
+.Nm
+.Op Ar options
+.Cm show
+.Op Cm address-family Ar ipv4|ipv6 Op Cm vrf Ar name
+.Op Ar asn
+.Ar view
+.Op Ar arguments
+.Nm
+.Op Ar options
+.Cm clear
+.Op Cm address-family Ar ipv4|ipv6 Op Cm vrf Ar name
+.Op Ar asn
+.Ar target
+.Op Ar arguments
+.Nm
+.Op Ar options
+.Cm version
+.Nm
+.Cm help
+.Sh DESCRIPTION
+.Nm
+is a noninteractive client for
+.Xr openeigrpd 8 .
+It sends bounded, versioned requests to the local Unix management socket.
+The text renderer follows FRR named-mode EIGRP show headings and column
+layouts using public portable-core state exposed by the Linux management IPC.
+The versioned IPC includes portable snapshots and dedicated timer, accounting
+and static-neighbor operations. Values not supplied by portable EIGRP or the
+Linux platform are not fabricated.
+.Sh COMMANDS
+.Bl -tag -width Ds
+.It Cm show version
+Show the client, host, and portable-component version inventory.
+.It Cm show capabilities
+Report protocol release and supported capabilities.
+.It Cm show protocols
+List configured EIGRP instances and runtime status.
+.It Cm show neighbors Op Cm detail Op Ar interface
+Show neighbors and their hold time, uptime, queues, SRTT, RTO and sequence numbers.
+.It Cm show interfaces Op Cm detail Op Ar interface
+Show EIGRP interface settings, peer counts, and operational counters.
+.It Cm show topology Op Cm all-links | Ar prefix
+Show DUAL prefixes and paths. The default human-readable view selects
+successor and feasible-successor paths; all-links includes the other paths.
+A topology autonomous-system number may also follow the view keyword.
+A selected destination is parsed as a network prefix; an omitted prefix
+length indicates a host route.
+.It Cm show statistics
+Show portable traffic counters.
+.Cm traffic
+is an alias.
+.It Cm show events
+Show event entries with named-mode headings. The event summary is retained
+in technical-support output.
+.It Cm show timers
+Show portable EIGRP timer state, including millisecond precision deadlines
+and ACTIVE/SIA destinations.
+.It Cm show accounting
+Show neighbor prefix-limit accounting and process/redistribution penalty state
+from the portable EIGRP management API.
+.It Cm show neighbors static
+Show the configured static-neighbor state from the portable EIGRP management
+API. This is distinct from the live adjacency list.
+.It Cm show diagnostics
+Show feature capability, debug and timer records.
+.It Cm show tech-support
+Collect the portable EIGRP feature inventory and FRR named-mode
+operational sections: protocols, interfaces, neighbors, topology, traffic,
+timers, accounting and events.
+.Cm tech-support
+is an alias.
+.It Cm clear events
+Reset the event history of matching instances.
+.It Cm clear neighbors Op Ar interface|address Op Cm soft
+Reset EIGRP neighbor adjacencies using the portable administrative API.
+A soft clear may preserve an adjacency, as determined by the portable core.
+.It Cm clear topology Op Ar prefix
+Clear all topology entries or one selected prefix through the portable core.
+.It Cm version
+Show local integration release, OS, kernel and IPC version without a daemon.
+.It Cm help
+Print usage.
+.El
+.Sh INSTANCE SELECTION
+An omitted autonomous-system number selects every matching AS.
+An omitted address-family selects both IPv4 and IPv6.
+When neither is given, all configured address families are selected,
+including inactive and nondefault-VRF configuration.
+Command keywords allow unambiguous leading abbreviations such as
+.Cm show addr ipv4 topo .
+Ambiguous abbreviations return an error; names and addresses are not
+abbreviated.
+The
+.Cm vrf name
+selector matches portable configured identity, even when the Linux runtime
+does not support that VRF. Runtime-dependent fields then remain unavailable.
+An explicit numeric nondefault
+.Fl -vrf-id
+requires both ASN and AFI and a core-provided runtime ID.
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl s Ar path , Fl -socket Ar path
+Unix management socket; default
+.Pa /run/openeigrpd/control.sock .
+.It Fl a Ar asn , Fl -asn Ar asn
+Filter to autonomous system 1 through 65535.
+.It Fl 4 , Fl 6
+Select IPv4 or IPv6.
+.It Fl -afi Ar 4|6
+Select an address family numerically.
+.It Fl -vrf-id Ar number
+Explicit numeric runtime VRF ID; default 0.
+.It Fl -json
+Emit unmodified newline-delimited JSON records, rather than text output.
+The detail and positional interface/prefix display filters are not available
+in JSON mode. Dedicated timer, accounting and static-neighbor queries support
+JSON output.
+.It Fl h , Fl -help
+Print usage.
+.It Fl -version
+Print local version and exit.
+.El
+.Sh EXAMPLES
+.Bd -literal -offset indent
+eigrp show nei
+eigrp show address-family ipv4 4453 topology
+eigrp show address-family ipv4 topology 4453 all-links
+eigrp show topology 192.0.2.0/24
+eigrp show address-family ipv4 4453 timers
+eigrp show addr ipv6 topo
+eigrp show address-family ipv4 4453 interfaces detail eth0
+eigrp show 4453 traffic --json
+sudo eigrp clear address-family ipv4 4453 neighbors 192.0.2.2
+sudo eigrp clear topology 192.0.2.0/24
+sudo eigrp clear events
+.Ed
+.Sh OUTPUT
+Human-readable output is organized per matching EIGRP AF and AS.
+The command is not a Linux kernel RIB viewer; use
+.Xr ip 8
+for host routes.
+A request for
+.Cm show routes
+is rejected explicitly.
+JSON records preserve existing fields and add portable-core state fields;
+management IPC version 5 is not wire-compatible with earlier versions.
+The daemon has no stable cross-page snapshot guarantee; topology changes
+can affect subsequent pages.
+.Sh SECURITY
+The control socket is normally mode 0660 and belongs to the
+.Sy openeigrpctl
+access group. Read-only clients require socket access but not root.
+Every
+.Cm clear
+request is authorized separately using peer credentials; only root or
+the daemon startup UID may invoke a modifying operation.
+No interactive configuration or live configuration reload is exposed.
+.Sh LIMITATIONS
+Management IPC version 5 pages contain at most 32 records and 16 KiB.
+The 32-bit record offset permits topology dumps beyond the former 8192-record
+limit and enumeration of more than 128 configured address families. Since the portable iterator has no resume cursor, each page replays
+preceding records and large dumps can be costly. There is no snapshot
+guarantee across pages. Nondefault Linux VRF configuration is viewable, but
+its runtime state remains unavailable where the Linux integration does not
+support it. Host-specific FRR operational state also remains unavailable. The IPC
+exposes portable EIGRP interface, neighbor, topology, accounting, and timer
+state. No FRR- or Cisco-specific field is invented to fill a host limitation.
+.Sh EXIT STATUS
+.Bl -tag -width Ds
+.It 0
+Success.
+.It 1
+Daemon, socket, authorization, instance selection or protocol failure.
+.It 2
+Invalid command line or unsupported command.
+.El
+.Sh SEE ALSO
+.Xr openeigrpd 8 ,
+.Xr openeigrpd.conf 5

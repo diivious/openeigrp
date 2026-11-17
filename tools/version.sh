@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (C) 2026 Donnie V. Savage
-# Resolve a shared OpenEIGRP version for native packages and Docker images.
+# Resolve a shared OpenEIGRP release/build identity from origin/master.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,25 +9,29 @@ die() { printf 'version: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'USAGE'
 Usage: tools/version.sh --latest [--repo PATH]
+       tools/version.sh --ci [--repo PATH]
        tools/version.sh --local [LABEL] [--repo PATH]
+       tools/version.sh --current [LABEL] [--repo PATH]
 
---latest obtains the highest numeric rel-X.Y.Z tag reachable from origin/master.
---local adds -LABEL to that release (default: $USER-test).
-An explicit X.Y.Z local version is retained unchanged for release builds.
-Remote release metadata must be available; no guessed fallback is used.
+--latest returns the highest rel-MAJOR.MINOR release on origin/master.
+--ci returns MAJOR.MINOR.0-merge.dev at the checked-out commit without allocating.
+--local allocates the next local build: MAJOR.MINOR.BUILD-LABEL.dev.
+--current returns the last allocated local build without incrementing it.
+An existing rel-MAJOR.MINOR.0 tag can seed the first two-component release.
+Development labels default to $USER and must be valid in Docker and Debian.
 USAGE
 }
 
 [[ $# -gt 0 ]] || { usage >&2; exit 2; }
 mode="$1"; shift
 case "$mode" in
-    --latest|--local) ;;
+    --latest|--ci|--local|--current) ;;
     --help|-h) usage; exit 0 ;;
     *) die "unknown mode: $mode" ;;
 esac
 
-label="${USER:-$(id -un)}-test"
-if [[ "$mode" == --local && $# -gt 0 && "$1" != --* ]]; then
+label="${USER:-$(id -un)}"
+if [[ "$mode" != --latest && $# -gt 0 && "$1" != --* ]]; then
     label="$1"; shift
 fi
 repo="$root"
@@ -39,50 +43,66 @@ while [[ $# -gt 0 ]]; do
         *) die "unknown argument: $1" ;;
     esac
 done
-
-if [[ "$mode" == --local ]]; then
-    if [[ "$label" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        printf '%s\n' "$label"
-        exit 0
-    fi
+if [[ "$mode" == --local || "$mode" == --current ]]; then
     [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] ||
         die 'invalid development label (letters, digits, dot or hyphen only)'
-    [[ ! "$label" =~ ^[0-9]+\.[0-9]+\.[0-9]+[-~+] ]] ||
-        die 'pass a development suffix, not a full version (example: diivious-test)'
 fi
 
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
     die "not a Git checkout: $repo"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 ||
     die "Git remote origin is required: $repo"
-# Fetch release metadata only. This updates local Git refs, not the checked-out
-# files, and rejects stale/disconnected release information instead of guessing.
 git -C "$repo" fetch --quiet --tags --no-recurse-submodules origin \
     '+refs/heads/master:refs/remotes/origin/master' ||
     die 'unable to refresh origin/master release tags'
 
-# Only use tags still advertised by origin. A deleted or branch-only local
-# release tag must never be used to label either integration artifact.
 remote_tags="$(git -C "$repo" ls-remote --refs --tags origin 'refs/tags/rel-*')" ||
     die 'unable to read origin release tags'
+# CI resolves the release baseline against its immutable checkout, not a
+# moving origin/master, so parallel jobs and architectures use one identity.
+release_ref=refs/remotes/origin/master
+if [[ "$mode" == --ci ]]; then
+    release_ref=HEAD
+    # Pull-request checkouts point at a synthetic merge commit. Its first
+    # parent is the immutable target-branch baseline, not PR-added tags.
+    if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
+        release_ref=HEAD^1
+    fi
+fi
 version="$(
     while IFS=$'\t' read -r sha ref; do
         tag="${ref#refs/tags/rel-}"
-        [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+        # Existing rel-X.Y.0 tags are historical release metadata only.
+        if [[ "$tag" =~ ^([0-9]+)\.([0-9]+)\.0$ ]]; then
+            major="${BASH_REMATCH[1]}"; minor="${BASH_REMATCH[2]}"
+        elif [[ "$tag" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+            major="${BASH_REMATCH[1]}"; minor="${BASH_REMATCH[2]}"
+        else
+            continue
+        fi
+        (( 10#$major <= 255 && 10#$minor <= 255 )) || continue
         local_sha="$(git -C "$repo" rev-parse "refs/tags/rel-$tag")" || exit 1
         [[ "$sha" == "$local_sha" ]] || {
             printf 'version: local release tag rel-%s differs from origin\n' "$tag" >&2
             exit 1
         }
         if git -C "$repo" merge-base --is-ancestor \
-            "refs/tags/rel-$tag^{commit}" refs/remotes/origin/master; then
-            printf '%s\n' "$tag"
+            "refs/tags/rel-$tag^{commit}" "$release_ref"; then
+            printf '%s.%s\n' "$major" "$minor"
         fi
-    done <<< "$remote_tags" | sort -t . -k1,1n -k2,2n -k3,3n | tail -1
+    done <<< "$remote_tags" | sort -u -t . -k1,1n -k2,2n | tail -1
 )" || die 'unable to verify release tags on origin/master'
-[[ -n "$version" ]] || die 'no rel-X.Y.Z release tag reachable from origin/master'
-if [[ "$mode" == --latest ]]; then
+[[ -n "$version" ]] || die "no rel-MAJOR.MINOR release tag reachable from $release_ref"
+if [[ "$mode" == --ci ]]; then
+    printf '%s.0-merge.dev\n' "$version"
+elif [[ "$mode" == --latest ]]; then
     printf '%s\n' "$version"
 else
-    printf '%s-%s\n' "$version" "$label"
+    if [[ "$mode" == --local ]]; then
+        action=next
+    else
+        action=current
+    fi
+    build="$(python3 "$root/tools/build-count.py" "$action" --base "$version" --repo "$repo")" || exit $?
+    printf '%s.%s-%s.dev\n' "$version" "$build" "$label"
 fi

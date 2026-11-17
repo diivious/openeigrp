@@ -35,7 +35,7 @@ sudo env \
 
 The test checks: installation is inactive and disabled; the root-only
 configuration is accepted; systemd creates a group-traversable runtime
-directory and a protected control socket; the real `oectl` talks to the real
+directory and a protected control socket; the real `eigrp` talks to the real
 daemon; daemon UID, GID, effective capabilities, and `NoNewPrivs` are correct;
 restart works; stopped upgrades stay stopped, while running upgrades preserve administrator configuration and
 service enablement; stop cleans the socket; package removal stops the service

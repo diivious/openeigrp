@@ -51,13 +51,11 @@ def test_mixed_peer_aggregate_policy_is_preserved():
 def test_named_cli_retains_and_writes_32bit_override_for_both_afs():
     cli = read("frr/code/eigrp_frr_named.c")
     nb = (read("frr/code/eigrp_northbound.c") + read("frr/code/eigrp_frr_ipv4.c") + read("frr/code/eigrp_frr_ipv6.c"))
-    yang = read("frr/patch/frr-eigrp-yang.patch")
     assert '"metric version 32bit"' in cli
     assert '"no metric version 32bit"' in cli
     assert '"./metric-version-32bit"' in cli
     assert 'vty_out(vty, "   metric version 32bit\\n")' in cli
     assert "eigrp_metric_version_update(EIGRP_SET, &context)" in nb
     assert "eigrp_metric_version_update(EIGRP_RESET, &context)" in nb
-    assert "leaf metric-version-32bit { type empty; }" in yang
     # The topology child resolver is AF-neutral and is used by both callbacks.
     assert nb.count("eigrpd_named_topology_child_context(args->dnode") >= 2

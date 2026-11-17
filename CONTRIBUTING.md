@@ -89,7 +89,7 @@ Ask before you:
 - change whitespace, comment style, or include order across a file
 - add a new public header or public function
 - move code between `eigrp/` and a host directory
-- change managed patches under `frr/patch/`
+- change upstream FRR source compatibility requirements
 
 Do the work first only when the change is local, obvious, and already covered by
 an existing spec rule.
@@ -126,17 +126,15 @@ Rules:
 - Do not sort includes, rename locals, or wrap comments as a side effect.
 - Do not land drive-by cleanups in a feature or bug fix.
 
-Before committing, run `make check`. This checks staged, unstaged and
-untracked changes and runs the style-checker's executable regression tests.
-`make check SOURCE=all` checks the entire tree. Fix all reported violations;
-CI checks the pushed or proposed-merge diff using `STYLE_CHECK_BASE`.
+Run `make` for host-compatible compilation and full-tree style checks.
+For a changed-file-only audit, run `tools/python tools/style-check.py`;
+CI checks the pushed or proposed-merge diff using `--base`.
 
 **Before committing or opening a pull request, run `make pre-commit` locally.**
-It runs `make all` first, then builds both Docker image architectures, builds
-both Debian package architectures, and runs both package lifecycle UUTs.
-`make all` covers native/portable builds, full-tree style validation, portable
-pytest/YAML UUTs, quick and extended scale suites, and native Linux tests on
-Linux. Do not describe a gate as passed if any stage is unverified or failed.
+It runs the `make all` coverage (fast unit/YAML UUTs, quick scale, both FRR
+Docker image builds and both Debian packages), then full scale/stress,
+Docker image integration/adjacency UUTs and package lifecycle UUTs.
+Do not describe a gate as passed if any stage is unverified or failed.
 
 C source checks require `clang-format` on `PATH` (install with Homebrew or the
 host package manager). The check enforces whitespace hygiene, C formatting,
@@ -170,18 +168,18 @@ New files use the copyright of the person who wrote them.
 From the repository root, the normal standalone development loop is:
 
 ```sh
-make portable-build   # Compile portable engine and Unix libraries only
-make                 # All non-Docker builds and UUTs
-make all             # Same as make; day-to-day regression gate
-make pre-commit      # Add amd64/arm64 Docker builds, packages, and package UUTs
+make                 # Compile host code and validate style (no Docker)
+make all             # Fast unit/YAML UUTs, quick scale, both platform builds
+make pre-commit      # Extended scale, Docker integration and package UUTs
 ```
 
-`make all` builds the native daemon on Linux (portable libraries on macOS),
-runs full-tree style checks, portable Python and YAML UUTs, quick and extended
-scale suites, and native Linux tests on Linux. It requires no Docker, FRR
-checkout, or Netlab installation. `make pre-commit` additionally requires
-Docker with `amd64`/`arm64` support and network access. Live FRR UUT and
-personal Netlab tests remain outside both gates.
+`make` builds the native daemon on Linux (portable libraries on macOS) and
+checks full-tree style without Docker. `make all` runs portable Python and
+YAML UUTs (including all 107 existing scenarios), quick scale checks, native
+Linux tests on Linux and builds both amd64/arm64 FRR images and Debian
+packages. `make pre-commit` adds extended scale and Docker/package runtime
+UUTs. Both higher tiers require Docker with amd64/arm64 support. Standalone
+host FRR and remote Netlab tests remain outside the automatic gates.
 
 GitHub Actions runs the platform-appropriate gate on Linux and macOS. See
 the root `Makefile` and `.github/workflows/` for the hosted CI contract.
@@ -194,8 +192,8 @@ frr/tools/frr.sh --install --frr-root ../frr
 frr/tools/frr.sh --build --frr-root ../frr
 ```
 
-If you changed managed FRR-wide files, apply patches on a fresh FRR checkout
-with `frr/tools/frr.sh --patch` first. Do not fuzz or force a patch.
+FRR-wide YANG and VTY support must exist in the upstream checkout. Test
+against the pinned FRR source; do not modify upstream source during staging.
 
 If you changed named-mode CLI, config retention, or writeback, run the live UUT:
 

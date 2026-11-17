@@ -43,15 +43,14 @@ RUN set -eu; \
       test "$SOURCE_MODE" = local; \
     fi
 
-# FRR 10.7.1 needs the managed patches. Upstream FRR master includes them
-# since FRRouting/frr#23767; applying the old patches there would conflict.
-# Select by the immutable 10.7.1 commit, not a potentially moving branch name.
+# FRR upstream owns the EIGRP named-mode schema and vtysh integration.
+# Reject incompatible source before staging any EIGRP code; rebuild the
+# embedded YANG from that verified source, never from a stale generated file.
 RUN set -eux; \
     cd /src-eigrp; \
-    if [ "$FRR_SHA" = f8c0b08dcb0c78f9e42b9b86ae70b049e4e617c1 ]; then \
-      bash frr/tools/frr.sh --patch --frr-root /src-frr; \
-    fi; \
-    bash frr/tools/frr.sh --install --frr-root /src-frr; \
+    bash frr/tools/frr-install.sh --schema-only --frr-root /src-frr; \
+    EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash frr/tools/frr.sh --install \
+      --frr-root /src-frr; \
     EIGRP_BUILD_VERSION="$EIGRP_VERSION" bash frr/tools/frr.sh --configure \
       --frr-root /src-frr -- \
       --prefix=/usr --libdir=/usr/lib --enable-vtysh --enable-pcre2posix \

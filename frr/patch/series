@@ -1,3 +1,0 @@
-# Ordered FRR integration patches. One patch filename per line.
-vtysh-named-eigrp.patch
-frr-eigrp-yang.patch

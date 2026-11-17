@@ -2,7 +2,7 @@
 
 `openeigrpd` is the standalone Linux routing daemon. It uses the portable
 EIGRP core and shared Unix scheduling, with native IPv4/IPv6 sockets,
-Netlink interface/RIB services, and an `oectl` management socket.
+Netlink interface/RIB services, and an `eigrp` management socket.
 It does **not** need FRR, BIRD, a virtual-wire UUT broker, or Docker at runtime.
 
 ## Where to go
@@ -19,7 +19,7 @@ Directory responsibilities:
 ```text
 linux/
   README.md         Linux overview, quick start, and navigation
-  code/             Daemon, oectl, config validator, and host services
+  code/             Daemon, eigrp, config validator, and host services
   config/           Example configuration
   packaging/        Debian/systemd scripts, metadata, and man/ sources
   specs/            Developer and maintainer guides, host specifications
@@ -54,7 +54,7 @@ sudo apt install ./dist/openeigrpd_0.1.0_amd64.deb   # adjust version/arch
 sudoedit /etc/openeigrpd.conf
 sudo openeigrpd-config -t -f /etc/openeigrpd.conf
 sudo systemctl enable --now openeigrpd
-sudo oectl show protocols
+sudo eigrp show protocols
 ```
 
 The sample configuration includes IPv4 and IPv6 address-family examples.
@@ -64,19 +64,19 @@ before activating the daemon.
 ## Operations
 
 ```sh
-oectl version
-oectl show protocols
-oectl show neighbors --asn 4453 --afi 4
-oectl show interfaces --asn 6473 --afi 6
-oectl show routes --asn 4453 --afi 4 --json
-oectl show tech-support
+eigrp version
+eigrp show protocols
+eigrp show neighbors --asn 4453 --afi 4
+eigrp show interfaces --asn 6473 --afi 6
+eigrp show address-family ipv4 4453 topology
+eigrp show tech-support
 ```
 
-`oectl` is read-only except `clear events`, which requires root or the daemon
-startup UID. The default management socket is `/run/openeigrpd/control.sock`
+`eigrp` exposes `clear events`, `clear neighbors`, and `clear topology`
+through the portable API; all require root or the daemon startup UID. The default management socket is `/run/openeigrpd/control.sock`
 (mode 0660, group `openeigrpctl`). Membership in that group allows
-observational access, not mutation. Scoped queries can autodetect one running
-default-VRF AF; multiple AFs need explicit selection.
+observational access, not mutation. Scoped queries select all matching default-VRF AS/AF contexts when selectors
+are omitted.
 
 Use `systemctl restart openeigrpd` to apply a new validated config. `SIGHUP`
 is **not** a reload: it is rejected while preserving active state.
@@ -87,7 +87,7 @@ is **not** a reload: it is rejected while preserving active state.
 |---|---|
 | Daemon flags, signals, lifecycle, permissions | [openeigrpd(8)](packaging/man/openeigrpd.8) |
 | Named-mode directives and IPv4/IPv6 examples | [openeigrpd.conf(5)](packaging/man/openeigrpd.conf.5) |
-| `oectl` commands, filters and JSON output | [oectl(8)](packaging/man/oectl.8) |
+| `eigrp` commands, filters and JSON output | [eigrp(8)](packaging/man/eigrp.8) |
 | Packaging, installation, upgrades and removal | [Maintainer guide](specs/maintainer.md) |
 | Live Debian/systemd VM qualification | [Qualification guide](specs/systemd-qualification.md) |
 | Architecture, host APIs and native test commands | [Developer guide](specs/developer.md) |
@@ -101,7 +101,7 @@ is **not** a reload: it is rejected while preserving active state.
   redistribution is limited to connected/static routes in the default VRF.
 - MD5 key-chain auth is supported. HMAC-SHA-256, encoded type-7 secrets,
   route-map `set`, complex ACL expressions and EIGRP Stub runtime are not.
-- `oectl show routes` exposes the portable topology view, not the Linux RIB.
+- `eigrp show topology` exposes portable DUAL state; host routes use the Linux RIB (`ip route`).
   IPC pagination is bounded; concurrent routing changes are not snapshotted.
 - Linux native packet/daemon tests exist, but a real systemd VM and
   privileged Cisco/Netlab adjacency qualification remain separate gates.

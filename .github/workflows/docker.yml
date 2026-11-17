@@ -18,16 +18,18 @@ on:
       - 'tools/test/test_docker_source_selection.py'
       - 'tools/test/test_tool_ownership.py'
       - 'tools/version.sh'
+      - 'tools/build-version.sh'
+      - 'tools/gen-version.py'
+      - 'libunix/code/**'
       - 'frr/test/setup/**'
       - 'frr/tools/frr.sh'
       - 'frr/tools/frr-install.sh'
       - 'eigrp/code/**'
       - 'frr/code/**'
-      - 'frr/patch/**'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Optional existing rel-X.Y.Z EIGRP tag to test (manual runs never publish)'
+        description: 'Optional existing rel-MAJOR.MINOR EIGRP tag to test (manual runs never publish)'
         required: false
         type: string
 
@@ -51,6 +53,8 @@ jobs:
     steps:
       - name: Checkout build tooling
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Test FRR release selection and checkout safety
         run: |
           python3 -m unittest -q \
@@ -73,20 +77,20 @@ jobs:
           set -euo pipefail
           if [[ "$EVENT_NAME" == 'push' && "$GIT_REF" == refs/tags/* ]]; then
             eigrp_ref="${GIT_REF#refs/tags/}"
-            [[ "$eigrp_ref" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            [[ "$eigrp_ref" =~ ^rel-[0-9]+\.[0-9]+$ ]] || {
               echo "invalid publication tag: $eigrp_ref" >&2; exit 1;
             }
             version="${eigrp_ref#rel-}"
             release=yes
           elif [[ "$EVENT_NAME" == 'workflow_dispatch' && -n "$MANUAL_TAG" ]]; then
             eigrp_ref="$MANUAL_TAG"
-            [[ "$eigrp_ref" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            [[ "$eigrp_ref" =~ ^rel-[0-9]+\.[0-9]+$ ]] || {
               echo "invalid test tag: $eigrp_ref" >&2; exit 1;
             }
             version="${eigrp_ref#rel-}"
             release=no
           else
-            version="dev-${GIT_SHA:0:12}"
+            version="$(./tools/version.sh --ci)"
             if [[ "$EVENT_NAME" == pull_request ]]; then
               eigrp_ref="refs/pull/$PR_NUMBER/merge"
             else
@@ -109,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           image="openeigrp-ci:$VERSION-$ARCH"
-          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
             ./frr/tools/docker.sh --build "$VERSION" --platform "$PLATFORM" --image "$image"
           else
             ./frr/tools/docker.sh --build "$VERSION" --platform "$PLATFORM" --image "$image" \
@@ -169,7 +173,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$RELEASE_TAG" =~ ^rel-[0-9]+\.[0-9]+$ ]] || exit 1
           VERSION="${RELEASE_TAG#rel-}"
           repository=ghcr.io/diivious/openeigrp-frr
           # Check every destination tag before pushing anything. Docker's

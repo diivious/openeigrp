@@ -5,9 +5,13 @@
  * Copyright (C) 2026 Donnie V. Savage
  */
 
+#include <string.h>
+
 #include "eigrp_status.h"
 #include "eigrp_features.h"
-
+#include "eigrp_instance.h"
+#include "eigrp_structs.h"
+#include "eigrp_timer.h"
 
 eigrp_result_t
 eigrp_status_capability_state_read(eigrp_status_capability_state_t *state)
@@ -33,10 +37,37 @@ struct eigrp_status_iterate_context {
 	void *arg;
 };
 
+struct eigrp_status_runtime_request {
+	eigrp_instance_t *runtime;
+	eigrp_status_protocol_state_t *state;
+};
+
+static eigrp_result_t eigrp_status_runtime_read(void *arg)
+{
+	struct eigrp_status_runtime_request *request = arg;
+	const eigrp_instance_t *runtime = request->runtime;
+	eigrp_status_protocol_state_t *state = request->state;
+
+	state->effective_router_id = ntohl(runtime->router_id.s_addr);
+	memcpy(state->k_values, runtime->k_values, sizeof(state->k_values));
+	state->variance = runtime->variance;
+	state->max_paths = runtime->max_paths;
+	state->max_hops = runtime->max_hops;
+	state->distance_internal = runtime->distance_internal;
+	state->distance_external = runtime->distance_external;
+	state->metric_version = runtime->metric_version;
+	state->active_time_seconds = eigrp_timer_active_time_seconds(runtime);
+	state->topology_count_valid = runtime->topology_reachable_count_valid;
+	state->topology_prefix_count = runtime->topology_reachable_count;
+	state->redistributed_prefix_count = runtime->redist_prefix_count;
+	return EIGRP_RESULT_SUCCESS;
+}
+
 static eigrp_result_t eigrp_status_af(const char *instance_name,
 				      eigrp_af_config_t *af, void *arg)
 {
 	struct eigrp_status_iterate_context *context = arg;
+	eigrp_named_config_t *parent = eigrp_named_config_read(instance_name);
 	eigrp_status_protocol_state_t state = {
 		.instance_name = instance_name,
 		.config = af,
@@ -44,11 +75,24 @@ static eigrp_result_t eigrp_status_af(const char *instance_name,
 		.vrf_name = af->vrf_name,
 		.asn = af->asn,
 		.shutdown = af->shutdown,
+		.parent_shutdown = parent && parent->shutdown,
 		.router_id_configured = af->router_id_configured,
 		.router_id = af->router_id,
-		.runtime_present = af->runtime != NULL,
+		.runtime_present = false,
 	};
 
+	if (af->runtime && !state.shutdown && !state.parent_shutdown) {
+		struct eigrp_status_runtime_request request = {
+			.runtime = af->runtime,
+			.state = &state,
+		};
+		eigrp_result_t result = eigrp_mgnt_runtime_execute(
+			af->runtime, eigrp_status_runtime_read, &request);
+		if (result == EIGRP_RESULT_SUCCESS)
+			state.runtime_present = true;
+		else if (result != EIGRP_RESULT_CONFLICT)
+			return result;
+	}
 	return context->callback(&state, context->arg);
 }
 

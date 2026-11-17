@@ -25,7 +25,7 @@ install: all
 	  "$(DESTDIR)$(SYSCONFDIR)" "$(DESTDIR)$(SYSTEMDDIR)" \
 	  "$(DESTDIR)$(SYSUSERSDIR)" "$(DESTDIR)$(MANDIR)/man5" "$(DESTDIR)$(MANDIR)/man8"
 	install -m 0755 code/openeigrpd "$(DESTDIR)$(SBINDIR)/openeigrpd"
-	install -m 0755 code/oectl "$(DESTDIR)$(BINDIR)/oectl"
+	install -m 0755 code/eigrp "$(DESTDIR)$(BINDIR)/eigrp"
 	install -m 0755 code/openeigrpd-config "$(DESTDIR)$(BINDIR)/openeigrpd-config"
 	@if [ ! -e "$(DESTDIR)$(SYSCONFDIR)/openeigrpd.conf" ] && \
 	   [ ! -L "$(DESTDIR)$(SYSCONFDIR)/openeigrpd.conf" ]; then \
@@ -35,7 +35,7 @@ install: all
 	fi
 	install -m 0644 packaging/openeigrpd.service "$(DESTDIR)$(SYSTEMDDIR)/openeigrpd.service"
 	install -m 0644 packaging/openeigrpd.sysusers "$(DESTDIR)$(SYSUSERSDIR)/openeigrpd.conf"
-	install -m 0644 packaging/man/oectl.8 "$(DESTDIR)$(MANDIR)/man8/oectl.8"
+	install -m 0644 packaging/man/eigrp.8 "$(DESTDIR)$(MANDIR)/man8/eigrp.8"
 	install -m 0644 packaging/man/openeigrpd.conf.5 "$(DESTDIR)$(MANDIR)/man5/openeigrpd.conf.5"
 	install -m 0644 packaging/man/openeigrpd.8 "$(DESTDIR)$(MANDIR)/man8/openeigrpd.8"
 	@# No daemon enable/start or systemd invocation in an install recipe.

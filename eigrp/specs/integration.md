@@ -29,3 +29,22 @@ Integration-specific build options and tests belong in the integration's
 own `specs/`, e.g. [Linux](../../linux/specs/configuration.md),
 [FRR](../../frr/specs/integration.md), or
 [Unix](../../libunix/specs/integration.md).
+
+## OpenEIGRP build identity
+
+`eigrp/code/eigrp_build_version.h` is the single generated version contract
+for every OpenEIGRP binary and integration. The core Makefile generates it
+from `EIGRP_BUILD_VERSION`; when no version is supplied, development builds
+resolve `${USER}-${X.Y.Z}-dev` from the highest `rel-X.Y.Z` tag on
+`origin/master`. Do not introduce integration-specific substitutions for
+`EIGRP_RELEASE`. FRR staging uses the same generator to produce the header
+inside its independent source tree. Host, framework and kernel versions are
+reported separately from the OpenEIGRP release.
+
+The Software Version TLV in HELLO packets advertises the OpenEIGRP baseline
+release **major.minor** in the two Vendor OS bytes. For example,
+`diivious-0.100.10-dev` advertises `0x00 0x64` and a release `0.100.10`
+advertises the same pair. The patch component and development label are not
+encoded. Values above 255 for either byte are rejected at build time.
+The two EIGRP revision bytes are independent of the software release and
+continue to indicate classic/wide metric capability according to policy.

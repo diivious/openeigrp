@@ -35,12 +35,11 @@ usage: $script_name [options] [-- pytest-args]
 
 Default workflow:
   1. Sync to the remote UUT when --host is supplied.
-  2. Stage EIGRP into the FRR checkout without modifying FRR-wide patches.
+  2. Verify the upstream FRR named-mode schema and VTY integration, then stage EIGRP.
   3. Build FRR/eigrpd.
   4. Run portable and FRR-native EIGRP tests.
 
-Required FRR-wide patches must already have been applied explicitly with
-  frr/tools/frr.sh --patch
+FRR-wide source modifications are not performed by OpenEIGRP.
 
 Test selection:
   --all                 Build, then run portable and FRR-native tests. Default.

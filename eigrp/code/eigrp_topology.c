@@ -2376,6 +2376,8 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 	prefix_state.feasible_distance = prefix->fdistance;
 	prefix_state.successor_count = eigrp_topology_successor_count(prefix);
 	prefix_state.serial_number = prefix->serno;
+	prefix_state.dual_state = prefix->state;
+	prefix_state.pending_replies = prefix->rij ? prefix->rij->count : 0;
 
 	result = prefix_callback(&prefix_state, arg);
 	if (result != EIGRP_RESULT_SUCCESS)
@@ -2391,21 +2393,33 @@ static eigrp_result_t eigrp_topology_state_emit_prefix(
 			(route->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)
 			!= 0;
 
-		if (route->reported_distance == EIGRP_MAX_METRIC)
+		/* Keep withdrawn/inaccessible paths visible in all-links and
+		 * selected-prefix diagnostics while they remain owned by DUAL.
+		 */
+		if (!all_links
+		    && (route->reported_distance == EIGRP_MAX_METRIC
+			|| route->reported_distance == EIGRP_METRIC_MAX))
 			continue;
 		if (!all_links && !successor && !feasible)
 			continue;
 
 		memset(&route_state, 0, sizeof(route_state));
+		route_state.external = eigrp_topology_route_external(route);
+		route_state.redistributed =
+			route_state.external
+			&& route->adv_router == runtime->neighbor_self;
 		route_state.connected =
-			route->adv_router == runtime->neighbor_self;
+			!route_state.external
+			&& route->adv_router == runtime->neighbor_self;
 		route_state.successor = successor;
 		route_state.feasible_successor = feasible;
 		route_state.distance = route->distance;
 		route_state.reported_distance = route->reported_distance;
+		route_state.total_metric = route->total_metric;
+		route_state.reported_metric = route->reported_metric;
 		route_state.interface_name =
 			route->ei ? eigrp_intf_name_string(route->ei) : NULL;
-		if (!route_state.connected)
+		if (!route_state.connected && !route_state.redistributed)
 			eigrp_route_nexthop_export(route, &route_state);
 
 		result = route_callback(&route_state, arg);
@@ -2446,7 +2460,11 @@ eigrp_result_t eigrp_topology_state_iterate(
 	if (destination) {
 		if (!eigrp_topology_table_key(destination, &lookup))
 			return EIGRP_RESULT_INVALID_ARGUMENT;
-		node = eigrp_table_node_match(runtime->topology_table, &lookup);
+		/* A requested topology destination is an exact prefix, not an
+		 * LPM route lookup. Never display a covering destination
+		 * instead. */
+		node = eigrp_table_node_lookup(runtime->topology_table,
+					       &lookup);
 		if (!node)
 			return EIGRP_RESULT_NOT_FOUND;
 		prefix = node->info;

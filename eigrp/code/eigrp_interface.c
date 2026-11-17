@@ -95,6 +95,31 @@ static unsigned long eigrp_intf_reliable_queue_count(eigrp_intf_t *ei)
 	return count;
 }
 
+static void eigrp_intf_mean_srtt_read(eigrp_intf_t *ei,
+				      eigrp_intf_state_t *state)
+{
+	eigrp_nbr_t *nbr;
+	eigrp_list_item_t *node;
+	uint64_t sum = 0;
+	uint32_t count = 0;
+
+	if (!ei || !ei->nbrs)
+		return;
+	for (EIGRP_LIST_ITERATE_RO(ei->nbrs, node, nbr)) {
+		if (nbr->state != EIGRP_NEIGHBOR_UP)
+			continue;
+		state->up_peer_count++;
+		if (!nbr->srtt_valid)
+			continue;
+		sum += nbr->srtt_msec;
+		count++;
+	}
+	if (count) {
+		state->mean_srtt_valid = true;
+		state->mean_srtt_msec = (uint32_t)(sum / count);
+	}
+}
+
 static void eigrp_intf_state_from_config(eigrp_intf_state_t *state,
 					 eigrp_intf_config_t *config)
 {
@@ -144,6 +169,7 @@ eigrp_intf_state_emit(eigrp_intf_t *ei, eigrp_intf_config_t *config,
 		state.hello_interval = ei->params.v_hello;
 		state.hold_time = ei->params.v_wait;
 		state.peer_count = ei->nbrs ? ei->nbrs->count : 0;
+		eigrp_intf_mean_srtt_read(ei, &state);
 		state.output_queue_count = (ei->obuf ? ei->obuf->count : 0)
 					   + ei->multicast_pending.count;
 		state.reliable_queue_count =

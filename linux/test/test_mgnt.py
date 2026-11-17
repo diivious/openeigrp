@@ -6,6 +6,7 @@
 import concurrent.futures
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -19,10 +20,21 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CODE = ROOT / "linux" / "code"
 TEST = ROOT / "linux" / "test"
-MAGIC, VERSION = 0x45474D54, 1
+MAGIC, VERSION = 0x45474D54, 5
 HEADER = "!IHHHHI"
 SCOPE = "!HHIHHI"
-SELECTOR = struct.pack(SCOPE, 4, 4453, 0, 0, 0, 0)
+
+
+def selector(afi=4, asn=4453, vrf_id=0, flags=0, offset=0,
+             vrf_name="", instance_name=""):
+    vrf = vrf_name.encode()
+    instance = instance_name.encode()
+    assert len(vrf) < 64 and len(instance) < 128
+    return (struct.pack(SCOPE, afi, asn, vrf_id, 0, flags, offset)
+            + vrf.ljust(64, b"\x00") + instance.ljust(128, b"\x00"))
+
+
+SELECTOR = selector()
 
 
 def frame(op, body=b"", magic=MAGIC, version=VERSION, status=0, flags=0,
@@ -50,12 +62,21 @@ def get_reply(sock):
     return op, status, flags, [json.loads(s) for s in content.splitlines()]
 
 
+def identify(conn, release=None):
+    if release is None:
+        header = (ROOT / "eigrp/code/eigrp_build_version.h").read_text()
+        release = re.search(r'#define EIGRP_RELEASE "([^"]+)"', header).group(1).encode()
+    conn.sendall(frame(11, release.ljust(128, b"\x00")))
+    return get_reply(conn)
+
+
 def talk(path, op, body=None):
     if body is None:
-        body = SELECTOR if op >= 3 else b""
+        body = SELECTOR if op >= 3 else struct.pack("!I", 0) if op == 2 else b""
     with socket.socket(socket.AF_UNIX) as conn:
         conn.settimeout(2)
         conn.connect(str(path))
+        assert identify(conn)[1] == 0
         conn.sendall(frame(op, body))
         return get_reply(conn)
 
@@ -74,6 +95,7 @@ class LinuxManagementTests(unittest.TestCase):
             "-Wall", "-Wextra", "-Werror", "-pthread", "-g",
             "-I", str(ROOT / "eigrp" / "code"), "-I", str(CODE),
             str(TEST / "mgnt_fixture.c"), str(CODE / "eigrp_linux_mgnt.c"),
+            str(CODE / "eigrp_linux_version.c"),
             "-o", str(cls.binary),
         ], capture_output=True, text=True)
         if built.returncode:
@@ -113,7 +135,9 @@ class LinuxManagementTests(unittest.TestCase):
                          (3, "neighbor"), (4, "interface"),
                          (5, "prefix"), (6, "prefix"),
                          (7, "traffic"), (8, "event_summary"),
-                         (9, "capability")):
+                         (9, "capability"),
+                         (14, "timer"), (15, "accounting_summary"),
+                         (16, "neighbor")):
             with self.subTest(op=op):
                 returned_op, status, flags, rows = talk(self.path, op)
                 self.assertEqual((returned_op, status), (op, 0))
@@ -125,12 +149,70 @@ class LinuxManagementTests(unittest.TestCase):
         self.assertEqual(talk(self.path, 8)[3][1]["message"], 'event"\nnewline')
         self.assertEqual([r["kind"] for r in talk(self.path, 9)[3]],
                          ["capability", "debug", "timer"])
+        self.assertEqual(talk(self.path, 14)[3][0]["remaining_ms"], 4123)
+        self.assertEqual(talk(self.path, 15)[3][0]["total"], 48)
+        self.assertEqual(talk(self.path, 15)[3][1]["prefixes"], 12)
+        self.assertEqual(talk(self.path, 16)[3][0]["static"], True)
+        self.assertEqual(talk(self.path, 3)[3][0]["static"], False)
+        self.assertEqual(talk(self.path, 3)[3][0]["retry"], 3)
+
+    def test_protocol_pages_and_interface_no_match(self):
+        # The configured AF enumeration must advance beyond the first page.
+        self.proc.stdin.write("q\n")
+        self.proc.stdin.flush()
+        self.assertEqual(self.proc.communicate(timeout=5)[0].count("STOPPED"), 1)
+        env = dict(os.environ, EIGRP_LINUX_CTL_TEST_MANY="1",
+                   EIGRP_LINUX_CTL_TEST_NO_INTERFACES="1")
+        self.proc = subprocess.Popen([str(self.binary), str(self.path)],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, env=env)
+        self.assertEqual(self.proc.stdout.readline(), "READY\n")
+        rows, offset = [], 0
+        for _ in range(16):
+            _, status, flags, page = talk(self.path, 2, struct.pack("!I", offset))
+            self.assertEqual(status, 0)
+            self.assertLessEqual(len(page), 32)
+            self.assertTrue(page)
+            rows.extend(page)
+            offset += len(page)
+            if not flags:
+                break
+        else:
+            self.fail("protocol pagination did not finish")
+        self.assertEqual(len(rows), 141)
+        self.assertEqual(rows[-1]["instance"], "bulk-139")
+        self.assertEqual(talk(self.path, 2, b"")[1], 1)
+        self.assertEqual(talk(self.path, 4)[3], [{"kind": "interface_empty"}])
+
+    def test_identity_required_and_wrong_build_blocked(self):
+        with socket.socket(socket.AF_UNIX) as conn:
+            conn.settimeout(2)
+            conn.connect(str(self.path))
+            conn.sendall(frame(10, SELECTOR))
+            self.assertEqual(get_reply(conn)[1], 2)
+        with socket.socket(socket.AF_UNIX) as conn:
+            conn.settimeout(2)
+            conn.connect(str(self.path))
+            self.assertEqual(identify(conn, b"other-0.10.0-dev")[1], 2)
+        with socket.socket(socket.AF_UNIX) as conn:
+            conn.settimeout(2)
+            conn.connect(str(self.path))
+            _, status, _, rows = identify(conn)
+            self.assertEqual(status, 0)
+            self.assertEqual(rows[0]["kind"], "identity")
+            self.assertEqual(rows[0]["daemon"], "openeigrpd")
+            self.assertEqual(rows[0]["release"],
+                             re.search(r'#define EIGRP_RELEASE "([^"]+)"',
+                                       (ROOT / "eigrp/code/eigrp_build_version.h").read_text()).group(1))
+            self.assertEqual(rows[0]["os"], "Linux")
+            conn.sendall(frame(1))
+            self.assertEqual(get_reply(conn)[1], 0)
 
     def test_pagination_and_scope_validation(self):
         rows = []
         offset = 0
         while True:
-            scope = struct.pack(SCOPE, 4, 4453, 0, 0, 0, offset)
+            scope = selector(offset=offset)
             _, status, flags, page = talk(self.path, 5, scope)
             self.assertEqual(status, 0)
             self.assertLessEqual(len(page), 32)
@@ -141,15 +223,31 @@ class LinuxManagementTests(unittest.TestCase):
         self.assertEqual(len(rows), 96)
         self.assertEqual(rows[0]["prefix"], "198.51.100.1/32")
         self.assertEqual(rows[-1]["prefix"], "198.51.100.48/32")
-        self.assertEqual(talk(self.path, 3, struct.pack(SCOPE, 6, 4453, 0, 0, 0, 0))[1], 4)
-        self.assertEqual(talk(self.path, 3, struct.pack(SCOPE, 4, 0, 0, 0, 0, 0))[1], 1)
-        self.assertEqual(talk(self.path, 5, struct.pack(SCOPE, 4, 4453, 0, 0, 0, 8193))[1], 1)
-        self.assertEqual(talk(self.path, 4, struct.pack(SCOPE, 4, 4453, 0, 0, 1, 0))[1], 1)
+        self.assertEqual(talk(self.path, 3, selector(afi=6))[1], 4)
+        self.assertEqual(talk(self.path, 3, selector(asn=0))[1], 1)
+        self.assertEqual(talk(self.path, 5, selector(offset=8193))[1], 0)
+        self.assertEqual(talk(self.path, 4, selector(flags=1))[1], 1)
+        self.assertEqual(talk(self.path, 4, selector(vrf_name="blue"))[1], 1)
+        self.assertEqual(talk(self.path, 4, selector(instance_name="foo"))[1], 1)
+        self.assertEqual(talk(self.path, 4, selector(vrf_name="blue",
+                instance_name="not-configured"))[1], 4)
+        self.assertEqual(talk(self.path, 4, selector(vrf_name="default",
+                instance_name="eigrprulez"))[1], 0)
+        bad = bytearray(SELECTOR)
+        bad[16:80] = b"x" * 64
+        self.assertEqual(talk(self.path, 4, bytes(bad))[1], 1)
+        bad = bytearray(SELECTOR)
+        bad[80:208] = b"x" * 128
+        self.assertEqual(talk(self.path, 4, bytes(bad))[1], 1)
+        bad = bytearray(selector(vrf_name="default", instance_name="eigrprulez"))
+        bad[16 + len("default") + 1] = 1
+        self.assertEqual(talk(self.path, 4, bytes(bad))[1], 1)
 
     def test_framing_version_partial_reads_and_sequential_clients(self):
         with socket.socket(socket.AF_UNIX) as conn:
             conn.settimeout(3)
             conn.connect(str(self.path))
+            self.assertEqual(identify(conn)[1], 0)
             query = frame(1)
             for part in (query[:1], query[1:7], query[7:15], query[15:]):
                 conn.sendall(part)
@@ -157,7 +255,7 @@ class LinuxManagementTests(unittest.TestCase):
             conn.sendall(frame(3, SELECTOR) + frame(7, SELECTOR))
             self.assertEqual(get_reply(conn)[3][0]["kind"], "neighbor")
             self.assertEqual(get_reply(conn)[3][0]["kind"], "traffic")
-            conn.sendall(frame(2, version=2))
+            conn.sendall(frame(2, struct.pack("!I", 0), version=1))
             self.assertEqual(get_reply(conn)[1], 2)
             self.assertEqual(conn.recv(1), b"")
 
@@ -165,7 +263,9 @@ class LinuxManagementTests(unittest.TestCase):
         for corrupt in (
             frame(1, magic=0), frame(1, status=1), frame(1, flags=1),
             frame(1, size=2**32-1), frame(42), frame(3, b"abc"),
-            frame(1, SELECTOR),
+            frame(1, SELECTOR), frame(2), frame(2, SELECTOR),
+            frame(14, SELECTOR + bytes(128)),
+            frame(15, SELECTOR + bytes(128)), frame(16, SELECTOR + bytes(128)),
         ):
             with self.subTest(corrupt=corrupt[:16]):
                 with socket.socket(socket.AF_UNIX) as conn:
@@ -182,12 +282,18 @@ class LinuxManagementTests(unittest.TestCase):
 
     def test_authorization_and_live_clear_semantic(self):
         if os.geteuid() == 0:
-            child = '''import os, socket, struct, sys
+            release = re.search(r'#define EIGRP_RELEASE "([^"]+)"',
+                                (ROOT / "eigrp/code/eigrp_build_version.h").read_text()).group(1).encode()
+            child = f'''import os, socket, struct, sys
 s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect(sys.argv[1]);
-p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,1,op,0,0,len(b))+b
-body=struct.pack("!HHIHHI",4,4453,0,0,0,0)
+p=lambda op,b: struct.pack("!IHHHHI",0x45474d54,5,op,0,0,len(b))+b
+body=struct.pack("!HHIHHI",4,4453,0,0,0,0)+bytes(192)
+s.sendall(p(11,{release}.ljust(128,bytes(1))));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
 s.sendall(p(8,body));h=s.recv(16);length=struct.unpack("!IHHHHI",h)[-1];s.recv(length)
-s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
+for op, data in ((10, body), (12, body + bytes(128)),
+                 (13, body + bytes(128))):
+    s.sendall(p(op,data));h=s.recv(16)
+    print(struct.unpack("!IHHHHI",h)[3])
 '''
             def readonly():
                 os.setgroups([65534])
@@ -197,11 +303,11 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
                                       str(self.path)], preexec_fn=readonly,
                                      text=True, capture_output=True, timeout=4)
             self.assertEqual(checked.returncode, 0, checked.stderr)
-            self.assertEqual(checked.stdout.strip(), "3")
+            self.assertEqual(checked.stdout.strip().splitlines(), ["3", "3", "3"])
         self.assertEqual(talk(self.path, 8)[3][0]["count"], 1)
         self.assertEqual(talk(self.path, 10)[1], 0)
         self.assertEqual(talk(self.path, 8)[3][0]["count"], 0)
-        self.assertEqual(talk(self.path, 10, struct.pack(SCOPE, 4, 4453, 0, 0, 0, 1))[1], 1)
+        self.assertEqual(talk(self.path, 10, selector(offset=1))[1], 1)
 
     def test_concurrent_connections_disconnects_and_backpressure(self):
         def get(i):
@@ -274,11 +380,51 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
             self.assertEqual(self.proc.stdout.readline(), "READY\n")
             self.assertEqual(talk(self.path, 1)[1], 0)
 
+    def test_real_clear_dispatch_and_target_validation(self):
+        # These operations use the real IPC executor and public-core fixture.
+        target = bytearray(128)
+        target[0] = 2
+        target[4:8] = socket.inet_pton(socket.AF_INET, "192.0.2.2")
+        self.assertEqual(talk(self.path, 12, SELECTOR + target)[1], 0)
+        self.assertFalse(talk(self.path, 3)[3])
+        self.assertEqual(talk(self.path, 12, SELECTOR + target)[1], 0)
+        self.assertTrue(talk(self.path, 5)[3])
+        bad = bytearray(128)
+        bad[0] = 2
+        bad[2] = 32
+        bad[4:8] = socket.inet_pton(socket.AF_INET, "198.51.100.48")
+        self.assertEqual(talk(self.path, 13, SELECTOR + bad)[1], 0)
+        self.assertFalse(talk(self.path, 5)[3])
+
+    def test_malformed_clear_frames_rejected_without_mutation(self):
+        for op, body in (
+            (12, SELECTOR),
+            (13, SELECTOR),
+            (12, SELECTOR + bytes([3]) + bytes(127)),
+            (12, SELECTOR + bytes([1]) + bytes(127)),
+            (12, SELECTOR + bytes([2, 0, 1]) + bytes(125)),
+            (13, SELECTOR + bytes([2, 1, 32]) + bytes(125)),
+            (13, SELECTOR + bytes([2, 0, 33]) + bytes(125)),
+            (12, SELECTOR + bytes([0, 0, 0, 1]) + bytes(124)),
+        ):
+            with self.subTest(op=op, body=body[:20]):
+                self.assertEqual(talk(self.path, op, body)[1], 1)
+        self.assertEqual(talk(self.path, 3)[3][0]["address"], "192.0.2.2")
+        self.assertEqual(talk(self.path, 5)[3][0]["kind"], "prefix")
+
     def test_archive_boundary(self):
+        # Building the archive must not allocate another version. The fixture
+        # was compiled with this header, and its identity gate must still
+        # accept the same client after the nested make finishes.
+        header = ROOT / "eigrp/code/eigrp_build_version.h"
+        original = header.read_text()
+        release = re.search(r'#define EIGRP_RELEASE "([^"]+)"', original).group(1)
+        env = dict(os.environ, EIGRP_BUILD_VERSION=release)
         built = subprocess.run(["make", "-C", str(CODE),
                                 "libeigrp_linux_mgnt.a"],
-                               text=True, capture_output=True)
+                               text=True, capture_output=True, env=env)
         self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertEqual(header.read_text(), original)
         symbols = subprocess.run(["nm", "--defined-only",
                                   str(CODE / "libeigrp_linux_mgnt.a")],
                                  text=True, capture_output=True)
@@ -287,12 +433,31 @@ s.sendall(p(10,body));h=s.recv(16);print(struct.unpack("!IHHHHI",h)[3])
         self.assertIn("eigrp_linux_mgnt_stop", symbols.stdout)
         self.assertNotIn("eigrp_uut_", symbols.stdout)
 
+        scenario = json.loads(
+            (TEST / "uut/management-build-identity.yaml").read_text())
+        self.assertEqual(scenario["schema"],
+                         "linux-management-build-identity-uut/v1")
+        for case in scenario["cases"]:
+            with self.subTest(case=case["name"]):
+                identity = (release.encode() if case["identity"] == "built"
+                            else b"not-a-build")
+                with socket.socket(socket.AF_UNIX) as conn:
+                    conn.settimeout(2)
+                    conn.connect(str(self.path))
+                    _, status, _, rows = identify(conn, identity)
+                    self.assertEqual(status, case["status"])
+                    if status == 0:
+                        self.assertEqual(rows[0]["release"], release)
+                        conn.sendall(frame(1))
+                        self.assertEqual(get_reply(conn)[1], 0)
+
     def test_format(self):
         formatter = shutil.which("clang-format")
         if not formatter:
             self.skipTest("clang-format unavailable; mandatory style gate unverified")
         formatted = subprocess.run([formatter, "--dry-run", "--Werror",
                                     str(CODE / "eigrp_linux_mgnt.c"),
+                                    str(CODE / "eigrp_linux_version.c"),
                                     str(CODE / "eigrp_linux_mgnt.h"),
                                     str(TEST / "mgnt_fixture.c")],
                                    text=True, capture_output=True)

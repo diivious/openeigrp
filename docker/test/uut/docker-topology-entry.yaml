@@ -1,0 +1,71 @@
+schema: docker-topology-entry-uut/v1
+# Expected CLI entry rendering from eigrp_frr_named.c, using the prefixes,
+# next hops and metrics recorded in docker-uut.log on 2026-11-16.
+# The full-table display uses "P <prefix>,"; the entry display does not.
+outputs:
+  r1-learned: &r1-learned |
+    EIGRP-IPv4 VR(savage) Topology Entry for AS(4453)/ID(10.56.41.11) for 10.47.45.0/24
+      State is Passive (DUAL state 0), 1 successors, FD is 19660800
+      Replies pending: 0, serial number: 3
+            via 10.56.41.12 (19660800/13107200), eth0
+  r2-learned: &r2-learned |
+    EIGRP-IPv4 VR(savage) Topology Entry for AS(4453)/ID(10.56.41.12) for 10.53.41.0/24
+      State is Passive (DUAL state 0), 1 successors, FD is 19660800
+      Replies pending: 0, serial number: 3
+            via 10.56.41.11 (19660800/13107200), eth0
+  r1-connected: &r1-connected |
+    EIGRP-IPv4 VR(savage) Topology Entry for AS(4453)/ID(10.56.41.11) for 10.53.41.0/24
+      State is Passive (DUAL state 0), 1 successors, FD is 13107200
+      Replies pending: 0, serial number: 2
+            via Connected, eth1
+  r1-active: &r1-active |
+    EIGRP-IPv4 VR(savage) Topology Entry for AS(4453)/ID(10.56.41.11) for 10.47.45.0/24
+      State is Active (DUAL state 1), 1 successors, FD is 19660800
+      Replies pending: 1, serial number: 3
+            via 10.56.41.12 (19660800/13107200), eth0
+  missing: &missing |
+    EIGRP-IPv4 VR(savage) Topology Entry for AS(4453)/ID(10.56.41.11) for 10.47.45.0/24
+    % Network not in table
+  cli-error: &cli-error |
+    % Unknown command: show eigrp address-family ipv4 topology
+cases:
+  - name: r1-remote-prefix
+    prefix: 10.47.45.0/24
+    peer: 10.56.41.12
+    output: *r1-learned
+    present: true
+  - name: r2-remote-prefix
+    prefix: 10.53.41.0/24
+    peer: 10.56.41.11
+    output: *r2-learned
+    present: true
+  - name: active-entry-compatibility
+    prefix: 10.47.45.0/24
+    peer: 10.56.41.12
+    output: *r1-active
+    present: true
+  - name: incorrect-peer
+    prefix: 10.47.45.0/24
+    peer: 10.56.41.11
+    output: *r1-learned
+    present: false
+  - name: incorrect-prefix
+    prefix: 10.53.41.0/24
+    peer: 10.56.41.12
+    output: *r1-learned
+    present: false
+  - name: connected-route-is-not-learned
+    prefix: 10.53.41.0/24
+    peer: 10.56.41.12
+    output: *r1-connected
+    present: false
+  - name: missing-route
+    prefix: 10.47.45.0/24
+    peer: 10.56.41.12
+    output: *missing
+    present: false
+  - name: invalid-cli
+    prefix: 10.47.45.0/24
+    peer: 10.56.41.12
+    output: *cli-error
+    present: false

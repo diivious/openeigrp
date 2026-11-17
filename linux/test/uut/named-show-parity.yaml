@@ -1,0 +1,657 @@
+{
+  "schema": "linux-named-show-uut/v1",
+  "cases": [
+    {
+      "name": "named-ipv4-neighbors",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "4453",
+        "neighbors"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Address-family Neighbors for AS(4453)",
+        "Address                 Interface       Hold",
+        "192.0.2.2               eth0"
+      ],
+      "stdout_omits": [
+        "VR(default)",
+        "Cisco neighbor handle index"
+      ]
+    },
+    {
+      "name": "named-neighbor-detail-after-filter",
+      "argv": [
+        "show",
+        "neighbors",
+        "eth0",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "   State: up",
+        "Version 15.2/1.4 (TLV 2)",
+        "Retransmissions: 7, Current retries: 3",
+        "Reliable queue: 0, last received sequence: 123"
+      ],
+      "stdout_omits": [
+        "No EIGRP neighbors matched"
+      ]
+    },
+    {
+      "name": "named-neighbor-filter-missing",
+      "argv": [
+        "show",
+        "neighbors",
+        "no-such-interface"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "  No EIGRP neighbors matched no-such-interface"
+      ],
+      "stdout_omits": [
+        "Address                 Interface"
+      ]
+    },
+    {
+      "name": "named-ipv4-interfaces",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "4453",
+        "interfaces"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Address-family Interfaces for AS(4453)",
+        "Interface              Peers Bandwidth    Delay        Hello   Hold    Mean SRTT",
+        "(Kbit/s)     (10us)",
+        "eth\"0\\u000asecond"
+      ],
+      "stdout_omits": [
+        "Output Q",
+        "Pacing / Flow Timer"
+      ]
+    },
+    {
+      "name": "named-interface-detail-last",
+      "argv": [
+        "show",
+        "interfaces",
+        "eth\"0\nsecond",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "  Hello interval: 5 seconds",
+        "  Hold time: 15 seconds",
+        "  Bandwidth percent: 60%",
+        "  MTU: 1500, reliability: 240/255, load: 5/255",
+        "  TLV1 peers: 1, TLV2 peers: 1",
+        "  Mean SRTT: 42 ms",
+        "  Authentication: configured (mode 2)",
+        "  Split-horizon: enabled, next-hop-self: enabled",
+        "  Next hello: 3 seconds",
+        "  Un/reliable mcasts: 111/222",
+        "  Mcast exceptions: 5",
+        "  Pacing: 8000 bytes sent, 9 deferrals"
+      ]
+    },
+    {
+      "name": "named-interface-filter-missing",
+      "argv": [
+        "show",
+        "interfaces",
+        "Loopback1",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "  No EIGRP interfaces matched Loopback1"
+      ]
+    },
+    {
+      "name": "named-topology-asn-after-view",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "topology",
+        "4453"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Topology Table for AS(4453)/ID(192.0.2.1)",
+        "Codes: P - Passive, A - Active",
+        "r - reply Status, s - sia Status",
+        "P 198.51.100.48/32, 1 successors, FD is 12288",
+        "        via 192.0.2.2 (12288/6144), eth0"
+      ],
+      "stdout_omits": [
+        "serno",
+        "per-prefix flags are not exposed"
+      ],
+      "prefix_lines": 48
+    },
+    {
+      "name": "named-topology-all-links",
+      "argv": [
+        "show",
+        "topology",
+        "all-links"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "FD is 12288, serno 48"
+      ],
+      "prefix_lines": 48
+    },
+    {
+      "name": "named-topology-exact-entry",
+      "argv": [
+        "show",
+        "topology",
+        "198.51.100.48"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "Topology Entry for AS(4453)/ID(192.0.2.1) for 198.51.100.48/32",
+        "  State is Passive (DUAL state 2), 1 successors, FD is 12288",
+        "  Replies pending: 3, serial number: 48",
+        "Route is Internal, successor",
+        "Total vector: bandwidth 50000 Kbit/s, delay 5 us, reliability 230/255, load 7/255, MTU 1500, hop count 2",
+        "Reported vector: bandwidth 10000 Kbit/s, delay 1 us"
+      ],
+      "stdout_omits": [
+        "Topology Table",
+        "Codes: P - Passive"
+      ],
+      "prefix_lines": 0
+    },
+    {
+      "name": "named-traffic",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "4453",
+        "traffic"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Traffic Statistics for AS(4453)",
+        "  Hellos sent/received: 900/0",
+        "  Updates sent/received: 0/12",
+        "  SIA-Replies sent/received: 0/0"
+      ]
+    },
+    {
+      "name": "named-events",
+      "argv": [
+        "show",
+        "events"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Events for AS(4453)",
+        "Event information for AS 4453:",
+        "1  event\"\\u000anewline"
+      ],
+      "stdout_omits": [
+        "Event log: 1 entries",
+        "1970-01-02"
+      ]
+    },
+    {
+      "name": "named-timers",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "4453",
+        "timers"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Address-family Timers for AS(4453)",
+        "Hello Process\nExpiration Type",
+        "| 4.123 Hello (eth0)",
+        "SIA Process\n  No ACTIVE/SIA deadlines scheduled"
+      ],
+      "stdout_omits": [
+        "OpenEIGRP capabilities",
+        "Debug AFI"
+      ]
+    },
+    {
+      "name": "named-protocols",
+      "argv": [
+        "show",
+        "protocols"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "  Metric weights: K1=1, K2=0, K3=1, K4=0, K5=0, K6=0",
+        "  Metric version: classic (32-bit)",
+        "  Administrative distance: internal 90, external 170",
+        "  Maximum paths: 4, maximum hops: 100",
+        "  Variance: 2",
+        "  Active-time configured: 180 seconds",
+        "  Reachable topology prefixes: 48",
+        "  Redistributed prefixes: 3"
+      ],
+      "stdout_omits": [
+        "  K-values:",
+        "  Effective router-ID:"
+      ]
+    },
+    {
+      "name": "named-accounting-core-state",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "4453",
+        "accounting"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "Accounting for AS(4453)/ID(192.0.2.1)",
+        "Total Prefix Count: 48",
+        "192.0.2.2",
+        "Process topology: suspended, prefixes: 48, violations: 2",
+        "Redistribution: locked, prefixes: 3, violations: 4"
+      ]
+    },
+    {
+      "name": "named-static-neighbors-core-state",
+      "argv": [
+        "show",
+        "neighbors",
+        "static"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "Static Neighbors for AS(4453)",
+        "192.0.2.9",
+        "eth1",
+        "configured"
+      ]
+    },
+    {
+      "name": "named-timer-json-dedicated",
+      "argv": [
+        "show",
+        "timers",
+        "--json"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "\"kind\":\"timer\"",
+        "\"remaining_ms\":4123"
+      ],
+      "stdout_omits": [
+        "\"kind\":\"debug\"",
+        "\"kind\":\"capability\""
+      ]
+    },
+    {
+      "name": "named-interface-valid-measured-srtt",
+      "argv": [
+        "show",
+        "interfaces"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "Mean SRTT",
+        "100000       10           5       15      42"
+      ]
+    },
+    {
+      "name": "named-accounting-json-state",
+      "argv": [
+        "show",
+        "accounting",
+        "--json"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "\"kind\":\"accounting_summary\"",
+        "\"kind\":\"accounting_entry\"",
+        "\"process_penalty\":1234",
+        "\"redist_penalty\":5678"
+      ]
+    },
+    {
+      "name": "named-static-neighbors-json",
+      "argv": [
+        "show",
+        "neighbors",
+        "static",
+        "--json"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "\"static\":true",
+        "\"address\":\"192.0.2.9\""
+      ],
+      "stdout_omits": [
+        "192.0.2.2"
+      ]
+    },
+    {
+      "name": "named-static-neighbors-detail-accepted",
+      "argv": [
+        "show",
+        "neighbors",
+        "static",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP-IPv4 VR(eigrprulez) Static Neighbors for AS(4453)",
+        "192.0.2.9",
+        "Interface",
+        "State"
+      ],
+      "stdout_omits": [
+        "192.0.2.2",
+        "detail is unsupported"
+      ]
+    },
+    {
+      "name": "named-tech-support-frr-features-and-order",
+      "argv": [
+        "show",
+        "tech-support"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "EIGRP features:",
+        "EIGRP technical support: eigrprulez IPv4 AS 4453 VRF default",
+        "  Metric weights: K1=1",
+        "Address-family Interfaces for AS(4453)",
+        "Address-family Timers for AS(4453)",
+        "Accounting for AS(4453)",
+        "Event information for AS 4453:"
+      ],
+      "stdout_omits": [
+        "=== Protocols ===",
+        "Host Version:"
+      ]
+    },
+    {
+      "name": "named-protocol-metric-version",
+      "argv": [
+        "show",
+        "protocols"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "  Metric version: classic (32-bit)",
+        "  Administrative distance: internal 90, external 170",
+        "  Reachable topology prefixes: 48"
+      ],
+      "stdout_omits": [
+        "K-values:",
+        "Effective router-ID:"
+      ]
+    },
+    {
+      "name": "exact-neighbors",
+      "argv": [
+        "show",
+        "neighbors"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/neighbors.txt"
+    },
+    {
+      "name": "exact-interfaces",
+      "argv": [
+        "show",
+        "interfaces"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/interfaces.txt"
+    },
+    {
+      "name": "exact-topology-entry-all-links",
+      "argv": [
+        "show",
+        "topology",
+        "198.51.100.48",
+        "all-links"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/topology-entry-all-links.txt"
+    },
+    {
+      "name": "exact-protocols",
+      "argv": [
+        "show",
+        "protocols"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/protocols.txt"
+    },
+    {
+      "name": "exact-traffic",
+      "argv": [
+        "show",
+        "traffic"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/traffic.txt"
+    },
+    {
+      "name": "exact-timers",
+      "argv": [
+        "show",
+        "timers"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/timers.txt"
+    },
+    {
+      "name": "exact-accounting",
+      "argv": [
+        "show",
+        "accounting"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/accounting.txt"
+    },
+    {
+      "name": "exact-events",
+      "argv": [
+        "show",
+        "events"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/events.txt"
+    },
+    {
+      "name": "exact-static-neighbors",
+      "argv": [
+        "show",
+        "neighbors",
+        "static"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/static-neighbors.txt"
+    },
+    {
+      "name": "named-topology-entry-all-links-serno",
+      "argv": [
+        "show",
+        "topology",
+        "198.51.100.48",
+        "all-links"
+      ],
+      "returncode": 0,
+      "stdout_contains": [
+        "FD is 12288, serno 48\n",
+        "Replies pending: 3, serial number: 48"
+      ]
+    },
+    {
+      "name": "exact-capabilities",
+      "argv": [
+        "show",
+        "capabilities"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/capabilities.txt"
+    },
+    {
+      "name": "exact-neighbor-detail",
+      "argv": [
+        "show",
+        "neighbors",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/neighbor-detail.txt"
+    },
+    {
+      "name": "exact-interface-detail",
+      "argv": [
+        "show",
+        "interfaces",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/interface-detail.txt"
+    },
+    {
+      "name": "exact-topology",
+      "argv": [
+        "show",
+        "topology"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/topology.txt"
+    },
+    {
+      "name": "exact-topology-all-links",
+      "argv": [
+        "show",
+        "topology",
+        "all-links"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/topology-all-links.txt"
+    },
+    {
+      "name": "exact-diagnostics",
+      "argv": [
+        "show",
+        "diagnostics"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/diagnostics.txt"
+    },
+    {
+      "name": "interface-no-match-empty",
+      "fixture": "no-interfaces",
+      "argv": [
+        "show",
+        "interfaces"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/interfaces-empty.txt"
+    },
+    {
+      "name": "interface-detail-no-match-empty",
+      "fixture": "no-interfaces",
+      "argv": [
+        "show",
+        "interfaces",
+        "detail"
+      ],
+      "returncode": 0,
+      "stdout_equals_file": "fixtures/named-show/interfaces-empty.txt"
+    },
+    {
+      "name": "interface-no-match-json-remains-empty",
+      "fixture": "no-interfaces",
+      "argv": [
+        "show",
+        "interfaces",
+        "--json"
+      ],
+      "returncode": 0,
+      "json_lines": 0
+    },
+    {
+      "name": "protocols-over-128-scopes",
+      "fixture": "many",
+      "argv": [
+        "show",
+        "protocols",
+        "--json"
+      ],
+      "returncode": 0,
+      "json_lines": 141,
+      "stdout_contains": [
+        "\"instance\":\"bulk-139\"",
+        "\"asn\":5139"
+      ]
+    },
+    {
+      "name": "interfaces-over-128-scopes",
+      "fixture": "many",
+      "argv": [
+        "show",
+        "interfaces"
+      ],
+      "returncode": 0,
+      "heading_count": [
+        "Address-family Interfaces for AS(",
+        141
+      ],
+      "stdout_contains": [
+        "VR(bulk-139) Address-family Interfaces for AS(5139)"
+      ]
+    },
+    {
+      "name": "select-last-of-141-scopes",
+      "fixture": "many",
+      "argv": [
+        "show",
+        "address-family",
+        "ipv4",
+        "5139",
+        "interfaces"
+      ],
+      "returncode": 0,
+      "heading_count": [
+        "Address-family Interfaces for AS(",
+        1
+      ],
+      "stdout_contains": [
+        "VR(bulk-139) Address-family Interfaces for AS(5139)"
+      ]
+    },
+    {
+      "name": "tech-support-over-128-scopes",
+      "fixture": "many",
+      "argv": [
+        "show",
+        "tech-support"
+      ],
+      "returncode": 0,
+      "heading_count": [
+        "EIGRP technical support:",
+        141
+      ],
+      "stdout_contains": [
+        "EIGRP technical support: bulk-139 IPv4 AS 5139"
+      ]
+    }
+  ]
+}

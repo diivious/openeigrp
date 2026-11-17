@@ -42,7 +42,7 @@ vtysh / frr-reload / netconf
         v
 FRR YANG + VTY parser          frr/code/eigrp_frr_named.c
         |                      frr/code/eigrp_frr_classic.c
-        |                      frr/patch YANG schema
+        |                      upstream FRR YANG schema
         v
 northbound adapter             frr/code/eigrp_northbound.c + AF-specific modules
         |
@@ -162,15 +162,14 @@ The supported FRR path is documented in the top-level `README.md` and in
 
 ```sh
 frr/tools/frr.sh --install --frr-root ../frr
-# Only on the older FRR frr-10.7.1 release:
-frr/tools/frr.sh --patch --frr-root ../frr
 frr/tools/frr.sh --build --frr-root ../frr
 ```
 
-`--install` copies `eigrp/code/` plus the adapter files in `code/` into `frr/eigrpd/`.
-`--patch` applies `patch/` onto FRR sources outside that directory. It is
-required only for FRR `frr-10.7.1`; upstream `master` incorporates these
-changes through FRRouting/frr#23767 and must not receive the legacy patches.
+`--install` validates upstream FRR's named-mode YANG and VTY support before
+staging `eigrp/code/` and the adapter files from `frr/code/` into FRR's
+`eigrpd/` directory. The installer does not modify FRR-wide source files.
+The development Docker baseline is an immutable FRR master commit selected
+in `docker/docker.cfg`.
 
 ## What not to copy onto a new host
 

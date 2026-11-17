@@ -55,7 +55,7 @@ check_file()
     ' "$work/manifest" || fail "missing or unsafe package entry: $file"
 }
 check_file usr/sbin/openeigrpd -rwxr-xr-x
-check_file usr/bin/oectl -rwxr-xr-x
+check_file usr/bin/eigrp -rwxr-xr-x
 check_file usr/bin/openeigrpd-config -rwxr-xr-x
 check_file etc/openeigrpd.conf -rw-------
 check_file usr/lib/systemd/system/openeigrpd.service -rw-r--r--
@@ -66,13 +66,13 @@ check_file usr/lib/sysusers.d/openeigrpd.conf -rw-r--r--
 awk '
     BEGIN {
         allowed["./usr/sbin/openeigrpd"] = 1
-        allowed["./usr/bin/oectl"] = 1
+        allowed["./usr/bin/eigrp"] = 1
         allowed["./usr/bin/openeigrpd-config"] = 1
         allowed["./etc/openeigrpd.conf"] = 1
         allowed["./usr/lib/systemd/system/openeigrpd.service"] = 1
         allowed["./usr/lib/sysusers.d/openeigrpd.conf"] = 1
         allowed["./usr/share/man/man5/openeigrpd.conf.5"] = 1
-        allowed["./usr/share/man/man8/oectl.8"] = 1
+        allowed["./usr/share/man/man8/eigrp.8"] = 1
         allowed["./usr/share/man/man8/openeigrpd.8"] = 1
     }
     $1 ~ /^d/ {

@@ -20,8 +20,6 @@ TOPOLOGY = ROOT / "eigrpd" / "code" / "eigrp_topology.c"
 STATISTICS = ROOT / "eigrpd" / "code" / "eigrp_statistics.c"
 TIMER = ROOT / "eigrpd" / "code" / "eigrp_timer.c"
 UUT = ROOT / "tools" / "frr-named-uut.sh"
-SERIES = ROOT / "frr" / "patch" / "series"
-YANG_PATCH = ROOT / "frr" / "patch" / "frr-eigrp-yang.patch"
 DESIGN = ROOT / "specs" / "design-spec.md"
 PROCESS = ROOT / "specs" / "design-spec.md"
 
@@ -90,7 +88,6 @@ def test_router_id_refresh_uses_af_event_path_for_both_families():
 def test_ipv4_and_ipv6_summaries_share_generic_prefix_storage_and_targets():
     vty = read(VTY)
     northbound = (read(NORTHBOUND) + read(NORTHBOUND.with_name("eigrp_frr_ipv4.c")) + read(NORTHBOUND.with_name("eigrp_frr_ipv6.c")))
-    patch = read(YANG_PATCH)
 
     assert '"summary-address X:X::X:X/M' in vty
     assert '"summary-metric X:X::X:X/M' in vty
@@ -100,7 +97,6 @@ def test_ipv4_and_ipv6_summaries_share_generic_prefix_storage_and_targets():
     assert "prefix.address.afi != afi" in northbound
     assert "eigrp_summary_create(&context, &prefix" in northbound
     assert "eigrp_summary_metric_update(EIGRP_SET, &context, &prefix" in northbound
-    assert 'type inet:ip-prefix;' in patch
 
 
 def test_stage2_precedes_multi_as_and_mirrors_applicable_command_families():
@@ -127,26 +123,10 @@ def test_stage2_precedes_multi_as_and_mirrors_applicable_command_families():
     assert '"auto-summary"' not in stage2
 
 
-def test_managed_patch_and_design_spec_record_ipv6_control_runtime_contract():
-    series = read(SERIES)
+def test_design_spec_records_ipv6_control_runtime_contract():
     design = read(DESIGN)
-    process = read(PROCESS)
-    process_words = " ".join(process.split())
-
-    patches = [
-        line.strip()
-        for line in series.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    assert patches == ["vtysh-named-eigrp.patch", "frr-eigrp-yang.patch"]
-    yang_patch = read(YANG_PATCH)
-    assert 'description "IPv4 or IPv6 summary prefix";' in yang_patch
-    assert 'description "Fixed metric for an IPv4 or IPv6 summary aggregate";' in yang_patch
-    assert 'key "protocol route-instance";' in yang_patch
-    assert 'type eigrp-redistribution-protocol;' in yang_patch
-    assert 'type eigrp-redistribution-route-instance;' in yang_patch
-    assert "A BGP ASN or IS-IS area tag is a protocol" in yang_patch
-    assert "per-instance data-path readiness flag" in process
+    process_words = " ".join(read(PROCESS).split())
+    assert "per-instance data-path readiness flag" in read(PROCESS)
     assert "EIGRP Stub routing is explicitly outside project scope" in design
     assert "IPv4 and IPv6 use the same lifecycle rule" in process_words
 

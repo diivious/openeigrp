@@ -19,7 +19,7 @@ not production certification of any particular host.
 
 | Host | IPv4 | IPv6 | Configuration / operations | Status |
 |---|---|---|---|---|
-| Native Linux | Raw protocol-88 socket implemented | Native IPv6 packet transport implemented | Named-mode subset, `oectl`, systemd and `.deb` | Native integration implemented; live privileged and Cisco qualification required |
+| Native Linux | Raw protocol-88 socket implemented | Native IPv6 packet transport implemented | Named-mode subset, `eigrp`, systemd and `.deb` | Native integration implemented; live privileged and Cisco qualification required |
 | FRR | Adapter implemented | Adapter implemented | FRR host CLI/management | Qualify against selected FRR tree; feature surface differs from native Linux |
 | Unix UUT | Synthetic | Synthetic | Scenario-driven | Test-only host, no live kernel routing |
 | BIRD | Not implemented | Not implemented | Not implemented | Deferred |
@@ -33,14 +33,14 @@ not production certification of any particular host.
   Redistribution supports Linux `connected` and `static` sources.
 - MD5 key-chain authentication is supported; HMAC-SHA-256 and encoded type-7
   key material are not supported by the native configuration path.
-- `oectl` is observational except `clear events`. Its `show routes` is a
+- `eigrp` is observational except `clear events`. Its `show routes` is a
   portable topology view, **not** a Linux kernel route dump.
 - Management IPC pagination is bounded (offset at most 8192) and cannot
   guarantee a stable snapshot while the topology changes.
 
 For specific Linux commands, see [Linux README](../linux/README.md),
 [configuration manual](../linux/packaging/man/openeigrpd.conf.5) and
-[control-client manual](../linux/packaging/man/oectl.8).
+[control-client manual](../linux/packaging/man/eigrp.8).
 
 ## Protocol authority
 

@@ -1,0 +1,11 @@
+OpenEIGRP capabilities (release test"fixture):
+  ipv4              : Supported
+  ipv6              : Not Supported
+  tlv1              : Supported
+  tlv2              : Supported
+  wide_metrics      : Not Supported
+  bfd               : Not Supported
+  snmp              : Not Supported
+  manet             : Not Supported
+  mtr               : Not Supported
+  evn               : Not Supported

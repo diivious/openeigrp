@@ -66,6 +66,15 @@ jobs:
         with:
           fetch-depth: 0 # Complete history is needed for multi-commit push/PR diffs.
 
+      - name: Pin CI build identity across workflow steps
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(./tools/version.sh --ci)"
+          ./tools/build-version.sh --binary "$version" >/dev/null
+          printf 'EIGRP_BUILD_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'OpenEIGRP CI build identity: %s\n' "$version"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -99,7 +108,12 @@ jobs:
               base="$(git rev-parse HEAD^)"
               ;;
           esac
-          make check STYLE_CHECK_BASE="$base"
+          ./tools/python tools/style-check.py --base "$base"
+          ./tools/python tools/test/test_style_check.py
+          ./tools/python tools/test/test_style_fix.py
+
+      - name: Verify local and CI gate parity
+        run: python3 -m unittest -q tools.test.test_ci_parity
 
       - name: Build native Linux daemon and portable sources
         run: make linux
@@ -107,12 +121,8 @@ jobs:
       - name: Run native Linux management and IPv6 packet regressions
         run: python3 -m pytest -q linux/test/test_mgnt.py linux/test/test_ipv6_packet.py
 
-      - name: Run pacing, topology-index, and fresh-uptime smoke tests
-        run: |
-          python3 -m pytest -q \
-            eigrp/test/packet/pacing.py \
-            eigrp/test/scale/test_table_index.py \
-            eigrp/test/uut/test_process_limit_low_uptime.py
+      - name: Run the same PR smoke gate as pre-commit
+        run: make _ci-smoke
 
   codeql:
     name: CodeQL / Analyze (${{ matrix.language }})
@@ -137,6 +147,8 @@ jobs:
     steps:
       - name: Check out EIGRP
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # CI version is derived from the checked-out commit.
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -170,6 +182,8 @@ jobs:
     steps:
       - name: Check out EIGRP
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # CI version is derived from the checked-out commit.
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -179,31 +193,26 @@ jobs:
       - name: Install portable test and style dependencies
         run: python3 -m pip install pytest PyYAML clang-format
 
-      - name: Run branch and PR portable YAML smoke gate
+      - name: Run PR smoke gate on the target platform
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/master') }}
-        shell: bash
         env:
           EIGRP_PYTHON: python3
-        run: |
-          set -euo pipefail
-          make -C eigrp/test/uut eigrp-uut-node
-          for scenario in \
-            examples/ipv4-basic-core-gate.yaml \
-            examples/ipv6-basic-core-gate.yaml \
-            rtp/lost-ack.yaml \
-            dual-diamond/feasible-successor.yaml; do
-            python3 eigrp/test/uut/run_all.py --scenario "$scenario"
-          done
+        run: make _ci-smoke
 
-      - name: Run full regression after master merge or manual dispatch
+      - name: Run portable and native regression after merge or manual dispatch
         if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
         shell: bash
         env:
           EIGRP_PYTHON: python3
+          RUNNER_OS: ${{ runner.os }}
         run: |
           set -o pipefail
           mkdir -p logs/uut/eigrp/ci
-          make all 2>&1 | tee logs/uut/eigrp/ci/make-all.log
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            make all
+          else
+            make _ci-core
+          fi 2>&1 | tee logs/uut/eigrp/ci/make-core.log
 
       - name: Trace Linux UUT aborts on failure
         if: ${{ failure() && runner.os == 'Linux' }}

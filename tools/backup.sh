@@ -100,7 +100,7 @@ rm -rf -- "$backup_dir/logs" "$backup_dir/frr/test/build/obj" \
     "$backup_dir/frr/test/build/logs"
 rm -f -- "$backup_dir/eigrp/test/uut/eigrp-uut-node" \
     "$backup_dir/libunix/code/eigrp-wire" \
-    "$backup_dir/linux/code/openeigrpd" "$backup_dir/linux/code/oectl" \
+    "$backup_dir/linux/code/openeigrpd" "$backup_dir/linux/code/eigrp" \
     "$backup_dir/linux/code/openeigrpd-config"
 
 # Write a complete archive alongside its final destination before replacing

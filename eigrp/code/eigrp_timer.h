@@ -27,6 +27,8 @@ void eigrp_timer_add(eigrp_instance_t *eigrp, eigrp_timer_event_t **owner,
 		     eigrp_event_callback_t callback, void *arg,
 		     uint32_t delay_msec);
 void eigrp_timer_cancel(eigrp_instance_t *eigrp, eigrp_timer_event_t **owner);
+uint64_t eigrp_timer_remaining_msec(eigrp_instance_t *eigrp,
+				    const eigrp_timer_event_t *event);
 uint32_t eigrp_timer_remaining_seconds(eigrp_instance_t *eigrp,
 				       const eigrp_timer_event_t *event);
 void eigrp_timer_cancel_all(eigrp_instance_t *eigrp);

@@ -1,0 +1,19 @@
+{
+  "schema": "eigrp-ci-build-version-uut/v1",
+  "cases": [
+    {"name": "pr-two-architectures", "event": "pull_request", "ref": "refs/pull/27/merge", "version": "0.5.0-merge.dev", "release": "no"},
+    {"name": "manual-ci-two-architectures", "event": "workflow_dispatch", "ref": "refs/heads/cli-formatting", "version": "0.5.0-merge.dev", "release": "no"},
+    {"name": "tagged-production-two-architectures", "event": "push", "ref": "refs/tags/rel-0.5", "version": "0.5", "release": "yes"}
+  ],
+  "direct_make_cases": [
+    {"name": "independent-ci-step", "inherited": {}},
+    {"name": "local-precommit-makeflags", "inherited": {
+      "EIGRP_BUILD_VERSION": "0.5.8-diivious.dev",
+      "MAKEFLAGS": " -- EIGRP_BUILD_VERSION=0.5.8-diivious.dev"}},
+    {"name": "recursive-make-override-flags", "inherited": {
+      "EIGRP_BUILD_VERSION": "0.5.9-diivious.dev",
+      "MFLAGS": "-- EIGRP_BUILD_VERSION=0.5.9-diivious.dev",
+      "GNUMAKEFLAGS": "-- EIGRP_BUILD_VERSION=0.5.9-diivious.dev",
+      "MAKEOVERRIDES": "EIGRP_BUILD_VERSION=0.5.9-diivious.dev"}}
+  ]
+}

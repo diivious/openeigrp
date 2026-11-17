@@ -1,0 +1,14 @@
+schema: docker-frr-feature-uut/v1
+# Module features supplied to FRR northbound when EIGRP's schema is loaded.
+# The named hierarchy is gated by if-feature openeigrp in FRR's native YANG.
+cases:
+  - name: named-feature-enabled
+    feature: openeigrp
+    available: true
+  - name: unknown-feature-disabled
+    feature: unrelated-feature
+    available: false
+  - name: omitted-module-features
+    feature: openeigrp
+    without_features: true
+    available: false

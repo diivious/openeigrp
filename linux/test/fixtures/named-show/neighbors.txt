@@ -1,0 +1,5 @@
+
+EIGRP-IPv4 VR(eigrprulez) Address-family Neighbors for AS(4453)
+Address                 Interface       Hold  Uptime   SRTT   RTO   Q   Seq       
+                                        (sec)          (ms)   (ms)  Cnt Num       
+192.0.2.2               eth0            12    00:10:00 33     500   0   123       

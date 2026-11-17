@@ -21,7 +21,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 DAEMON = ROOT / "linux" / "code" / "openeigrpd"
-CLIENT = ROOT / "linux" / "code" / "oectl"
+CLIENT = ROOT / "linux" / "code" / "eigrp"
 
 
 class NativeDaemonTests(unittest.TestCase):
@@ -83,8 +83,8 @@ class NativeDaemonTests(unittest.TestCase):
         self.assertEqual(self.socket.stat().st_mode & 0o777, 0o660)
         report = self.ctl("show", "capabilities")
         self.assertEqual(report.returncode, 0, report.stderr)
-        self.assertIn("ipv4=true", report.stdout)
-        self.assertIn("ipv6=true", report.stdout)
+        self.assertIn("ipv4              : Supported", report.stdout)
+        self.assertIn("ipv6              : Supported", report.stdout)
         self.assertNotEqual(self.ctl("show", "protocols", "--asn", "4453").returncode, 0)
         self.proc.send_signal(signal.SIGTERM)
         output, errors = self.proc.communicate(timeout=8)

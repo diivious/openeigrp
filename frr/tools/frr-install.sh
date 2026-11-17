@@ -7,8 +7,8 @@
 #
 # The project keeps common EIGRP source in eigrp/ and FRR-specific source in
 # frr/.  FRR itself still expects one flattened eigrpd/ source directory, so
-# this installer owns that projection.  Any required modification outside
-# FRR's eigrpd/ directory is carried as a patch under frr/patch/.
+# this installer owns that projection. FRR-wide YANG and vtysh support must
+# already be supplied by the selected upstream revision.
 
 set -euo pipefail
 
@@ -19,14 +19,13 @@ eigrp_root="$(cd "$script_dir/../.." && pwd)"
 frr_root=""
 install_eigrpd=1
 install_tests=1
-install_patches=1
+schema_only=0
 dry_run=0
 
 common_src="$eigrp_root/eigrp/code"
 frr_src="$eigrp_root/frr/code"
 frr_test_src="$eigrp_root/frr/test/eigrpd"
 frr_topotest_src="$eigrp_root/frr/test/topotests"
-frr_patch_src="$eigrp_root/frr/patch"
 
 usage() {
 	cat <<USAGE
@@ -37,7 +36,8 @@ options:
                         ../frr, ~/devel/frr, or parent when run from an FRR tree.
   --no-eigrpd           Do not assemble/install FRR/eigrpd/.
   --no-tests            Do not copy frr/test/ into FRR tests/eigrpd/.
-  --no-patches          Do not apply required patches from frr/patch/.
+  --schema-only         Validate upstream EIGRP YANG/vtysh and refresh embedded YANG;
+                        do not stage daemon/tests.
   --dry-run             Validate and print actions without changing FRR.
   --help                Show this help.
 
@@ -45,12 +45,8 @@ installs:
   eigrp/code/ + frr/code/* -> FRR/eigrpd/
   frr/test/eigrpd/      -> FRR/tests/eigrpd/
   frr/test/topotests/    -> FRR/tests/topotests/
-  frr/patch/*.patch     -> applied at the FRR repository root
 
-Patch handling is idempotent.  frr/patch/series defines dependency order when
-present.  Each patch is checked in reverse first; an already-applied patch is
-left alone, a clean forward patch is applied, and any conflict stops the
-install rather than guessing at an FRR source change.
+Only native FRR schema and VTY support are accepted; no FRR-wide source edits.
 USAGE
 }
 
@@ -95,60 +91,31 @@ infer_frr_root() {
 	return 1
 }
 
-# A rel-X.Y.Z Git tag on the EIGRP checkout identifies a Docker publication.
-# The runtime release string is X.Y.Z, independent of development maturity.
-eigrp_release_tag() {
-	local tag selected=""
-
-	command -v git >/dev/null 2>&1 || return 1
-	git -C "$eigrp_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-		|| return 1
-	while IFS= read -r tag; do
-		[[ "$tag" =~ ^rel-[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-		if [[ -n "$selected" ]]; then
-			echo "error: multiple release tags at HEAD; set EIGRP_BUILD_VERSION" >&2
-			return 2
-		fi
-		selected="${tag#rel-}"
-	done < <(git -C "$eigrp_root" tag --points-at HEAD)
-	[[ -n "$selected" ]] || return 1
-	printf '%s\n' "$selected"
-}
-
 inject_eigrp_release() {
 	local stage="$1"
-	local header="$stage/eigrp_features.h"
 	local release=""
 	local tag=""
-	local lookup_status=0
 
-	[[ -f "$header" ]] || fail "staged feature header not found: $header"
-
-	# Explicit build versions take priority. A release version must be tied
-	# to the corresponding immutable EIGRP source tag at HEAD; this does not
-	# require a matching tag in the independent FRR repository.
+	# Release builds must correspond to the tagged source at HEAD.
 	if [[ -n "${EIGRP_BUILD_VERSION:-}" ]]; then
-		[[ "$EIGRP_BUILD_VERSION" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]] || \
-			fail "invalid EIGRP_BUILD_VERSION: $EIGRP_BUILD_VERSION"
-		if [[ "$EIGRP_BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-			tag="rel-$EIGRP_BUILD_VERSION"
+		release="$EIGRP_BUILD_VERSION"
+		if [[ "$release" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+			tag="rel-$release"
 			git -C "$eigrp_root" tag --points-at HEAD --list "$tag" \
 				| grep -Fxq "$tag" || \
 				fail "release build requires EIGRP tag $tag at HEAD"
 		fi
-		release="$EIGRP_BUILD_VERSION"
 	else
-		release="$(eigrp_release_tag)" || lookup_status=$?
-		[[ "$lookup_status" -le 1 ]] || fail "unable to select an unambiguous OpenEIGRP release tag"
-	fi
-	if [[ -z "$release" ]]; then
-		echo "warning: no OpenEIGRP release tag or build version; using development" >&2
-		return 0
+		release="$("$eigrp_root/tools/version.sh" --local)" || \
+			fail "unable to resolve OpenEIGRP development version"
 	fi
 
-	sed -i \
-		-e 's/^#define EIGRP_RELEASE ".*"/#define EIGRP_RELEASE "'"$release"'"/' \
-		"$header"
+	# Always regenerate the staged header through the same generator as the
+	# portable Makefile.  Never mutate the feature contract or copy a stale
+	# local header into an independently staged FRR build.
+	python3 "$eigrp_root/tools/gen-version.py" \
+		--version "$release" --output "$stage/eigrp_build_version.h" || \
+		fail "unable to generate OpenEIGRP build identity"
 	echo "release: $release"
 }
 
@@ -313,58 +280,6 @@ eigrp_grammar_schema_current() {
 	return 0
 }
 
-patch_state() {
-	local patch_file="$1"
-
-	# Reverse first so an already-applied patch is never applied a second time.
-	# With one managed patch per upstream file, no later project patch can alter
-	# the same target and invalidate this reverse check.
-	if git -C "$frr_root" apply --reverse --check "$patch_file" >/dev/null 2>&1; then
-		printf '%s\n' applied
-		return 0
-	fi
-
-	if git -C "$frr_root" apply --check "$patch_file" >/dev/null 2>&1; then
-		printf '%s\n' pending
-		return 0
-	fi
-
-	printf '%s\n' conflict
-}
-
-install_patch_file() {
-	local patch_file="$1"
-	local state
-
-	state="$(patch_state "$patch_file")"
-	case "$state" in
-		pending)
-			if [[ "$dry_run" -eq 1 ]]; then
-				echo "would apply patch: $(basename "$patch_file")"
-			else
-				echo "apply patch: $(basename "$patch_file")"
-				git -C "$frr_root" apply "$patch_file"
-			fi
-			;;
-		applied)
-			echo "already patched: $(basename "$patch_file")"
-			;;
-		conflict)
-			cat >&2 <<MSG
-error: FRR patch does not apply cleanly and does not appear to be already applied:
-  $patch_file
-
-The FRR source may have changed or the same feature may have been modified
-independently.  Refusing to patch with fuzz or partial context.
-MSG
-			exit 1
-			;;
-		*)
-			fail "unknown patch state '$state' for $patch_file"
-			;;
-	esac
-}
-
 invalidate_eigrp_yang_embed() {
 	local count
 	local yang_source="$frr_root/yang/frr-eigrpd.yang"
@@ -373,9 +288,8 @@ invalidate_eigrp_yang_embed() {
 	[[ -f "$yang_source" ]] || fail "FRR EIGRP YANG source not found: $yang_source"
 
 	# The .yang source is authoritative. FRR generates frr-eigrpd.yang.c as a
-	# build artifact. With one managed patch owning this source file, duplicate
-	# or partial schema state is source drift and must fail rather than be repaired
-	# by reversing one layer of an overlapping patch stack.
+	# build artifact. Incompatible or duplicate upstream schema is rejected,
+	# not rewritten or repaired by the installer.
 	if [[ "$dry_run" -eq 1 ]]; then
 		echo "would validate: exactly one EIGRP named-mode schema node"
 		echo "would remove generated: yang/frr-eigrpd.yang.c"
@@ -384,59 +298,10 @@ invalidate_eigrp_yang_embed() {
 
 	count="$(grep -Ec '^[[:space:]]*list[[:space:]]+named[[:space:]]*\{' "$yang_source" || true)"
 	[[ "$count" -eq 1 ]] || \
-		fail "expected exactly one EIGRP named-mode schema node after patch installation; found $count"
+		fail "expected exactly one upstream EIGRP named-mode schema node; found $count"
 
 	rm -f "$yang_embed"
 	echo "invalidated generated: yang/frr-eigrpd.yang.c (FRR build will regenerate it)"
-}
-
-install_frr_patches() {
-	local -a patch_files=()
-	local patch_file
-	local patch_name
-	local series_file="$frr_patch_src/series"
-
-	[[ -d "$frr_patch_src" ]] || {
-		echo "warning: FRR patch directory not found: $frr_patch_src" >&2
-		return 0
-	}
-
-	# Keep an explicit series even when the current per-file patches are
-	# independent so installation order remains stable and reviewable.
-	if [[ -f "$series_file" ]]; then
-		while IFS= read -r patch_name || [[ -n "$patch_name" ]]; do
-			patch_name="${patch_name%%#*}"
-			patch_name="$(printf '%s' "$patch_name" | xargs)"
-			[[ -n "$patch_name" ]] || continue
-			[[ "$patch_name" == *.patch ]] || fail "invalid patch series entry: $patch_name"
-			patch_file="$frr_patch_src/$patch_name"
-			[[ -f "$patch_file" ]] || fail "patch series file references missing patch: $patch_file"
-			patch_files+=("$patch_file")
-		done < "$series_file"
-	else
-		shopt -s nullglob
-		patch_files=("$frr_patch_src"/*.patch)
-		shopt -u nullglob
-	fi
-
-	if [[ "${#patch_files[@]}" -eq 0 ]]; then
-		echo "patches: none"
-		return 0
-	fi
-
-	for patch_file in "${patch_files[@]}"; do
-		install_patch_file "$patch_file"
-	done
-
-	if [[ "$dry_run" -eq 1 ]]; then
-		echo "would validate: current EIGRP YANG grammar/callback shape"
-	elif ! eigrp_grammar_schema_current; then
-		fail "managed EIGRP YANG schema does not match the current CLI/northbound grammar"
-	fi
-
-	# Keep FRR's generated embedded EIGRP model synchronized with the patched
-	# authoritative .yang source after managed schema patches are applied.
-	invalidate_eigrp_yang_embed
 }
 
 while [[ "$#" -gt 0 ]]; do
@@ -454,8 +319,10 @@ while [[ "$#" -gt 0 ]]; do
 			install_tests=0
 			shift
 			;;
-		--no-patches)
-			install_patches=0
+		--schema-only)
+			schema_only=1
+			install_eigrpd=0
+			install_tests=0
 			shift
 			;;
 		--dry-run)
@@ -488,10 +355,18 @@ git -C "$frr_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
 [[ -d "$common_src" ]] || fail "missing project eigrpd directory: $common_src"
 [[ -d "$frr_src" ]] || fail "missing project FRR directory: $frr_src"
 
-# Global FRR modifications are checked/applied before daemon staging so a
-# version-drift conflict fails without first replacing FRR/eigrpd/.
-if [[ "$install_patches" -eq 1 ]]; then
-	install_frr_patches
+# Native FRR integration is a prerequisite for every staging/build action.
+# A source without required named-mode support is not an installable target.
+if ! eigrp_grammar_schema_current; then
+	fail "FRR YANG schema lacks required upstream EIGRP named-mode support"
+fi
+if ! grep -Fq 'router eigrp <(1-65535)|WORD>' "$frr_root/vtysh/vtysh.c" ||
+   ! grep -Fq 'install_element(EIGRP_NODE, &router_eigrp_cmd);' "$frr_root/vtysh/vtysh.c"; then
+	fail "FRR vtysh lacks required upstream EIGRP named-mode support"
+fi
+if [[ "$schema_only" -eq 1 ]]; then
+	invalidate_eigrp_yang_embed
+	exit 0
 fi
 
 if [[ "$install_eigrpd" -eq 1 ]]; then

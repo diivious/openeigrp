@@ -1,0 +1,29 @@
+{
+  "schema": "linux-client-identity-uut/v1",
+  "cases": [
+    {
+      "name": "json-version",
+      "argv": ["--json", "version"],
+      "returncode": 0,
+      "json_fields": {"kind": "integration", "client": "eigrp"}
+    },
+    {
+      "name": "json-version-suffix",
+      "argv": ["version", "--json"],
+      "returncode": 0,
+      "json_fields": {"kind": "integration", "client": "eigrp"}
+    },
+    {
+      "name": "usage-name",
+      "argv": ["help"],
+      "returncode": 0,
+      "stdout_contains": "Usage: eigrp "
+    },
+    {
+      "name": "error-name",
+      "argv": ["--invalid-option"],
+      "returncode": 2,
+      "stderr_contains": "eigrp: unknown option"
+    }
+  ]
+}

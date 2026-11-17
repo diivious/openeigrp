@@ -1,0 +1,4 @@
+
+EIGRP-IPv4 VR(eigrprulez) Static Neighbors for AS(4453)
+Address                                  Interface              State       
+192.0.2.9                                eth1                   configured  

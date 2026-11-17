@@ -9,15 +9,15 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 usage() {
     cat <<'USAGE'
 Usage:
-  linux/packaging/package.sh --local [LABEL|X.Y.Z] [--platform linux/amd64|linux/arm64]
+  linux/packaging/package.sh --local [LABEL] [--platform linux/amd64|linux/arm64]
                            [--image NAME:TAG] [--builder-image DEBIAN_IMAGE]
                            [--output DIR]
   linux/packaging/package.sh --uut [--platform linux/amd64|linux/arm64]
                          [--builder-image DEBIAN_IMAGE]
 
   --local     Build a production .deb from local working sources. Versions
-              are latest rel-X.Y.Z on origin/master plus -LABEL; default
-              LABEL is $USER-test. Exact release X.Y.Z is preserved.
+              are latest rel-MAJOR.MINOR on origin/master plus -LABEL; default
+              LABEL is $USER. Build counters increment locally.
               A real daemon is required.
   --uut       In a disposable container, compile native Linux components,
               build test-fixture packages and run the real dpkg install,
@@ -55,7 +55,7 @@ case "$operation" in
     *) usage >&2; die "unknown operation: $operation" ;;
 esac
 
-version="${USER:-$(id -un)}-test"
+version="${USER:-$(id -un)}"
 if [[ "$operation" == --local && $# -gt 0 && "$1" != --* ]]; then
     version="$1"
     shift
@@ -92,7 +92,7 @@ if [[ "$operation" == --uut ]]; then
     [[ -z "$related_image" ]] ||
         die '--image applies only to --local; use --builder-image for UUT'
     exec "$root/linux/packaging/build-packages.sh" --uut \
-        --version 0.0.0~uut --arch "${platform#linux/}" --image "$builder_image"
+        --version "$("$root/tools/version.sh" --local "${USER:-$(id -un)}" --repo "$root")" --arch "${platform#linux/}" --image "$builder_image"
 fi
 
 # Keep this in lockstep with frr/tools/docker.sh: the builder and the OCI version
