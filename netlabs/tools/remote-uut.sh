@@ -10,27 +10,38 @@ usage() {
     cat <<'HELP'
 Usage: netlabs/tools/remote-uut.sh --list
        netlabs/tools/remote-uut.sh --update
-       netlabs/tools/remote-uut.sh --all [--image TAG]
-       netlabs/tools/remote-uut.sh --rtp [--image TAG]
-       netlabs/tools/remote-uut.sh --dual [--image TAG]
-       netlabs/tools/remote-uut.sh --scenario 2R-neighbor [--image TAG]
+       netlabs/tools/remote-uut.sh [--local] [--tag VERSION] --all|--container|--package
+       netlabs/tools/remote-uut.sh [--local] [--tag VERSION] --rtp|--dual
+       netlabs/tools/remote-uut.sh [--local] [--tag VERSION] --scenario NAME
        netlabs/tools/remote-uut.sh --purge
        netlabs/tools/remote-uut.sh --abort
 
---list       List discoverable complete 2R-6R live scenarios.
---update     Explicitly refresh the installed OpenEIGRP release image.
---all        Run all netlabs regressions on Linux, then all runnable live cases.
---rtp        Run infra/RTP regressions, then all runnable RTP live cases.
---dual       Run infra/DUAL regressions, then all runnable DUAL live cases.
---scenario   Run exactly one live scenario without the local regression suite.
---image TAG  Use locally built openeigrp:TAG (no build); transfer only if image ID differs.
---purge      Remove netlabs reports and development images on client and server.
---abort      Stop an interrupted run, restore faults, and tear down its lab.
+--list       List complete live scenarios.
+--update     Pull the latest published FRR image and debian:latest on the appliance.
+--all        Run the container and Debian package suites.
+--container  Run container regressions and 2R-6R live scenarios.
+--package    Run package regressions and the disposable Debian lifecycle.
+--rtp/--dual Run the selected protocol regression and live scenarios.
+--scenario   Run exactly one live scenario without regressions.
+--package-old/--package-new  Explicit local .deb names for 1R-lifecycle debugging.
+--local      Use the last completed local make all build (no image building).
+--tag VERSION  Exact version selection: X.Y.Z with --local, X.Y for releases.
+--purge      Remove Netlab reports and development images.
+--abort      Recover an interrupted remote session.
 
-New live scenarios: netlabs/test/{rtp,dual}/<case>/{driver.py,scenario.yaml,topology.yml}
-Existing scenarios under netlabs/uut/ remain supported. Live tests execute
-sequentially on the appliance; no further scenario starts after unverified
-or failed teardown. Results are saved to logs/netlab/.
+Without --local, use published GHCR OpenEIGRP, as prepared by --update.
+The published release identifier X.Y maps exactly to GHCR tag X.Y.0.
+With --local, the build number X.Y.Z must match dist/netlabs-amd64.json,
+whose full package version also includes the development label.
+
+The package lifecycle uses the actual .deb for the selected build or published
+release. Published package tests require an official GitHub Release .deb;
+if none exists the run is blocked, not replaced with a local build.
+Local tests may upgrade from the latest official published .deb when available.
+The Debian systemd test image is always prebuilt by make all and transferred
+from the client. No image/package compilation occurs during test execution.
+Results are saved under logs/netlab/.
+
 HELP
 }
 
@@ -62,7 +73,11 @@ CASE_LAYOUTS=()
 
 add_case() {
     local name="$1" group="$2" dir="$3" layout="$4" i
-    [[ "$name" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || return 0
+    if [[ "$group" == package ]]; then
+        [[ "$name" == 1R-lifecycle ]] || return 0
+    else
+        [[ "$name" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || return 0
+    fi
     for i in "${!CASE_NAMES[@]}"; do
         if [[ "${CASE_NAMES[i]}" == "$name" ]]; then
             printf 'ERROR: duplicate live scenario ID %s (%s and %s)\n' \
@@ -95,7 +110,7 @@ discover() {
         add_case "$name" "$declared" "$dir" legacy || return 1
     done
     # A group's directory is the source of truth for new cases.
-    for group in rtp dual; do
+    for group in rtp dual package; do
         for dir in "$REMOTE_REPO_ROOT/netlabs/test/$group"/*; do
             [[ -d "$dir" && -f "$dir/driver.py" &&
                -f "$dir/scenario.yaml" && -f "$dir/topology.yml" ]] || continue
@@ -114,21 +129,21 @@ run_image_update() {
     remote_stage "$stage" netlabs/tools/remote/runner.sh netlabs/tools/remote/images.py
     remote_install_runner "$stage"
     if remote_run "$stage" image-update; then
-        echo 'PASS: OpenEIGRP image update'
+        echo 'PASS: OpenEIGRP and Debian image update'
     else
         rc=$?
         remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || :
-        printf 'FAIL: OpenEIGRP image update (remote exit %d)\n' "$rc" >&2
+        printf 'FAIL: OpenEIGRP/Debian image update (remote exit %d)\n' "$rc" >&2
         return "$rc"
     fi
 }
 
 # Check prerequisites before staging regressions, reporting blocked scenarios,
 # or claiming that a development image is absent. Published-image tests need
-# Docker on the appliance only; a local daemon is required for --image.
+# Published container tests require Docker on the appliance only.
 check_local_docker() {
     command -v docker >/dev/null 2>&1 || {
-        echo 'ERROR: local Docker CLI is required for --image' >&2
+        echo 'ERROR: local Docker CLI is required for --local and Debian package tests' >&2
         return 2
     }
     docker info >/dev/null 2>&1 || {
@@ -145,44 +160,79 @@ check_remote_docker() {
     fi
 }
 
-# --image selects an existing local build. Never rename/publish a development
-# image under a GHCR release tag. The server-side importer takes the session
-# lock and rejects active labs before modifying any Docker image.
+# Verify the build manifest and package checksums before transfer.
+load_package_artifacts() {
+    local manifest="$REMOTE_REPO_ROOT/dist/netlabs-amd64.json" data
+    [[ -f "$manifest" ]] || {
+        echo "ERROR: missing local Netlab artifact manifest; run make all" >&2
+        return 2
+    }
+    local -a args=(validate --dist "$REMOTE_REPO_ROOT/dist" --manifest "$manifest")
+    data="$(python3 "$REMOTE_REPO_ROOT/netlabs/tools/package-artifacts.py" "${args[@]}")" || return 2
+    # JSON is controlled by the validator; produce tabular values rather than
+    # executing a manifest as shell script. The filenames remain checked below.
+    local names
+    names="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(d["old"]["package"] if d["old"] else "-", d["new"]["package"], sep="\n")' "$data")" || return 2
+    if [[ -z "$PACKAGE_NEW" ]]; then
+        PACKAGE_OLD="${names%%$'\n'*}"
+        PACKAGE_NEW="${names#*$'\n'}"
+        [[ "$PACKAGE_OLD" != - ]] || PACKAGE_OLD=''
+    fi
+    # Use versioned AMD64 images. On macOS ARM64, openeigrp:TAG is the
+    # native arm64 alias and must not be transferred to an AMD64 appliance.
+    BUILD_IMAGE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["image"])' "$data")" || return 2
+    BUILD_IMAGE_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["image_id"])' "$data")" || return 2
+    PACKAGE_IMAGE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("package_image", ""))' "$data")" || return 2
+    PACKAGE_IMAGE_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("package_image_id", ""))' "$data")" || return 2
+    if [[ -z "$PACKAGE_IMAGE" || -z "$PACKAGE_IMAGE_ID" ]]; then
+        echo "ERROR: missing locally built Debian systemd image in artifact manifest; run make all" >&2
+        return 2
+    fi
+    if [[ -n "$PACKAGE_OLD" ]]; then
+        printf 'Debian upgrade: %s -> %s\n' "$PACKAGE_OLD" "$PACKAGE_NEW"
+    else
+        printf 'Debian package: %s (no published baseline; upgrade SKIPPED)\n' "$PACKAGE_NEW"
+    fi
+}
+
+# Only inspected locally and transferred to the appliance; never built here.
 DEV_IMAGE=''
 DEV_ID=''
-run_image_sync() {
-    local tag="$1" local_id local_platform stage status=0 remote_id
-    DEV_IMAGE="openeigrp:$tag"
+BUILD_IMAGE=''
+BUILD_IMAGE_ID=''
+PACKAGE_IMAGE=''
+PACKAGE_IMAGE_ID=''
+sync_image() {
+    local name="$1" expected_id="${2:-}" local_id platform stage status=0 remote_id
     check_local_docker || return $?
-    local_id="$(docker image inspect --format '{{.Id}}' "$DEV_IMAGE" 2>/dev/null)" || {
-        echo "ERROR: local image not found: $DEV_IMAGE (build with make docker first)" >&2
+    local_id="$(docker image inspect --format '{{.Id}}' "$name" 2>/dev/null)" || {
+        echo "ERROR: missing local Docker image $name; run make all" >&2
         return 1
     }
-    [[ "$local_id" =~ ^sha256:[a-f0-9]{64}$ ]] || {
-        echo "ERROR: invalid local image ID for $DEV_IMAGE" >&2; return 1;
-    }
-    local_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$DEV_IMAGE")" || return 1
-    [[ "$local_platform" == linux/amd64 ]] || {
-        echo "ERROR: $DEV_IMAGE is $local_platform; StormTrooper requires linux/amd64" >&2
+    [[ "$local_id" =~ ^sha256:[a-f0-9]{64}$ ]] || return 1
+    [[ -z "$expected_id" || "$local_id" == "$expected_id" ]] || {
+        echo "ERROR: $name differs from the build manifest; run make all" >&2
         return 1
     }
-    DEV_ID="$local_id"
-    printf 'Development image: %s (%s)\n' "$DEV_IMAGE" "$DEV_ID"
+    platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$name")" || return 1
+    [[ "$platform" == linux/amd64 ]] || {
+        echo "ERROR: $name is $platform; StormTrooper requires linux/amd64" >&2
+        return 1
+    }
+    printf 'Transferred image candidate: %s (%s)\n' "$name" "$local_id"
     stage="$(remote_new_stage)" || return 1
     if ! remote_stage "$stage" netlabs/tools/remote/dev-image.sh; then
         status=1
     else
-        remote_id="$(remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' inspect '$DEV_IMAGE'")" || status=1
+        remote_id="$(remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' inspect '$name'")" || status=1
         if (( status == 0 )); then
-            if [[ "$remote_id" == "$DEV_ID" ]]; then
+            if [[ "$remote_id" == "$local_id" ]]; then
                 echo 'PASS: development image unchanged; transfer skipped'
             else
-                echo 'Transferring updated development image to StormTrooper...'
-                # Capture both halves of the pipeline. In particular, Docker
-                # save failures must not be mistaken for a successful import.
+                echo "Transferring $name to the Netlab appliance..."
                 set +e
-                docker save "$DEV_IMAGE" | gzip -1 | \
-                    remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' import '$DEV_IMAGE' '$DEV_ID'"
+                docker save "$name" | gzip -1 | \
+                    remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' import '$name' '$local_id'"
                 local -a steps=("${PIPESTATUS[@]}")
                 set -e
                 if (( steps[0] != 0 || steps[1] != 0 || steps[2] != 0 )); then
@@ -195,30 +245,162 @@ run_image_sync() {
     remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || status=1
     return "$status"
 }
+run_image_sync() {
+    [[ -n "$BUILD_IMAGE" && -n "$BUILD_IMAGE_ID" ]] || {
+        echo 'ERROR: missing local FRR build identity; run make all' >&2
+        return 2
+    }
+    DEV_IMAGE="$BUILD_IMAGE"
+    sync_image "$DEV_IMAGE" "$BUILD_IMAGE_ID" || return $?
+    DEV_ID="$BUILD_IMAGE_ID"
+}
+# Local selection uses the single manifest written last by make all.
+# A container-only selection must not depend on package files/checksums.
+load_local_build() {
+    local manifest="$REMOTE_REPO_ROOT/dist/netlabs-amd64.json" details
+    [[ -f "$manifest" ]] || {
+        echo 'ERROR: no completed local build manifest; run make all' >&2
+        return 2
+    }
+    details="$(python3 - "$manifest" "$version_tag" <<'PYLOCAL'
+import json
+from pathlib import Path
+import re
+import sys
+try:
+    obj = json.loads(Path(sys.argv[1]).read_text())
+    if obj.get('schema') != 'openeigrp-netlabs-amd64/v1':
+        raise ValueError('invalid local build manifest')
+    version = obj['new']['version']
+    match = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)-[A-Za-z0-9.-]+\.dev', version)
+    if not match:
+        raise ValueError('invalid local development version')
+    if sys.argv[2] and match[1] != sys.argv[2]:
+        raise ValueError(f'local build is {match[1]}, not {sys.argv[2]}')
+    image = obj['image']
+    identity = obj['image_id']
+    if image != f'openeigrp:{version}-amd64' or not re.fullmatch(r'sha256:[a-f0-9]{64}', identity):
+        raise ValueError('invalid AMD64 FRR identity in build manifest')
+    print(image, identity, version, sep='\n')
+except (OSError, ValueError, KeyError, TypeError) as exc:
+    raise SystemExit(f'ERROR: {exc}')
+PYLOCAL
+)" || return 2
+    BUILD_IMAGE="${details%%$'\n'*}"
+    details="${details#*$'\n'}"
+    BUILD_IMAGE_ID="${details%%$'\n'*}"
+    BUILD_VERSION="${details#*$'\n'}"
+    printf 'Selected local build: %s (%s)\n' "$BUILD_VERSION" "$BUILD_IMAGE"
+}
+
+# The Debian systemd environment is a separate, prebuilt, non-EIGRP image.
+# Do not mistake it for the OpenEIGRP package or compile it on the appliance.
+load_package_environment() {
+    local desired_id="$PACKAGE_IMAGE_ID"
+    PACKAGE_IMAGE='openeigrp-package:netlab'
+    PACKAGE_IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$PACKAGE_IMAGE" 2>/dev/null)" || {
+        echo 'ERROR: missing Debian systemd test image; run make all' >&2
+        return 2
+    }
+    [[ "$PACKAGE_IMAGE_ID" =~ ^sha256:[a-f0-9]{64}$ ]] || return 2
+    if [[ -n "$desired_id" && "$PACKAGE_IMAGE_ID" != "$desired_id" ]]; then
+        echo 'ERROR: Debian test image changed since make all; rebuild artifacts' >&2
+        return 2
+    fi
+}
+
+
+# Select only published, installed images. An explicit version never falls
+# back to another release and neither path pulls images during tests.
+load_published_image() {
+    local available version
+    available="$(remote_ssh "docker image ls --format '{{.Repository}}:{{.Tag}}'")" || return 2
+    version="$(printf '%s\n' "$available" | python3 -c '
+import re, sys
+prefix = "ghcr.io/diivious/openeigrp-frr:"
+versions = []
+for row in sys.stdin:
+    if row.startswith(prefix):
+        tag = row.strip()[len(prefix):]
+        if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", tag):
+            versions.append(tag)
+if not versions:
+    raise SystemExit("ERROR: no published GHCR image on appliance; run --update")
+print(max(versions, key=lambda s: tuple(map(int, s.split(".")))))
+')" || return 2
+    if [[ -n "$version_tag" ]]; then
+        version="${version_tag}.0"
+        if ! grep -Fxq "ghcr.io/diivious/openeigrp-frr:$version" <<<"$available"; then
+            echo "ERROR: published release $version_tag is not installed on appliance (expected GHCR $version); use --update or pull that exact image" >&2
+            return 2
+        fi
+    fi
+    PUBLISHED_VERSION="$version"
+    PUBLISHED_RELEASE="${version%.*}"
+    PUBLISHED_IMAGE="ghcr.io/diivious/openeigrp-frr:$version"
+    local platform
+    platform="$(remote_ssh "docker image inspect --format '{{.Os}}/{{.Architecture}}' '$PUBLISHED_IMAGE'")" || return 2
+    [[ "$platform" == linux/amd64 ]] || {
+        echo "ERROR: published image $PUBLISHED_IMAGE is $platform, expected linux/amd64" >&2
+        return 2
+    }
+    printf 'Selected published image: %s\n' "$PUBLISHED_IMAGE"
+}
+
+load_published_package() {
+    local data
+    data="$(python3 "$REMOTE_REPO_ROOT/netlabs/tools/package-artifacts.py" \
+        download --dist "$REMOTE_REPO_ROOT/dist" --release "$PUBLISHED_RELEASE")" || return 2
+    [[ "$data" != null ]] || {
+        echo "BLOCKED: no published Debian package for rel-$PUBLISHED_RELEASE (use --local for a development build)" >&2
+        return 4
+    }
+    PACKAGE_NEW="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["package"])' "$data")" || return 2
+    PACKAGE_OLD=''
+    printf 'Selected published Debian package: %s\n' "$PACKAGE_NEW"
+}
+
+run_package_image_sync() {
+    sync_image "$PACKAGE_IMAGE" "$PACKAGE_IMAGE_ID" || return $?
+    printf 'Debian Containerlab image: %s (%s)\n' "$PACKAGE_IMAGE" "$PACKAGE_IMAGE_ID"
+}
+check_package_image() {
+    local actual
+    actual="$(docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' "$PACKAGE_IMAGE" 2>/dev/null)" || return 2
+    [[ "$actual" == "$PACKAGE_IMAGE_ID linux/amd64" ]] || {
+        echo "ERROR: Debian systemd image $PACKAGE_IMAGE must be linux/amd64" >&2
+        return 2
+    }
+}
 
 run_purge() {
     local stage rc=0 local_images image
     remote_transport_prepare || return 1
     check_remote_docker || return $?
     stage="$(remote_new_stage)" || return 1
+
     if ! remote_stage "$stage" netlabs/tools/remote/dev-image.sh; then
         remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || :
         return 1
     fi
+
     # The remote helper holds the lab lock and refuses active/orphaned labs.
     if ! remote_ssh "bash '$stage/netlabs/tools/remote/dev-image.sh' purge"; then
         rc=1
     fi
+
     remote_ssh "rm -rf -- '$stage'" >/dev/null 2>&1 || rc=1
     (( rc == 0 )) || return "$rc"
+
     # Client image removal is scoped to development tags, not GHCR releases.
     if command -v docker >/dev/null 2>&1; then
         local_images="$(docker image ls --format '{{.Repository}}:{{.Tag}}')" || return 1
         while IFS= read -r image; do
-            [[ "$image" == openeigrp:* ]] || continue
+            [[ "$image" == openeigrp:* || "$image" == openeigrp-package:* ]] || continue
             docker image rm "$image" || rc=1
         done <<<"$local_images"
     fi
+
     # Delete known report artifacts only. Preserve unrelated files and config.
     local f results="$REMOTE_REPO_ROOT/logs/netlab"
     if [[ -d "$results" ]]; then
@@ -227,6 +409,7 @@ run_purge() {
             rm -rf -- "$f" || rc=1
         done
     fi
+
     (( rc == 0 )) && echo 'PASS: netlabs development images and historical reports purged'
     return "$rc"
 }
@@ -247,8 +430,14 @@ run_live() {
         netlabs/common
         netlabs/config
     )
+
     if [[ "$layout" == grouped ]]; then
         files+=("netlabs/test/$group/$name")
+        if [[ "$group" == package ]]; then
+            files+=(linux/test/test_systemd_package.py linux/packaging/verify-deb.sh
+                    "dist/$PACKAGE_NEW")
+            [[ -z "$PACKAGE_OLD" ]] || files+=("dist/$PACKAGE_OLD")
+        fi
     else
         files+=("netlabs/uut/$name.py" "netlabs/uut/$name")
         # Historical route driver imports the neighbor CLI helpers.
@@ -266,16 +455,29 @@ run_live() {
     if [[ -n "$DEV_IMAGE" ]]; then
         remote_ssh "printf '%s\\n%s\\n' '$DEV_IMAGE' '$DEV_ID' > '$stage/dev-image.txt'" || return 1
     fi
+
+    if [[ -n "${RELEASE_IMAGE:-}" && "$group" != package ]]; then
+        remote_ssh "printf '%s\n' '$RELEASE_IMAGE' > '$stage/release-image.txt'" || return 1
+    fi
+
+    if [[ "$group" == package ]]; then
+        remote_ssh "printf '%s\n%s\n' '$PACKAGE_IMAGE' '$PACKAGE_IMAGE_ID' > '$stage/package-image.txt'" || return 1
+    fi
+
     transcript="$(mktemp)"
     set +e
-    if [[ "$layout" == grouped ]]; then
+    if [[ "$group" == package ]]; then
+        remote_run "$stage" uut-start "$name" package "$PACKAGE_OLD" "$PACKAGE_NEW" 2>&1 | tee "$transcript"
+    elif [[ "$layout" == grouped ]]; then
         remote_run "$stage" uut-start "$name" "$group" 2>&1 | tee "$transcript"
     else
         remote_run "$stage" uut-start "$name" 2>&1 | tee "$transcript"
     fi
+
     steps=("${PIPESTATUS[@]}")
     set -e
     status="${steps[0]}"
+
     if (( steps[1] != 0 )); then
         echo 'ERROR: Could not record remote UUT transcript' >&2
         status=1
@@ -344,11 +546,17 @@ run_remote_regressions() {
         netlabs/tools/remote
         netlabs/tools/remote-lab.sh
         netlabs/tools/remote-uut.sh
+        netlabs/tools/package-artifacts.py
+        netlabs/tools/package-image.sh
+        netlabs/tools/docker-amd.sh
         netlabs/uut
         netlabs/test
         netlabs/config
         netlabs/common
     )
+    if [[ "$selection" == package || "$selection" == all ]]; then
+        files+=(linux/test/test_systemd_package.py)
+    fi
     if ! remote_stage "$stage" "${files[@]}" || ! remote_install_runner "$stage"; then
         echo 'ERROR: could not stage remote regressions' >&2
         record unit regressions BLOCKED
@@ -459,46 +667,87 @@ if (( $# < 1 )); then
     usage >&2
     exit 2
 fi
-# Use an explicit, simple parser so the image option may follow any selection.
+
 requested=''
 target=''
-image_tag=''
+local_mode=0
+version_tag=''
+PACKAGE_OLD=''
+PACKAGE_NEW=''
+package_unavailable=0
+manual_packages=0
+BUILD_VERSION=''
+PUBLISHED_RELEASE=''
+PUBLISHED_VERSION=''
+PUBLISHED_IMAGE=''
+
 while (( $# )); do
     case "$1" in
         --help|-h)
             [[ $# == 1 && -z "$requested" ]] || exit 2
-            usage
-            exit 0 ;;
-        --update|--abort|--list|--all|--rtp|--dual|--purge)
+            usage; exit 0 ;;
+        --update|--abort|--list|--all|--container|--package|--rtp|--dual|--purge)
             [[ -z "$requested" ]] || { usage >&2; exit 2; }
-            requested="${1#--}"
-            shift ;;
+            requested="${1#--}"; shift ;;
         --scenario)
-            [[ -z "$requested" && $# -ge 2 && "$2" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || {
+            [[ -z "$requested" && $# -ge 2 && "$2" =~ ^[1-6]R-[a-z][a-z0-9-]*$ ]] || {
                 usage >&2; exit 2;
             }
-            requested=scenario
-            target="$2"
-            shift 2 ;;
-        --image)
-            [[ -z "$image_tag" && $# -ge 2 && "$2" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || {
+            requested=scenario; target="$2"; shift 2 ;;
+        --local)
+            (( local_mode == 0 )) || { usage >&2; exit 2; }
+            local_mode=1; shift ;;
+        --tag)
+            [[ -z "$version_tag" && $# -ge 2 ]] || { usage >&2; exit 2; }
+            version_tag="$2"; shift 2 ;;
+        --package-old|--package-new)
+            [[ $# -ge 2 && "$2" =~ ^openeigrpd_[A-Za-z0-9.+~_-]+_amd64\.deb$ ]] || {
                 usage >&2; exit 2;
             }
-            image_tag="$2"
-            shift 2 ;;
+            if [[ "$1" == --package-old ]]; then
+                [[ -z "$PACKAGE_OLD" ]] || exit 2
+                PACKAGE_OLD="$2"
+            else
+                [[ -z "$PACKAGE_NEW" ]] || exit 2
+                PACKAGE_NEW="$2"
+            fi
+            manual_packages=1; shift 2 ;;
         *) usage >&2; exit 2 ;;
     esac
 done
+
 [[ -n "$requested" ]] || { usage >&2; exit 2; }
-if [[ -n "$image_tag" ]]; then
-    case "$requested" in
-        scenario|all|rtp|dual) ;;
-        *) echo 'ERROR: --image requires a live test selection' >&2; exit 2 ;;
-    esac
+
+if (( manual_packages )); then
+    [[ "$requested" == scenario && "$target" == 1R-lifecycle &&
+       -n "$PACKAGE_OLD" && -n "$PACKAGE_NEW" && "$PACKAGE_OLD" != "$PACKAGE_NEW" &&
+       $local_mode -eq 0 && -z "$version_tag" ]] || {
+        echo 'ERROR: --package-old/--package-new require an untagged 1R-lifecycle scenario' >&2
+        exit 2
+    }
+    for package in "$PACKAGE_OLD" "$PACKAGE_NEW"; do
+        [[ -f "$REMOTE_REPO_ROOT/dist/$package" ]] || {
+            echo "ERROR: missing local package dist/$package" >&2; exit 2;
+        }
+    done
 fi
-if [[ -n "$image_tag" ]]; then
-    check_local_docker || exit $?
+
+if (( local_mode )); then
+    [[ -z "$version_tag" || "$version_tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo 'ERROR: --local --tag requires exact X.Y.Z local build version' >&2; exit 2;
+    }
+else
+    [[ -z "$version_tag" || "$version_tag" =~ ^[0-9]+\.[0-9]+$ ]] || {
+        echo 'ERROR: published --tag requires exact X.Y release version' >&2; exit 2;
+    }
 fi
+
+case "$requested" in
+    update|abort|purge|list)
+        (( local_mode == 0 )) && [[ -z "$version_tag" ]] || {
+            echo "ERROR: --local/--tag cannot be combined with --$requested" >&2; exit 2;
+        } ;;
+esac
 case "$requested" in
     update) run_image_update; exit $? ;;
     abort) run_abort; exit $? ;;
@@ -507,64 +756,119 @@ esac
 
 discover
 if [[ "$requested" == list ]]; then
-    for name in "${CASE_NAMES[@]}"; do
-        printf '%s\n' "$name"
-    done
+    for name in "${CASE_NAMES[@]}"; do printf '%s\n' "$name"; done
     exit 0
 fi
 
 selected=()
 for i in "${!CASE_NAMES[@]}"; do
-    if [[ "$requested" == all || \
+    if [[ ( "$requested" == all ) || \
+          ( "$requested" == container && "${CASE_GROUPS[i]}" != package ) || \
           ( "$requested" == scenario && "${CASE_NAMES[i]}" == "$target" ) || \
           ( "$requested" == "${CASE_GROUPS[i]}" ) ]]; then
         selected+=("$i")
     fi
 done
+
 if [[ "$requested" == scenario && ${#selected[@]} -ne 1 ]]; then
     printf 'Unknown or incomplete scenario: %s\n' "$target" >&2
     exit 2
 fi
 
+package_selected=0
+container_selected=0
+for i in "${selected[@]}"; do
+    if [[ "${CASE_GROUPS[i]}" == package ]]; then
+        package_selected=1
+    else
+        container_selected=1
+    fi
+done
+
+# Validate local artifacts before contacting the appliance. No build or
+# Docker pull is performed by this path.
+if (( local_mode )); then
+    check_local_docker || exit $?
+    load_local_build || exit $?
+
+    if (( package_selected )); then
+        load_package_artifacts || exit $?
+        load_package_environment || exit $?
+        check_package_image || exit $?
+    fi
+
+    if (( container_selected )); then
+        local_id="$(docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' "$BUILD_IMAGE" 2>/dev/null)" || {
+            echo "ERROR: missing local image $BUILD_IMAGE; run make all" >&2; exit 2;
+        }
+        [[ "$local_id" == "$BUILD_IMAGE_ID linux/amd64" ]] || {
+            echo "ERROR: local image $BUILD_IMAGE differs from build manifest or is not AMD64" >&2; exit 2;
+        }
+    fi
+
+elif (( package_selected && manual_packages )); then
+    check_local_docker || exit $?
+    load_package_environment || exit $?
+    check_package_image || exit $?
+fi
+
+# Published selection happens against the appliance where the container runs.
+# In local mode this is not used for selecting the FRR development image.
+remote_transport_prepare || exit $?
+check_remote_docker || exit $?
+if (( ! local_mode && ! manual_packages )); then
+    load_published_image || exit $?
+    if (( package_selected )); then
+        if load_published_package; then
+            check_local_docker || exit $?
+            load_package_environment || exit $?
+            check_package_image || exit $?
+        else
+            rc=$?
+            if (( rc == 4 )); then package_unavailable=1; else exit "$rc"; fi
+        fi
+    fi
+fi
+
+if (( local_mode && container_selected )); then
+    run_image_sync || exit $?
+fi
+
+if (( package_selected && ! package_unavailable )); then
+    run_package_image_sync || exit $?
+fi
+
+# Pin an exact published release in the disposable topology. A default run
+# also pins its selection so another --update cannot change it mid-batch.
+if (( ! local_mode && container_selected )); then
+    RELEASE_IMAGE="$PUBLISHED_IMAGE"
+fi
+
 if [[ "$requested" == scenario ]]; then
-    remote_transport_prepare
-    check_remote_docker || exit $?
-    if [[ -n "$image_tag" ]]; then
-        run_image_sync "$image_tag" || exit $?
+    if (( package_unavailable )); then
+        echo 'BLOCKED: no published Debian artifact for 1R-lifecycle' >&2
+        exit 2
     fi
     run_live "${selected[0]}"
     exit $?
 fi
 
-# Never run live qualification with a failing or blocked infrastructure gate.
-# The selected appliance may be busy, so do not start a second session while a
-# previous live case is still operating.
 regressions_ok=0
-# An unreachable host or invalid credentials are transport errors, not
-# blocked test results. Stop before producing a misleading batch report.
-if ! remote_transport_prepare; then
-    echo 'ERROR: Remote preflight failed; no tests executed.' >&2
-    exit 2
-fi
-if (( ${#selected[@]} > 0 )); then
-    check_remote_docker || exit $?
-fi
+
 if run_remote_regressions "$requested"; then
-    regressions_ok=1
+    regressions_ok=1;
 fi
+
 if (( ! regressions_ok )); then
     printf 'BLOCKED: live scenarios not started because regressions failed\n' >&2
-    for i in "${selected[@]}"; do
-        record live "${CASE_NAMES[i]}" BLOCKED
-    done
-    if (( ${#selected[@]} == 0 )); then
-        record live "${requested}-live" NOT_IMPLEMENTED
-    fi
+    for i in "${selected[@]}"; do record live "${CASE_NAMES[i]}" BLOCKED; done
+    if (( ${#selected[@]} == 0 )); then record live "${requested}-live" NOT_IMPLEMENTED; fi
     printf '\nRegression summary: %d PASS, %d FAIL, %d BLOCKED/NOT_IMPLEMENTED\n' \
         "$PASSED" "$FAILED" "$BLOCKED"
     write_summary "$requested" || exit 1
     exit 1
 fi
+
 if (( ${#selected[@]} == 0 )); then
     if [[ "$requested" != all ]]; then
         printf 'NOT_IMPLEMENTED: no runnable %s live scenarios found\n' "$requested" >&2
@@ -573,27 +877,15 @@ if (( ${#selected[@]} == 0 )); then
         echo 'BLOCKED: no complete live scenarios were discovered' >&2
         record live all-live BLOCKED
     fi
+
 else
-    if [[ -n "$image_tag" ]]; then
-        if ! run_image_sync "$image_tag"; then
-            echo 'BLOCKED: development image transfer failed' >&2
-            for i in "${selected[@]}"; do
-                record live "${CASE_NAMES[i]}" BLOCKED
-            done
-            printf '\nRegression summary: %d PASS, %d FAIL, %d BLOCKED/NOT_IMPLEMENTED\n' \
-                "$PASSED" "$FAILED" "$BLOCKED"
-            write_summary "$requested" || exit 1
-            exit 1
-        fi
-    fi
     stop_batch=0
     for i in "${selected[@]}"; do
         case_name="${CASE_NAMES[i]}"
-        if (( stop_batch )); then
+        if (( stop_batch )) || { (( package_unavailable )) && [[ "${CASE_GROUPS[i]}" == package ]]; }; then
             record live "$case_name" BLOCKED
             continue
         fi
-
         if run_live "$i"; then
             if (( LAST_SAFE )); then
                 record live "$case_name" PASS "$LAST_RESULT"
@@ -604,15 +896,17 @@ else
         else
             record live "$case_name" FAIL "$LAST_RESULT"
         fi
-
-        # Never start another scenario if cleanup did not complete.
         if (( ! LAST_SAFE )); then
             echo 'BLOCKED: stopping batch because remote teardown was not verified' >&2
             stop_batch=1
         fi
     done
 fi
-printf '\nRegression summary: %d PASS, %d FAIL, %d BLOCKED/NOT_IMPLEMENTED\n' \
+
+printf '\n***\n***\n***\n'
+printf 'Regression summary:\n    %d PASS\n    %d FAIL\n    %d BLOCKED/NOT_IMPLEMENTED\n' \
     "$PASSED" "$FAILED" "$BLOCKED"
+printf '\n***\n***\n***\n\n'
+
 write_summary "$requested" || exit 1
 (( FAILED == 0 && BLOCKED == 0 ))

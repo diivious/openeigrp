@@ -108,7 +108,7 @@ clab_nodes_exist() {
         echo 'ERROR: docker ps failed; cannot verify orphan ownership' >&2
         return 2
     }
-    grep -Eq '^clab-(eigrp-|oeig-lab-)' <<<"$nodes"
+    grep -Eq '^clab-(eigrp-|oeig-lab-|eigrp_pkg-)' <<<"$nodes"
 }
 
 assert_free() {
@@ -134,12 +134,30 @@ validate_stage() {
 
 # A successful netlab down is not sufficient when a container remains.
 netlab_destroy() {
-    local topology="$1"
+    local topology="$1" group="${2:-}"
     if ! command -v netlab >/dev/null 2>&1; then
         echo 'ERROR: netlab not installed' >&2
         return 1
     fi
 
+    if [[ "$group" == package ]]; then
+        # The driver tears down every phase. The common runner is a final
+        # safeguard for an interrupted or partially started Containerlab node.
+        local nodes
+        nodes="$(docker ps -a --format '{{.Names}}')" || return 1
+        if ! grep -qx 'clab-eigrp_pkg-uut' <<<"$nodes"; then
+            return 0
+        fi
+        if ! (cd "${topology%/*}" && netlab down); then
+            echo 'WARNING: package netlab down failed; checking surviving node' >&2
+        fi
+        nodes="$(docker ps -a --format '{{.Names}}')" || return 1
+        if grep -qx 'clab-eigrp_pkg-uut' <<<"$nodes"; then
+            echo 'ERROR: package Containerlab node remains after teardown' >&2
+            return 1
+        fi
+        return 0
+    fi
     if ! (cd "${topology%/*}" && netlab down); then
         echo 'WARNING: netlab down failed; checking for surviving nodes' >&2
     fi
@@ -214,16 +232,30 @@ run_lab() {
 
 run_uut() {
     local stage="$1" name="$2" group="${3:-}" work driver report rc clean_rc image_rc capture_rc
-    local -a steps
+    local package_old="${4:-}" package_new="${5:-}"
+    local -a steps driver_args
     check_docker
     assert_free
     validate_stage "$stage"
-    [[ "$name" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || fail 'Invalid scenario name (requires 2R-6R)'
+    if [[ "$group" == package ]]; then
+        [[ "$name" == 1R-lifecycle ]] || fail 'Invalid package scenario ID'
+        [[ -n "$package_new" ]] || fail 'Package scenario requires a development .deb'
+        for file in "$package_new" "$package_old"; do
+            [[ -z "$file" ]] && continue
+            [[ "$file" =~ ^openeigrpd_[A-Za-z0-9.+:~_-]+_(amd64|arm64)\.deb$ ]] || \
+                fail 'Invalid staged Debian package basename'
+            [[ -f "$stage/dist/$file" ]] || fail "Missing staged package: $file"
+        done
+        [[ -z "$package_old" || "$package_old" != "$package_new" ]] || \
+            fail 'Upgrade requires two distinct package versions'
+    else
+        [[ "$name" =~ ^[2-6]R-[a-z][a-z0-9-]*$ ]] || fail 'Invalid scenario name (requires 2R-6R)'
+    fi
 
     # New cases live under test/{rtp,dual}/<case>/ with one driver.py.
     # Existing netlabs/uut cases retain their original path and driver name.
     case "$group" in
-        rtp|dual)
+        rtp|dual|package)
             work="$stage/netlabs/test/$group/$name"
             driver="$work/driver.py"
             ;;
@@ -237,10 +269,30 @@ run_uut() {
         fail 'Missing UUT scenario, topology, or driver'
     local topology_name
     topology_name="$(sed -n 's/^name:[[:space:]]*\([a-zA-Z0-9_-]*\)[[:space:]]*$/\1/p' "$work/topology.yml" | head -n 1)"
-    [[ "$topology_name" =~ ^(eigrp-[a-zA-Z0-9_-]+|oeig-lab-[a-zA-Z0-9_-]+)$ ]] || \
-        fail 'Topology name must start with eigrp- or oeig-lab- for orphan detection'
-    command -v docker >/dev/null || fail 'Docker unavailable'
+    if [[ "$group" == package ]]; then
+        [[ "$topology_name" == eigrp_pkg ]] || fail 'Package topology name must be eigrp_pkg'
+    else
+        [[ "$topology_name" =~ ^(eigrp-[a-zA-Z0-9_-]+|oeig-lab-[a-zA-Z0-9_-]+)$ ]] || \
+            fail 'Topology name must start with eigrp- or oeig-lab- for orphan detection'
+    fi
+    if [[ "$group" != package ]]; then
+        command -v docker >/dev/null || fail 'Docker unavailable'
+    fi
     command -v netlab >/dev/null || fail 'netlab unavailable'
+
+    if [[ "$group" == package ]]; then
+        local pkg_image pkg_id actual_id
+        [[ -f "$stage/package-image.txt" ]] || fail 'Missing staged Debian container image identity'
+        mapfile -t package_identity <"$stage/package-image.txt"
+        [[ ${#package_identity[@]} -eq 2 ]] || fail 'Invalid Debian image identity'
+        pkg_image="${package_identity[0]}"
+        pkg_id="${package_identity[1]}"
+        [[ "$pkg_image" =~ ^openeigrp-package:[a-zA-Z0-9][a-zA-Z0-9_.-]*$ &&
+           "$pkg_id" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid Debian container identity'
+        actual_id="$(docker image inspect --format '{{.Id}}' "$pkg_image")" || \
+            fail 'Debian Containerlab image missing on appliance'
+        [[ "$actual_id" == "$pkg_id" ]] || fail 'Debian test image ID changed'
+    fi
 
     report="$(mktemp -d "$RESULTS/uut-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXXXX")"
     state_write uut "$name" "$stage" running "$group"
@@ -251,9 +303,18 @@ run_uut() {
     # Modify only the uploaded topology; repository fixtures remain unchanged.
     # A failed image selection is a setup failure and still gets a report.
     image_rc=0
-    "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
-        "$stage/netlabs/tools/remote/images.py" prepare \
-        "$work/topology.yml" "$stage/artifacts/image.json" || image_rc=$?
+    if [[ "$group" != package ]]; then
+        "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
+            "$stage/netlabs/tools/remote/images.py" prepare \
+            "$work/topology.yml" "$stage/artifacts/image.json" || image_rc=$?
+    fi
+    driver_args=(--scenario "$work/scenario.yaml" --topology "$work/topology.yml"
+                 --artifacts "$stage/artifacts")
+    if [[ "$group" == package ]]; then
+        driver_args+=(--package-image "$pkg_image" --package-image-id "$pkg_id"
+                      --package-new "$stage/dist/$package_new")
+        [[ -z "$package_old" ]] || driver_args+=(--package-old "$stage/dist/$package_old")
+    fi
 
     # Stream Python output while keeping an identical transcript in runner.log.
     # PIPESTATUS[0] is the test result; tee must never mask a UUT failure.
@@ -262,9 +323,7 @@ run_uut() {
         PYTHONUNBUFFERED=1 timeout --foreground --signal=TERM --kill-after=20s 1500s \
             "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
             "$driver" \
-            --scenario "$work/scenario.yaml" \
-            --topology "$work/topology.yml" \
-            --artifacts "$stage/artifacts" 9>&- 2>&1 | tee "$stage/artifacts/runner.log" 9>&-
+            "${driver_args[@]}" 9>&- 2>&1 | tee "$stage/artifacts/runner.log" 9>&-
         steps=("${PIPESTATUS[@]}")
         rc="${steps[0]}"
         if (( steps[1] != 0 )); then
@@ -291,8 +350,25 @@ run_uut() {
         # Never destroy it while an fault/capture marker is unresolved.
         echo 'ERROR: evidence restoration failed; preserving router namespaces' \
             >>"$stage/artifacts/cleanup.log"
-    elif ! netlab_destroy "$work/topology.yml" >>"$stage/artifacts/cleanup.log" 2>&1; then
+    elif ! netlab_destroy "$work/topology.yml" "$group" >>"$stage/artifacts/cleanup.log" 2>&1; then
         clean_rc=1
+    fi
+    if [[ "$group" == package && -f "$stage/artifacts/report.json" ]] &&
+       python3 - "$stage/artifacts/report.json" <<'PYCLEAN'
+import json
+import sys
+with open(sys.argv[1], encoding='utf-8') as source:
+    report = json.load(source)
+if any(isinstance(item, dict) and item.get('cleanup_error')
+       for item in report.get('objectives', [])):
+    sys.exit(1)
+PYCLEAN
+    then
+        :
+    elif [[ "$group" == package && -f "$stage/artifacts/report.json" ]]; then
+        clean_rc=1
+        echo 'ERROR: package driver reported unverified container teardown' \
+            >>"$stage/artifacts/cleanup.log"
     fi
     if (( clean_rc != 0 )); then
         echo 'FAIL: netlab/evidence cleanup failed; session retained' >&2
@@ -390,7 +466,8 @@ run_regressions() {
     local stage="$1" selection="$2" report rc=0
     assert_free
     validate_stage "$stage"
-    [[ "$selection" == all || "$selection" == rtp || "$selection" == dual ]] || \
+    [[ "$selection" == all || "$selection" == container || "$selection" == package ||
+       "$selection" == rtp || "$selection" == dual ]] || \
         fail 'Invalid regression selection'
     [[ -f "$stage/netlabs/tools/remote/regressions.py" ]] || \
         fail 'Missing regression runner'
@@ -441,6 +518,8 @@ run_image_update() {
     validate_stage "$stage"
     "${NETLAB_PYTHON:-/home/netlab/netlab-venv/bin/python}" \
         "$stage/netlabs/tools/remote/images.py" update || rc=$?
+    echo 'Pulling latest stable Debian base image on the appliance...'
+    docker pull --platform linux/amd64 debian:latest || rc=1
     rm -rf -- "$stage"
     return "$rc"
 }
@@ -522,11 +601,11 @@ stop_session() {
         local group topology
         group="$(state_get group)"
         case "$group" in
-            rtp|dual) topology="$work/netlabs/test/$group/$(state_get name)/topology.yml" ;;
+            rtp|dual|package) topology="$work/netlabs/test/$group/$(state_get name)/topology.yml" ;;
             '') topology="$work/netlabs/uut/$(state_get name)/topology.yml" ;;
             *) fail 'Invalid stored UUT group; session retained' ;;
         esac
-        if recover_evidence "$work" && netlab_destroy "$topology"; then
+        if recover_evidence "$work" && netlab_destroy "$topology" "$group"; then
             state_clear
             echo 'Stale UUT session cleared'
         else
@@ -622,7 +701,7 @@ abort_session() {
         local topology group_name
         group_name="$(state_get group)"
         case "$group_name" in
-            rtp|dual)
+            rtp|dual|package)
                 topology="$workspace/netlabs/test/$group_name/$(state_get name)/topology.yml"
                 ;;
             '')
@@ -635,7 +714,7 @@ abort_session() {
         esac
         if (( clean_rc == 0 )); then
             if recover_evidence "$workspace" >>"$workspace/artifacts/cleanup.log" 2>&1 &&
-               netlab_destroy "$topology" >>"$workspace/artifacts/cleanup.log" 2>&1; then
+               netlab_destroy "$topology" "$group_name" >>"$workspace/artifacts/cleanup.log" 2>&1; then
                 state_clear
             else
                 clean_rc=1
@@ -684,8 +763,8 @@ case "$action" in
         run_lab "$1" "$2"
         ;;
     uut-start)
-        [[ $# == 2 || $# == 3 ]] || exit 2
-        run_uut "$1" "$2" "${3:-}"
+        [[ $# == 2 || $# == 3 || ( $# == 5 && "${3:-}" == package ) ]] || exit 2
+        run_uut "$1" "$2" "${3:-}" "${4:-}" "${5:-}"
         ;;
     regressions)
         [[ $# == 2 ]] || exit 2

@@ -186,7 +186,11 @@ def ipv6_origin_diagnostics(artifacts, asn):
 def ipv6_passive_runtime(artifacts, interface):
     """Check the *runtime* interface table, not retained configuration."""
     output = (artifacts / 'oe-ipv6-eigrp-interfaces.log').read_text(encoding='utf8')
-    matched = bool(re.search(r'(?m)^' + re.escape(interface) + r'\s+runtime\s', output))
+    # The FRR runtime table has numeric Peers/Bandwidth/Delay/Hello/Hold
+    # columns, not a literal 'runtime' marker.
+    row = re.compile(r'^' + re.escape(interface)
+                     + r'\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(?:\d+|n/a)$')
+    matched = any(row.fullmatch(line.strip()) for line in output.splitlines())
     return {'status': 'PASS' if matched else 'FAIL', 'interface': interface,
             'reason': None if matched else 'configured passive interface has no EIGRP runtime'}
 

@@ -1,0 +1,40 @@
+schema: openeigrp-package-netlab/v1
+name: 1R-lifecycle
+group: package
+process: native-openeigrpd
+build_artifacts:
+  image: local AMD64 FRR image, if a container suite is selected
+  environment: prebuilt AMD64 Debian systemd Containerlab image
+  package: locally built AMD64 deb with validated manifest checksum
+  execution: validate and transfer only, never build or pull during tests
+upgrade_artifacts:
+  old: latest complete published rel-MAJOR.MINOR GitHub Release Debian package
+  new: locally built, higher-version AMD64 Debian package
+  checks: published SHA256SUMS, verify-deb.sh, dpkg version ordering
+# A single scenario creates three fresh Debian systemd containers with a
+# published baseline, or two when no Debian release exists.
+stages:
+  - fresh-service
+  - stopped-upgrade
+  - running-lifecycle
+no_release_stages:
+  - fresh-service
+  - local-lifecycle
+# In published mode, an absent native .deb blocks this package case but must
+# not block independent container cases or be misreported as a passing test.
+published_selection:
+  missing_native_package: BLOCKED
+  independent_container_cases: RUN
+  batch_summary: report_pass_fail_blocked_counts
+objectives:
+  - package artifact transfer to writable container rootfs staging
+  - package manifest, identity, architecture, executables, tools and dependencies
+  - APT install and negative package/dependency validation
+  - systemd service, permissions, capabilities, hardening and failure-journal diagnostics
+  - credential mount propagation during initial boot and container restart
+  - installed credential directive and running daemon credential-backed config path
+  - systemd container restart and enablement persistence (not kernel reboot), failed-start recovery after stop
+  - stopped and running package upgrades
+  - active systemd guest policy permits package stop and try-restart
+  - package regressions stage the Debian lifecycle module and validate the real staging function
+  - ordinary removal, configuration-preserving reinstall and purge

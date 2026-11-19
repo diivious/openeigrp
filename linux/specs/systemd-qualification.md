@@ -1,51 +1,52 @@
-# Live systemd package qualification
+# Live Debian package qualification with Netlab
 
-This is the final, privileged qualification step for the native `openeigrpd`
-Debian package. The ordinary `linux/test/test_packaging.py` exercise verifies
-real `dpkg` operations in a non-systemd container; it **cannot** verify a
-systemd service running under PID 1 or live routing capabilities.
+This gate tests the actual **distributed native Debian package**, not an
+in-tree daemon, fake build fixture, non-systemd image, or another routing
+implementation. It runs inside a disposable Containerlab Debian node with systemd as
+PID 1. It installs packages into `/usr`, `/etc` and dpkg, creates service
+identities, and starts native EIGRP. **Never run this on a workstation or
+preexisting installation.** Package-owned accounts/groups intentionally remain
+after purge to avoid reassigning a security identity.
 
-Use a **disposable, clean Debian or Ubuntu VM** with systemd as PID 1,
-networking isolated from production, and `CAP_NET_RAW` and `CAP_NET_ADMIN`
-available. Do not use a production router, development workstation, or
-container that does not boot systemd. The test changes system accounts, the
-dpkg database, `/etc`, `/usr`, and systemd enablement, and purges the package.
-System account names may remain after purge by design.
-
-Obtain the source checkout and build **two versions** of the same native ELF
-on the VM (or use two appropriately versioned packages built for that VM's
-architecture and libc). For example, from the repository root:
-
-```sh
-make linux
-linux/packaging/build-deb.sh --version 0.1.0~qa1
-linux/packaging/build-deb.sh --version 0.1.0~qa2
-```
-
-Do not run the systemd lifecycle test if any OpenEIGRP package or configuration
-already exists. Verify the VM is disposable and run:
+Use the single Netlab package scenario described in
+[`netlabs/test/package/1R-lifecycle/README.md`](../../netlabs/test/package/1R-lifecycle/README.md).
+For automated upgrade testing, use the official last-published GitHub Release
+AMD64 `.deb` as version A and the current checkout's native development `.deb`
+as version B. The `docker-amd.sh` wrapper always builds B. When A exists it
+checks published SHA256SUMS, verifies both packages, and rejects versions that
+cannot be upgraded in Debian package ordering. Before a native release exists,
+install/service/reinstall/purge tests run and upgrade phases are SKIPPED.
+APT installs the local files, resolves declared
+runtime dependencies, and performs the upgrades. No public APT repository is
+assumed. The guest contains only selected .debs and test scripts, not the
+repository source. Package contents are checked with
+`linux/packaging/verify-deb.sh` before any installation.
 
 ```sh
-sudo env \
-  OPENEIGRP_PACKAGE_SYSTEMD_TEST=1 \
-  OPENEIGRP_PACKAGE_OLD="$PWD/dist/openeigrpd_0.1.0~qa1_$(dpkg --print-architecture).deb" \
-  OPENEIGRP_PACKAGE_NEW="$PWD/dist/openeigrpd_0.1.0~qa2_$(dpkg --print-architecture).deb" \
-  python3 linux/test/test_systemd_package.py
+# Build the development FRR Docker image and .deb locally first.
+netlabs/tools/remote-uut.sh --image diivious-test --package
+# Or combine it with all Docker-based scenarios:
+netlabs/tools/remote-uut.sh --image diivious-test --all
 ```
 
-The test checks: installation is inactive and disabled; the root-only
-configuration is accepted; systemd creates a group-traversable runtime
-directory and a protected control socket; the real `eigrp` talks to the real
-daemon; daemon UID, GID, effective capabilities, and `NoNewPrivs` are correct;
-restart works; stopped upgrades stay stopped, while running upgrades preserve administrator configuration and
-service enablement; stop cleans the socket; package removal stops the service
-and preserves configuration; purge deletes the configuration. All package
-inputs are checked with the native `.deb` manifest verifier before installation.
+The build creates `dist/netlabs-amd64.json` so the test runner uses the
+verified package selection without guessing filenames. Rebuild after publishing a
+new release to refresh the selected GitHub baseline. Direct runs with explicit
+`--package-old` and `--package-new` remain available for diagnostics. The driver boots
+and destroys a fresh Debian systemd container three times (with an upgrade
+baseline) or twice (without one), **within one scenario**. It restarts the
+container to verify systemd userspace startup and enabled-service persistence.
+A container restart does not reboot the host kernel; kernel reboot coverage is
+explicitly NOT_TESTED. The shared guest script
+`linux/test/test_systemd_package.py` tests service account, permissions,
+capabilities, hardening, socket, management client, upgrade policy, stopped
+state, config conffile retention, reinstall and purge, bad config diagnostics,
+and package failure reporting. The package's installed management CLI is
+`eigrp`, not `oectl`.
 
-A passing result is **not** a Cisco interoperability or DUAL convergence test.
-Additionally qualify real protocol-88 neighbor formation, route install/
-withdrawal, and teardown on an isolated Linux/Netlab topology, using the
-existing portable YAML UUT and Cisco interoperability gates as appropriate.
-Repeat on both amd64 and arm64 VMs, and on each Debian/Ubuntu release claimed
-to be supported. Docker cross-platform orchestration tests alone do not
-establish arm64 runtime compatibility.
+Inspect `logs/netlab/` for stage logs and structured outcomes. Failure to prepare or transfer the local Debian systemd image,
+Docker/Containerlab, APT dependency resolution, or required runtime capabilities is **BLOCKED/FAIL**,
+never a qualified platform PASS. Repeat independently on AMD64 and ARM64, and
+on each claimed distribution. The Debian `latest` AMD64 container does not
+qualify other platforms or full-machine reboot behavior. This gate makes no Cisco interoperability or route-convergence
+claim.

@@ -37,9 +37,17 @@ REMOTE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 REMOTE_HOST=mock-appliance
 remote_transport_prepare() { :; }
 remote_ssh() {
-    # The client checks the appliance daemon before starting remote work.
-    [[ "$*" == 'command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1' ]] || return 99
-    printf 'docker-preflight\n' >>"$MOCK_REMOTE_LOG"
+    case "$*" in
+        'command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1')
+            printf 'docker-preflight\n' >>"$MOCK_REMOTE_LOG" ;;
+        *'docker image ls'*)
+            printf 'ghcr.io/diivious/openeigrp-frr:0.4.0\n' ;;
+        *'docker image inspect'*)
+            printf 'linux/amd64\n' ;;
+        *'release-image.txt'*)
+            printf 'release-pin\n' >>"$MOCK_REMOTE_LOG" ;;
+        *) return 99 ;;
+    esac
 }
 remote_new_stage() { printf '/home/netlab-data/runs/upload.mock\n'; }
 remote_stage() { printf 'stage %s\n' "$*" >>"$MOCK_REMOTE_LOG"; }
@@ -144,6 +152,8 @@ MOCK_FAILED_CASE=2R-neighbor bash "$client/netlabs/tools/remote-uut.sh" --all >"
 [[ $(grep -c 'run .*uut-start' "$MOCK_REMOTE_LOG") == 3 ]]
 [[ ! -s "$MOCK_LOCAL_LOG" ]]
 grep -Fq 'regressions all' "$MOCK_REMOTE_LOG"
+# The package image mock tests execute this real helper in the staged tree.
+grep -Fq 'netlabs/tools/package-image.sh' "$MOCK_REMOTE_LOG"
 # Report names have random suffixes; sorting them is not execution order.
 # Read the exact result emitted by this invocation.
 first_report="$(sed -n 's/^Batch report: //p' "$tmp/all.log")"

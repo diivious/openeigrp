@@ -41,6 +41,7 @@ eigrpd/eigrpd.xref
 
 # Linux/generated daemon artifacts
 *.deb
+/dist/netlabs-amd64.json
 
 # unix lib
 libunix/code/eigrp-wire

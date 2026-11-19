@@ -23,13 +23,38 @@ CE = ('Codes: D - EIGRP, EX - EIGRP external\n'
 
 class InternalLiveDriverTests(unittest.TestCase):
     def test_ipv6_loopback_requires_runtime_not_only_configuration(self):
+        # Captured from the live 2R-internal OpenEIGRP FRR CLI on 2026-11-19.
+        output = (Path(__file__).parent / 'fixtures' /
+                  '2r-internal-ipv6-eigrp-interfaces.log').read_text(encoding='utf8')
         with tempfile.TemporaryDirectory() as temp:
             artifact = Path(temp) / 'oe-ipv6-eigrp-interfaces.log'
-            artifact.write_text('Interface Source Peers\nlo config -\neth1 runtime 1\n')
-            self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'FAIL')
-            artifact.write_text('Interface Source Peers\nlo runtime 0\neth1 runtime 1\n')
+            artifact.write_text(output, encoding='utf8')
             self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'PASS')
             self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo0')['status'], 'FAIL')
+
+            # Only runtime-table rows count. Configuration and CLI failures
+            # must not be mistaken for an active EIGRP interface.
+            artifact.write_text('Interface Source Peers\nlo config -\neth1 runtime 1\n',
+                                encoding='utf8')
+            self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'FAIL')
+            artifact.write_text('Invalid command\nlo runtime 0\n', encoding='utf8')
+            self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'FAIL')
+
+    def test_ipv6_runtime_requires_exact_interface_and_valid_table_row(self):
+        output = (Path(__file__).parent / 'fixtures' /
+                  '2r-internal-ipv6-eigrp-interfaces.log').read_text(encoding='utf8')
+        with tempfile.TemporaryDirectory() as temp:
+            artifact = Path(temp) / 'oe-ipv6-eigrp-interfaces.log'
+            # A similarly named runtime interface cannot prove 'lo' exists.
+            artifact.write_text(output.replace('lo                     0',
+                                               'lo0                    0'), encoding='utf8')
+            self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'FAIL')
+            # A configuration or malformed output line without numeric columns
+            # is not an interface row.
+            artifact.write_text('lo 0 configured\n', encoding='utf8')
+            self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'FAIL')
+            artifact.write_text('lo 0 100000 10 5 15 12\n', encoding='utf8')
+            self.assertEqual(live.ipv6_passive_runtime(Path(temp), 'lo')['status'], 'PASS')
 
     def test_real_oe_connected_route_does_not_satisfy_learned_prefix(self):
         self.assertFalse(live.internal_route_present(OE, '10.255.0.2/32', 'oe'))

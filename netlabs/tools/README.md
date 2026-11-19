@@ -1,8 +1,11 @@
 # Remote netlab execution (StormTrooper)
 
 These commands are invoked from an OpenEIGRP checkout on macOS or Debian.
-They require only local `ssh` and `tar` (or `sshpass` if not using SSH keys).
-No local netlab/Containerlab/Docker installation is required.
+The remote runner uses `ssh` and `tar` (or `sshpass` without SSH keys).
+Building the local development image and Debian artifacts requires Docker.
+`--local` and Debian package tests require a local Docker daemon for artifact
+verification and transfer. Published container tests use the appliance image.
+The client does not require a local Netlab/Containerlab installation.
 
 ## Layout
 
@@ -62,12 +65,15 @@ netlabs/tools/remote-uut.sh --update
 ```
 
 `--update` contacts GHCR, identifies the highest published `X.Y.Z` tag,
-pulls it on the appliance, and retains earlier installed versions. It does
-not pull or change Cisco images. The appliance refuses an update if a lab or
+and pulls it on the appliance. It also pulls `debian:latest` (the moving
+stable Debian tag) for package test prerequisites. Earlier installed images
+are retained. It does not pull or change Cisco images. The appliance refuses an update if a lab or
 UUT owns the shared session lock.
 
-**Every subsequent UUT run automatically selects the highest versioned
-OpenEIGRP image installed on the appliance.** Normal test runs never query
+**By default, UUT runs select the highest versioned published
+OpenEIGRP image installed on the appliance.** `--tag X.Y` pins GHCR `X.Y.0`
+exactly; `--local` instead uses the last completed `make all` build.
+Normal container test runs never query
 the registry. The selected image is inserted into that run's temporary netlab
 `topology.yml`; the checked-in topology is unchanged. `image.json` records the
 selected tag, local Docker image ID and available repo digests, and the test
@@ -85,9 +91,52 @@ do not remove previously installed images.
 ```sh
 netlabs/tools/remote-uut.sh --list
 netlabs/tools/remote-uut.sh --scenario 2R-neighbor
+make all
 netlabs/tools/remote-uut.sh --all
+netlabs/tools/remote-uut.sh --container
+netlabs/tools/remote-uut.sh --package
+netlabs/tools/remote-uut.sh --local --all
+netlabs/tools/remote-uut.sh --local --tag 0.5.1 --package
+netlabs/tools/remote-uut.sh --tag 0.5 --container
 netlabs/tools/remote-uut.sh --abort
 ```
+
+`--all` runs the original container suite plus the 1R Debian package
+lifecycle. `--container` selects the original container suite alone;
+`--package` selects the native Debian lifecycle alone. By default these modes
+select published artifacts. Published package runs require an official .deb for
+the selected release; they report BLOCKED rather than using a development package when
+none is published. `--local` selects the last completed local build, and
+`--local --tag X.Y.Z` must match that build's numeric version exactly.
+`--tag X.Y` without `--local` pins the matching published release (GHCR X.Y.0).
+The two tag formats cannot be interchanged or matched by prefix.
+Build the development
+FRR Docker image, Debian systemd test image and native AMD64 `.deb` with
+`make all`. The package manifest
+in `dist/netlabs-amd64.json` identifies the package and published upgrade
+baseline, if any. Tests refuse stale or modified package artifacts.
+
+`make all` builds `openeigrp-package:netlab` from the repository Dockerfile
+using `debian:latest` and `linux/amd64`, and records its exact image ID in
+the build manifest. The client checks that identity and transfers the image
+to StormTrooper using the existing Docker import path. This image contains Debian and systemd,
+**not OpenEIGRP**. The client separately transfers the developer's already
+built `.deb`, which is installed using APT inside the fresh Containerlab node.
+`remote-uut.sh` never builds or pulls local images or packages; it fails
+immediately when artifacts from `make all` are missing or have changed.
+No image is built on StormTrooper, and no Vagrant or libvirt provider is needed.
+
+With `--local`, if no official Debian baseline has been published, the
+scenario runs installation, service, removal and purge, and reports upgrade
+stages as SKIPPED rather than PASS. In published mode, a missing published
+Debian package marks the package lifecycle BLOCKED; independent container
+scenarios still run under `--all`. No local substitution is permitted. The exact Debian base and test image IDs are checked at execution.
+
+A `docker restart` checks PID 1 restart and enabled-service persistence, but
+is not a kernel reboot. The report records kernel reboot as NOT_TESTED.
+Docker and Containerlab on StormTrooper remain the only runtime prerequisites.
+A missing image, inaccessible Docker daemon, or unsupported systemd container
+is not counted as a successful qualification.
 
 The neighbor UUT tests actual bidirectional IPv4 and IPv6 EIGRP adjacency
 between the selected OpenEIGRP-FRR release and CSR1000v 17.03.06. It uses

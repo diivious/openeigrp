@@ -1,0 +1,11 @@
+# Disposable Debian systemd node; only Containerlab/Docker is required.
+# Name must meet Netlab's <=16-character identifier rule.
+name: eigrp_pkg
+provider: clab
+nodes:
+  uut:
+    device: linux
+    image: openeigrp-package:placeholder
+    module: []
+    clab:
+      cmd: /lib/systemd/systemd

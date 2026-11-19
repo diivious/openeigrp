@@ -33,3 +33,7 @@ objectives: [DUAL-01, DUAL-02, DUAL-03, DUAL-04]
 # those vectors do not constitute live Cisco multi-gig or classic qualification.
 # DUAL-02 requires exact Cisco seed BW/delay/MTU. DUAL-03 requires changed
 # TLV2 vectors to equal measured RD, not merely increase monotonically.
+
+# The CSR1000v's VM boot runs inside the containerlab node. Permit its SSH
+# readiness checks to span a normal six-minute boot before starting DUAL.
+# A missing SSH server remains a hard setup failure, not a DUAL PASS.
