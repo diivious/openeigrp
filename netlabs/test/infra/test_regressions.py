@@ -20,7 +20,7 @@ class RegressionTests(unittest.TestCase):
     def test_group_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for group in ('infra', 'rtp', 'dual'):
+            for group in ('infra', 'rtp', 'dual', 'package'):
                 folder = root / 'netlabs/test' / group
                 folder.mkdir(parents=True)
                 (folder / 'test_check.py').write_text('pass\n')
@@ -31,7 +31,16 @@ class RegressionTests(unittest.TestCase):
             all_names = [x[0] for x in regressions.select(root, 'all')]
             rtp_names = [x[0] for x in regressions.select(root, 'rtp')]
             dual_names = [x[0] for x in regressions.select(root, 'dual')]
+            package_names = [x[0] for x in regressions.select(root, 'package')]
+            container_names = [x[0] for x in regressions.select(root, 'container')]
             self.assertIn('rtp', all_names)
+            self.assertIn('package', all_names)
+            self.assertIn('package', package_names)
+            self.assertNotIn('package', container_names)
+            self.assertIn('rtp', container_names)
+            self.assertIn('dual', container_names)
+            self.assertNotIn('rtp', package_names)
+            self.assertNotIn('dual', package_names)
             self.assertIn('dual', all_names)
             self.assertIn('infra', rtp_names)
             self.assertIn('infra', dual_names)

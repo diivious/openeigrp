@@ -106,6 +106,29 @@ class ImageSelectionTests(unittest.TestCase):
             self.assertEqual(updated['nodes'], source['nodes'])
             self.assertEqual(json.loads(evidence_path.read_text())['id'], 'sha256:abc')
 
+    def test_exact_published_pin_and_conflicting_local_pin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / 'runs/upload.fixture'
+            work = stage / 'netlabs/lab'
+            work.mkdir(parents=True)
+            topology = work / 'topology.yml'
+            topology.write_text('name: eigrp\ndefaults: {}\nnodes: {oe: {device: frr}}\n')
+            (stage / 'release-image.txt').write_text(images.REPOSITORY + ':0.5.0\n')
+            inspect = [{'Id': 'sha256:abc', 'Os': 'linux', 'Architecture': 'amd64'}]
+            with mock.patch.object(images, 'installed', side_effect=AssertionError('must not pick latest')), \
+                 mock.patch.object(images, 'docker', return_value=json.dumps(inspect)):
+                images.prepare(topology, stage / 'evidence.json')
+            self.assertEqual(yaml.safe_load(topology.read_text())['defaults']
+                             ['devices.frr.clab.image'], images.REPOSITORY + ':0.5.0')
+            self.assertEqual(json.loads((stage / 'evidence.json').read_text())['source'], 'release')
+            (stage / 'release-image.txt').write_text('openeigrp:0.5.0\n')
+            with self.assertRaisesRegex(RuntimeError, 'Invalid staged'):
+                images.staged_release(topology)
+            (stage / 'release-image.txt').write_text(images.REPOSITORY + ':0.5.0\n')
+            (stage / 'dev-image.txt').write_text('openeigrp:foo\nsha256:' + 'a'*64 + '\n')
+            with self.assertRaisesRegex(RuntimeError, 'Conflicting'):
+                images.prepare(topology, stage / 'evidence.json')
+
     def test_prepare_failure_does_not_modify_topology(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / 'topology.yml'

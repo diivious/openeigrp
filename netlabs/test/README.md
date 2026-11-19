@@ -5,32 +5,65 @@ Copyright (C) 2026 Donnie V. Savage
 Use **one client entry point** from the repository root:
 
 ```sh
-netlabs/tools/remote-uut.sh --list
-netlabs/tools/remote-uut.sh --update
+# Build the development FRR container and .deb locally first.
 netlabs/tools/remote-uut.sh --all
+netlabs/tools/remote-uut.sh --container
+netlabs/tools/remote-uut.sh --package
+netlabs/tools/remote-uut.sh --local --all
+netlabs/tools/remote-uut.sh --local --tag 0.5.1 --package
+netlabs/tools/remote-uut.sh --tag 0.5 --container
 netlabs/tools/remote-uut.sh --rtp
 netlabs/tools/remote-uut.sh --dual
-netlabs/tools/remote-uut.sh --scenario 2R-neighbor
+netlabs/tools/remote-uut.sh --scenario 1R-lifecycle
+netlabs/tools/remote-uut.sh --list
+netlabs/tools/remote-uut.sh --update
 netlabs/tools/remote-uut.sh --abort
 ```
 
-- `--list`: list complete, runnable live scenarios; no remote connection.
-- `--update`: explicitly refresh installed OpenEIGRP images; it is not a test.
-- `--all`: execute all infra and protocol regressions on the Linux test appliance, then **all discovered live scenarios** (2R-6R) sequentially.
-- `--rtp`: run infra and RTP regression tests, then all discovered live RTP scenarios.
-- `--dual`: run infra and DUAL regression tests, then all discovered live DUAL scenarios.
-- `--scenario ID`: run exactly one live case, without the regression suite.
-- `--abort`: stop an interrupted live test or regression run on StormTrooper,
-  recover packet-capture and network-fault state, and remove its topology.
-  An ordinary interactive lab is stopped using `remote-lab.sh --stop` instead.
+The developer's normal build produces the AMD64 FRR development image and
+native Debian `.deb`. The package artifact manifest in `dist/netlabs-amd64.json`
+identifies those local artifacts and the last published official Debian upgrade
+baseline if available. Test runs never rebuild OpenEIGRP on StormTrooper.
 
-The `netlabs/test/` directory contains three independent groups:
+The package test environment is prepared locally from `debian:latest` with
+systemd as PID 1, then transferred as a Docker image to the appliance. The
+real locally built `.deb` is transferred independently and installed there.
+
+- `--all`: run every container and Debian package regression and live scenario.
+- `--container`: the original container suite (infra/RTP/DUAL and 2R-6R cases).
+- `--package`: package regressions and the one disposable Debian container lifecycle.
+- `--rtp` and `--dual`: retain their original protocol-specific selections.
+- `--scenario ID`: run one live scenario without running regressions.
+- No selector: use the latest published GHCR OpenEIGRP release installed on the
+  appliance, and official release packages where applicable.
+- `--local`: use the latest completed `make all` development build and its
+  verified AMD64 images and packages, without requiring a developer image tag.
+- `--tag X.Y.Z` with `--local`: require that exact local build number.
+- `--tag X.Y` without `--local`: require the exact published release (GHCR
+  `X.Y.0`); do not fall back to a newer version.
+- `--list`: list runnable scenarios without contacting the test appliance.
+- `--update`: refresh published FRR and `debian:latest` base images on the appliance.
+- `--abort`: safely abort an interrupted test, recovering faults and teardown.
+
+Development Debian mode requires `dist/netlabs-amd64.json` and its referenced
+`.deb` files. Published mode downloads the selected official release .deb and
+verifies its SHA256SUMS; if absent it reports BLOCKED rather than testing a development
+build. The prebuilt Debian systemd test environment is required in either mode.
+A missing or outdated local build fails before the container starts; build
+the local FRR image, native `.deb`, and artifact manifest using your normal
+build workflow. `--container` does not require package
+artifacts. `--package` does not start an FRR Docker container. `--all` runs
+independent scenarios sequentially and refuses to proceed after unverified
+teardown. Each scenario's test results are separately recorded.
+
+The `netlabs/test/` directory contains four independent groups:
 
 ```text
 netlabs/test/
   infra/       # Remote runner, dispatch, network fault regressions
   rtp/                  # RTP wire/packet-capture regressions, live RTP cases
   dual/                 # DUAL regressions, live DUAL cases
+  package/              # 1R Debian package systemd container lifecycle (no peers)
 ```
 
 Place each new live case under the applicable protocol group:
@@ -43,7 +76,8 @@ netlabs/test/rtp/3R-selective-retry/
   README.md              # Scope, setup, actions, evidence, expected results
 ```
 
-Use `2R-` through `6R-` and a descriptive purpose in the case ID. A group
+Use `2R-` through `6R-` for protocol cases and the dedicated `1R-lifecycle`
+ID for native package qualification. A group
 comes from its **directory**, not a guessed keyword in the ID. Each complete
 case requires `driver.py`, `scenario.yaml`, and `topology.yml`; incomplete
 cases are not discovered. Duplicate IDs across groups or the transitional
@@ -53,11 +87,14 @@ Older `netlabs/uut/2R-neighbor` remains supported without moving its driver.
 Legacy cases declare `group: rtp` or `group: dual` in `scenario.yaml` for
 selection. The existing `2R-neighbor` defaults to RTP for older checkouts.
 The `2R-internal.py` driver has no complete fixture; it is **not runnable**
-and must not be listed or counted as qualified. New cases belong under
+and must not be listed or counted as qualified. New protocol cases belong under
 `netlabs/test/{rtp,dual}/`, not the legacy `netlabs/uut/` tree.
+The 1R package qualification is described in
+[`package/1R-lifecycle/README.md`](package/1R-lifecycle/README.md).
 
-`--all` stages and runs Infra/RTP/DUAL regression scripts **on the Linux appliance**.
-`--rtp` and `--dual` always include infra regressions as safety gates;
+`--all` stages Infra/RTP/DUAL and package regressions on the Linux appliance;
+`--container` excludes the Debian package suite. Package regressions run
+with `--package` and `--all`. `--rtp` and `--dual` include infra safety gates.
 The RTP group includes the existing neighbor driver's unit tests.
 The provisioned appliance Python environment supplies PyYAML and Jinja2;
 Linux provides `/proc`, `flock`, and GNU `timeout`. The macOS client needs only

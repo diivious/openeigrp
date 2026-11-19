@@ -109,6 +109,7 @@ class RemoteHelperTests(unittest.TestCase):
                     'DOCKER_STATE': str(self.path/'docker-state.json')}
         (self.path/'docker-state.json').write_text(json.dumps({'openeigrp:diivious-test': ID1,
                                                                 'openeigrp:unused': ID2,
+                                                                'openeigrp-package:diivious-test': ID1,
                                                                 'ghcr.io/diivious/openeigrp-frr:0.4.0': ID2,
                                                                 'vrnetlab/vr-csr:17.03.06': ID2}))
         stub = self.bin / 'docker'
@@ -181,6 +182,16 @@ else: sys.exit(2)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn(b'BUSY', r.stderr)
 
+    def test_package_image_inspect_and_orphan_protection(self):
+        r = self.run_helper('inspect', 'openeigrp-package:diivious-test')
+        self.assertEqual(r.returncode, 0, r.stderr.decode())
+        self.assertEqual(r.stdout.decode().strip(), ID1)
+        r = self.run_helper('purge', MOCK_NODES='clab-eigrp_pkg-uut')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(b'BUSY', r.stderr)
+        state = json.loads((self.path/'docker-state.json').read_text())
+        self.assertIn('openeigrp-package:diivious-test', state)
+
     def test_inspect_missing_image_is_empty(self):
         r = self.run_helper('inspect', 'openeigrp:missing')
         self.assertEqual(r.returncode, 0)
@@ -197,6 +208,7 @@ else: sys.exit(2)
         self.assertEqual(r.returncode, 0, r.stderr.decode())
         state = json.loads((self.path/'docker-state.json').read_text())
         self.assertNotIn('openeigrp:unused', state)
+        self.assertNotIn('openeigrp-package:diivious-test', state)
         self.assertNotIn('openeigrp:diivious-test', state)
         self.assertIn('ghcr.io/diivious/openeigrp-frr:0.4.0', state)
         self.assertIn('vrnetlab/vr-csr:17.03.06', state)
@@ -232,12 +244,12 @@ class ClientArgumentTests(unittest.TestCase):
             (root/'netlabs/tools/remote/common.sh').write_text(
                 'REMOTE_REPO_ROOT="' + str(root) + '"\n'
                 'remote_transport_prepare() { echo network-access >&2; return 90; }\n')
-            for invalid in ('../../evil', 'ghcr.io/diivious/release:0.4.0', 'a b'):
+            for invalid in ('../../evil', 'ghcr.io/diivious/release:0.4.0', 'a b', '0.5.0'):
                 r = subprocess.run(['bash', str(script), '--scenario', '2R-internal',
-                                    '--image', invalid], capture_output=True, text=True)
+                                    '--tag', invalid], capture_output=True, text=True)
                 self.assertEqual(r.returncode, 2, r.stderr)
                 self.assertNotIn('network-access', r.stderr)
-            r = subprocess.run(['bash', str(script), '--image', 'okay', '--purge'],
+            r = subprocess.run(['bash', str(script), '--tag', '0.5', '--purge'],
                                capture_output=True, text=True)
             self.assertEqual(r.returncode, 2, r.stderr)
 
@@ -263,6 +275,13 @@ class ClientTransferTests(unittest.TestCase):
             (temp/'netlab-data/results').mkdir()
             (temp/'remote-state').mkdir()
             (temp/'local.id').write_text(ID1)
+            dist = root/'dist'
+            dist.mkdir()
+            manifest = {'schema': 'openeigrp-netlabs-amd64/v1',
+                        'image': 'openeigrp:0.5.1-diivious.dev-amd64',
+                        'image_id': ID1,
+                        'new': {'version': '0.5.1-diivious.dev'}}
+            (dist/'netlabs-amd64.json').write_text(json.dumps(manifest))
             (temp/'remote.id').write_text('')
             (temp/'client-events').write_text('')
             (temp/'test-report').mkdir()
@@ -280,14 +299,25 @@ identity=idfile.read_text().strip()
 with (base/'client-events').open('a') as log: log.write(context+' '+repr(args)+'\\n')
 if args[:1]==['info']: pass
 elif args[:2]==['image','inspect']:
- if not identity: sys.exit(1)
- if '{{.Os}}/{{.Architecture}}' in args: print('linux/amd64')
+ name=args[-1]
+ version='0.5.1-diivious.dev'
+ amd64='openeigrp:'+version+'-amd64'
+ if not identity or name not in ('openeigrp:diivious-test',amd64): sys.exit(1)
+ if name==amd64 and os.getenv('MOCK_MISSING_AMD64'): sys.exit(1)
+ if 'org.opencontainers.image.version' in ' '.join(args):
+  print('invalid!' if os.getenv('MOCK_INVALID_VERSION') else version)
+ elif '{{.Os}}/{{.Architecture}}' in ' '.join(args):
+  arch='linux/arm64' if name==amd64 and os.getenv('MOCK_WRONG_ARCH') else 'linux/amd64'
+  print(identity+' '+arch if '{{.Id}}' in ' '.join(args) else arch)
  else: print(identity)
 elif args[:2]==['ps','-a']: print('')
-elif args[:2]==['image','ls']: print('openeigrp:diivious-test')
+elif args[:2]==['image','ls']:
+ print('openeigrp:diivious-test')
+ print('openeigrp:0.5.1-diivious.dev-amd64')
 elif args[:2]==['image','rm']:
  idfile.write_text('')
 elif args[:1]==['save']:
+ assert args[1]=='openeigrp:0.5.1-diivious.dev-amd64',args
  sys.stdout.write('ARCHIVE:'+identity)
 elif args[:1]==['load']:
  raw=sys.stdin.read()
@@ -321,14 +351,26 @@ remote_fetch_report() {
                    'MOCK_TMP': str(temp), 'REMOTE_LAB_DATA': str(temp/'netlab-data'),
                    'REMOTE_LAB_STATE': str(temp/'remote-state')}
             script = root/'netlabs/tools/remote-uut.sh'
+            for override, error in (('MOCK_MISSING_AMD64', 'missing local image'),
+                                    ('MOCK_WRONG_ARCH', 'differs from build manifest')):
+                proc = subprocess.run(['bash', str(script), '--scenario', '2R-neighbor',
+                                       '--local'],
+                                      env={**env, override: '1'},
+                                      capture_output=True, text=True)
+                self.assertEqual(proc.returncode, 2, proc.stderr + proc.stdout)
+                self.assertIn(error, proc.stderr)
+                self.assertNotIn("['save',", (temp/'client-events').read_text())
+                self.assertFalse((temp/'remote.id').read_text())
             for index, (value, expected_saves) in enumerate(((ID1, 1), (ID1, 1), (ID2, 2))):
                 (temp/'local.id').write_text(value)
+                manifest['image_id'] = value
+                (dist/'netlabs-amd64.json').write_text(json.dumps(manifest))
                 proc = subprocess.run(['bash', str(script), '--scenario', '2R-neighbor',
-                                       '--image', 'diivious-test'], env=env,
+                                       '--local'], env=env,
                                       capture_output=True, text=True)
                 self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
                 events = (temp/'client-events').read_text().splitlines()
-                saves = [e for e in events if "['save', 'openeigrp:diivious-test']" in e]
+                saves = [e for e in events if "['save', 'openeigrp:0.5.1-diivious.dev-amd64']" in e]
                 self.assertEqual(len(saves), expected_saves)
                 self.assertEqual((temp/'remote.id').read_text(), value)
                 self.assertTrue((root/'logs/netlab/uut-test1/result.json').exists())

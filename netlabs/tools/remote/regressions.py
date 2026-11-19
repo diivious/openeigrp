@@ -33,12 +33,15 @@ def select(root, selection):
     # any protocol test; RTP and DUAL then add their own focused suites.
     python_suite('netlabs/test/infra', 'infra')
     shell_suite('netlabs/test/infra')
+    # Package-driver control-flow tests are safe mocks, not privileged VM runs.
+    if selection in ('all', 'package'):
+        python_suite('netlabs/test/package', 'package')
 
-    if selection in ('all', 'rtp'):
+    if selection in ('all', 'container', 'rtp'):
         python_suite('netlabs/test/rtp', 'rtp')
         shell_suite('netlabs/test/rtp')
 
-    if selection in ('all', 'dual'):
+    if selection in ('all', 'container', 'dual'):
         python_suite('netlabs/test/dual', 'dual')
         shell_suite('netlabs/test/dual')
 
@@ -98,7 +101,8 @@ def execute(root, selection, artifacts):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--selection', choices=('all', 'rtp', 'dual'), required=True)
+    parser.add_argument('--selection', choices=('all', 'container', 'package', 'rtp', 'dual'),
+                        required=True)
     parser.add_argument('--artifacts', type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]

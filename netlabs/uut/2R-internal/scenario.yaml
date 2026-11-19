@@ -7,6 +7,7 @@ families: [ipv4, ipv6]
 neighbor_timeout: 120
 route_timeout: 150
 require_originated_updates: true
+# Require an actual IPv6 EIGRP interface-table row for the passive loopback.
 require_ipv6_passive_runtime: lo
 routes:
   oe:

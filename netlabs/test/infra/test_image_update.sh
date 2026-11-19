@@ -27,7 +27,7 @@ MOCK
 export MOCK_DISPATCH="$tmp/dispatch.log"
 export MOCK_CLEANUP="$tmp/cleanup.log"
 bash "$tmp/netlabs/tools/remote-uut.sh" --update >"$tmp/output.log"
-grep -Fq 'PASS: OpenEIGRP image update' "$tmp/output.log"
+grep -Fq 'PASS: OpenEIGRP and Debian image update' "$tmp/output.log"
 grep -Fq 'netlabs/tools/remote/images.py' "$tmp/dispatch.log"
 grep -Fq 'netlabs/tools/remote/runner.sh' "$tmp/dispatch.log"
 if MOCK_UPDATE_RC=47 bash "$tmp/netlabs/tools/remote-uut.sh" --update >"$tmp/error.log" 2>&1; then
@@ -37,6 +37,6 @@ else
     rc=$?
 fi
 [[ "$rc" == 47 ]]
-grep -Fq 'FAIL: OpenEIGRP image update (remote exit 47)' "$tmp/error.log"
+grep -Fq 'FAIL: OpenEIGRP/Debian image update (remote exit 47)' "$tmp/error.log"
 grep -Fq "rm -rf -- '/home/netlab-data/runs/upload.mock'" "$tmp/cleanup.log"
 echo 'PASS: --update stages the helper and preserves remote update failures'

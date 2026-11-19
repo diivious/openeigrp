@@ -103,8 +103,13 @@ REMOTE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 REMOTE_HOST=mock-appliance
 remote_transport_prepare() { :; }
 remote_ssh() {
-    [[ "$1" == *"docker info"* ]] || return 99
-    return 0
+    case "$1" in
+        *"docker info"*) return 0 ;;
+        *"docker image ls"*) printf 'ghcr.io/diivious/openeigrp-frr:0.5.0\n' ;;
+        *"docker image inspect"*) printf 'linux/amd64\n' ;;
+        *"release-image.txt"*) return 0 ;;
+        *) return 99 ;;
+    esac
 }
 remote_new_stage() { printf '/home/netlab-data/runs/upload.mock\n'; }
 remote_stage() { :; }

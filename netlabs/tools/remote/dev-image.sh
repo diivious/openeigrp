@@ -9,7 +9,7 @@ BASE="${REMOTE_LAB_DATA:-/home/netlab-data}"
 STATE="${REMOTE_LAB_STATE:-/home/netlab/.remote-lab}"
 
 valid_image() {
-    [[ "$1" =~ ^openeigrp:[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]
+    [[ "$1" =~ ^(openeigrp|openeigrp-package):[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]
 }
 
 valid_id() {
@@ -26,7 +26,7 @@ assert_idle() {
     fi
     local names
     names="$(docker ps -a --format '{{.Names}}')" || return 1
-    if grep -Eq '^clab-(eigrp-|oeig-lab-)' <<<"$names"; then
+    if grep -Eq '^clab-(eigrp-|oeig-lab-|eigrp_pkg-)' <<<"$names"; then
         echo 'BUSY: OpenEIGRP containerlab resources remain' >&2
         return 1
     fi

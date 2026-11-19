@@ -16,6 +16,8 @@ nodes:
     loopback.ipv6: 2001:db8:4473:ff::1/128
   csr:
     device: csr
+    # CSR1000v boots inside vrnetlab; its SSH server can take ~6 minutes.
+    netlab_check_retries: 120
     config: [ eigrp-2r-interop ]
     loopback.ipv4: 10.255.0.2/32
     loopback.ipv6: 2001:db8:4473:ff::2/128

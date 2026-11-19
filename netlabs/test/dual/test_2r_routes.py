@@ -371,6 +371,42 @@ class DualValidators(unittest.TestCase):
         self.assertEqual([args.args[0][-2:] for args in command.call_args_list],
                          [['eth1', 'down'], ['eth1', 'up']])
 
+    def test_csr_readiness_budget_used_by_deploy(self):
+        """Exercise the real 2R Lab loader and netlab deployment handoff."""
+        from interop import Lab
+        import tempfile
+
+        topo = ROOT / 'test/dual/2R-routes/topology.yml'
+        with tempfile.TemporaryDirectory() as work:
+            lab = Lab(topo, work)
+            retries = lab.info['nodes']['csr']['netlab_check_retries']
+            self.assertEqual(retries, 120)
+            # The standard 5-second readiness interval must fit the
+            # existing 900-second overall netlab-up command timeout.
+            self.assertLess(retries * 5, 900)
+            invoked = []
+
+            def command(argv, **kwargs):
+                if argv[:3] == ['docker', 'image', 'inspect']:
+                    return '[{"Id":"sha256:fixture","RepoDigests":[]}]'
+                if argv == ['netlab', 'up']:
+                    self.assertEqual(kwargs.get('cwd'), topo.parent)
+                    self.assertEqual(kwargs.get('timeout'), 900)
+                    invoked.append(argv)
+                    return 'deployed'
+                self.fail(f'unexpected deployment command: {argv}')
+
+            with mock.patch('interop.command', side_effect=command), \
+                 mock.patch('interop.shutil.which', return_value='/usr/bin/sshpass'), \
+                 mock.patch.object(lab, '_wait_oe'), \
+                 mock.patch.object(lab, '_csr_address', return_value='192.168.121.102'), \
+                 mock.patch.object(lab, '_wait_ce'), \
+                 mock.patch.object(lab, 'ce_cli', return_value='CSR version'), \
+                 mock.patch.object(lab, 'oe_cli', return_value='OE version'):
+                image = lab.deploy()
+            self.assertEqual(image, lab.info['defaults']['devices.frr.clab.image'])
+            self.assertEqual(invoked, [['netlab', 'up']])
+
     def test_dual_fixture(self):
         import yaml
         root=ROOT/'test/dual/2R-routes'

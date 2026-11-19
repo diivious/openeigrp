@@ -59,7 +59,7 @@ class DockerPreflightTest(unittest.TestCase):
 
     def test_netlab_image_mode_fails_before_remote_regressions(self):
         result = self.invoke('bash', 'netlabs/tools/remote-uut.sh',
-                             '--all', '--image', 'dev-test')
+                             '--container', '--local')
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('local Docker daemon unavailable', result.stderr)
         self.assertFalse(self.ssh_log.exists())
@@ -68,14 +68,14 @@ class DockerPreflightTest(unittest.TestCase):
 
     def test_netlab_single_scenario_image_mode_fails_early(self):
         result = self.invoke('bash', 'netlabs/tools/remote-uut.sh',
-                             '--scenario', '2R-neighbor', '--image', 'dev-test')
+                             '--scenario', '2R-neighbor', '--local')
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('local Docker daemon unavailable', result.stderr)
         self.assertFalse(self.ssh_log.exists())
 
     def test_netlab_release_image_checks_remote_daemon_first(self):
         result = self.invoke('bash', 'netlabs/tools/remote-uut.sh',
-                             '--all', REMOTE_DOCKER_MOCK_INFO_RC='1')
+                             '--container', REMOTE_DOCKER_MOCK_INFO_RC='1')
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('Docker daemon unavailable on mock-appliance', result.stderr)
         self.assertFalse(self.docker_log.exists())

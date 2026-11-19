@@ -144,9 +144,12 @@ endif
 _all:
 	@command -v docker >/dev/null 2>&1 || { echo 'error: make all requires Docker CLI' >&2; exit 1; }
 	@docker info >/dev/null 2>&1 || { echo 'error: make all requires a running Docker Engine/Desktop' >&2; exit 1; }
+	@rm -f -- dist/netlabs-amd64.json
 	$(MAKE) _ci-core
 	$(MAKE) docker ARCH=all GITHUB=
 	$(MAKE) packages ARCH=all VERSION='$(EIGRP_BUILD_VERSION)' RELEASE=0
+	$(PYTHON) netlabs/tools/package-artifacts.py record --dist dist \
+	  --version '$(EIGRP_BUILD_VERSION)' --tag '$(TAG)'
 
 # Local qualification uses one developer identity for core, Docker and .deb.
 # CI's merge identity is covered by the separate workflow version tests.
@@ -251,6 +254,11 @@ docker:
 	    case " $$archs " in *" $$native "*) docker tag 'openeigrp:'"$$version"-"$$native" 'openeigrp:$(TAG)' ;; esac; \
 	  fi; \
 	fi
+	@if [ -z '$(GITHUB)' ] && [ '$(ARCH)' != arm64 ]; then \
+	  case '$(TAG)' in *-test) test_tag='$(TAG)' ;; *) test_tag='$(TAG)-test' ;; esac; \
+	  docker tag 'openeigrp:$(EIGRP_BUILD_VERSION)-amd64' "openeigrp:$$test_tag"; \
+	  bash netlabs/tools/package-image.sh build netlabs/test/package/1R-lifecycle/Dockerfile; \
+	fi
 
 # Exercise both built FRR images: CLI, persistent configuration, restarts,
 # and real two-router protocol-88 adjacency (the --verify contract).
@@ -289,5 +297,7 @@ distclean: clean
 	$(MAKE) -C frr/test/build distclean
 	$(MAKE) -C linux distclean
 	$(MAKE) -C eigrp/test/scale distclean
-	@# Personal Netlab evidence is owned by the separate regression environment.
-	@rm -rf -- "$(CURDIR)/logs/uut" "$(CURDIR)/logs/frr" "$(CURDIR)/logs/linux"
+	@# Remove all test logs, including hidden entries, but preserve logs/.
+	@if [ -d "$(CURDIR)/logs" ]; then \
+	  find "$(CURDIR)/logs" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; \
+	fi

@@ -52,6 +52,8 @@ class MakeTargetsTest(unittest.TestCase):
         shutil.copy2(ROOT / "tools/build-count.py", self.root / "tools/build-count.py")
         self._script("tools/python", "printf 'PY %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         self._script("frr/tools/docker.sh", "printf 'DOCKER %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
+        self._script("netlabs/tools/package-image.sh",
+                     "printf 'PKG_IMAGE %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         self._script("frr/tools/frr.sh", "printf 'FRR %s\\n' \"$*\" >> \"$LOG_FILE\"\n")
         self._script("tools/version.sh", "printf 'VERSION %s\n' \"$*\" >> \"$LOG_FILE\"\n"
                      "printf '1.2.3-testdev.dev\n'\n")
@@ -152,8 +154,10 @@ class MakeTargetsTest(unittest.TestCase):
             self.assertIn("PACKAGES --version 1.2.3-testdev.dev --arch all", events)
             self.assertFalse(any("--uut" in e and e.startswith("PACKAGES ")
                                  for e in events))
-            self.assertFalse(any("netlabs" in e or e.startswith("FRR ")
-                                 for e in events))
+            self.assertTrue(any("netlabs/tools/package-artifacts.py record" in e
+                                for e in events))
+            self.assertEqual(sum(e.startswith("PKG_IMAGE build ") for e in events), 1)
+            self.assertFalse(any(e.startswith("FRR ") for e in events))
             # Full stress/volume/auth scale cases belong to pre-commit only.
             self.assertFalse(any(e.startswith("CHILD ") and
                                  any(e.endswith(" " + name) for name in (
@@ -262,8 +266,10 @@ class MakeTargetsTest(unittest.TestCase):
                                      "linkdown", "mixed-tlv", "churn", "auth-md5"))
                                  for e in events), 11)
             self.assertTrue(any("neighbor_2048.py" in e for e in events))
-            self.assertFalse(any("netlabs" in e or "frr/test/uut" in e
-                                 for e in events))
+            self.assertEqual(sum(e.startswith("PKG_IMAGE build ") for e in events), 1)
+            self.assertTrue(any("netlabs/tools/package-artifacts.py record" in e
+                                for e in events))
+            self.assertFalse(any("frr/test/uut" in e for e in events))
             self.assertEqual(any("linux/test" in e for e in events),
                              host == "Linux")
             indices = [next(i for i, e in enumerate(events) if predicate(e))
@@ -450,30 +456,43 @@ class MakeTargetsTest(unittest.TestCase):
         self.assertNotEqual(self.make("scale", "CASE=invalid")[0].returncode, 0)
 
     def test_clean_preserves_logs_and_distclean_removes_them(self):
-        evidence = self.root / "logs/uut/eigrp/run-one/report.json"
+        logs = self.root / "logs"
+        evidence = logs / "uut/eigrp/run-one/report.json"
         evidence.parent.mkdir(parents=True, exist_ok=True)
         evidence.write_text('{"result":"PASS"}')
-        personal_evidence = self.root / "logs/netlab/private-run/report.json"
-        personal_evidence.parent.mkdir(parents=True, exist_ok=True)
-        personal_evidence.write_text('{"result":"PASS"}')
+        netlab_evidence = logs / "netlab/private-run/report.json"
+        netlab_evidence.parent.mkdir(parents=True, exist_ok=True)
+        netlab_evidence.write_text('{"result":"PASS"}')
+        hidden_file = logs / ".DS_Store"
+        hidden_file.write_bytes(b"metadata")
+        hidden_evidence = logs / ".hidden/state.json"
+        hidden_evidence.parent.mkdir()
+        hidden_evidence.write_text("state")
+        (logs / "file with spaces.log").write_text("log")
+        unrelated = self.root / "keep-me.txt"
+        unrelated.write_text("preserve")
+        (logs / "external-link").symlink_to(unrelated)
         source = self.root / "netlabs/test/rtp/scenario.yaml"
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text("schema: eigrp-uut-test/v1\n")
         cache = self.root / "netlabs/test/__pycache__"
         cache.mkdir()
         (cache / "junk.pyc").write_bytes(b"cache")
-        result, events = self.make("clean")
+
+        result, _ = self.make("clean")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(evidence.exists())
+        for path in (evidence, netlab_evidence, hidden_file, hidden_evidence):
+            self.assertTrue(path.exists())
         self.assertTrue(source.exists())
         self.assertTrue(cache.exists())
-        self.assertTrue(personal_evidence.exists())
+
         result, _ = self.make("distclean")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertFalse(evidence.exists())
-        self.assertTrue(personal_evidence.exists())
-        self.assertTrue(cache.exists())
+        self.assertTrue(logs.is_dir())
+        self.assertEqual(list(logs.iterdir()), [])
+        self.assertTrue(unrelated.exists())
         self.assertTrue(source.exists())
+        self.assertTrue(cache.exists())
         self.assertEqual(self.make("distclean")[0].returncode, 0)
 
     def test_no_public_build_or_frr_smoke_targets(self):
