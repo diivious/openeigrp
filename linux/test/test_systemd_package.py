@@ -30,7 +30,8 @@ RUNTIME = SOCKET.parent
 SERVICE = Path("/usr/lib/systemd/system/openeigrpd.service")
 SYSUSERS = Path("/usr/lib/sysusers.d/openeigrpd.conf")
 MARKER = "! openeigrpd package lifecycle retained configuration\n"
-SECRET = "netlab-journal-credential-must-not-leak-39482"
+# Public test marker; never a user credential.
+JOURNAL_CANARY = "netlab-config-journal-canary-39482"
 EXPECTED = {
     "/usr/sbin/openeigrpd": 0o755,
     "/usr/bin/eigrp": 0o755,
@@ -332,7 +333,7 @@ class SystemdPackageTest(unittest.TestCase):
         self.assertFalse(enabled())
         # Failure reporting is distinct from the daemon being responsive.
         with CONFIG.open("a") as file:
-            file.write("! " + SECRET + "\n")
+            file.write("! " + JOURNAL_CANARY + "\n")
             file.write("invalid-openeigrpd-netlab-directive\n")
         result = run("systemctl", "start", UNIT, check=False)
         self.assertNotEqual(result.returncode, 0, "bad config must fail startup")
@@ -345,7 +346,7 @@ class SystemdPackageTest(unittest.TestCase):
         journal = run("journalctl", "-u", UNIT, "-b", "--no-pager", "-n", "150").stdout
         self.assertTrue(any(s in journal.lower() for s in ("invalid", "error", "failed")),
                         "journal must give useful startup diagnostics")
-        self.assertNotIn(SECRET, journal, "journal leaked configuration secret")
+        self.assertNotIn(JOURNAL_CANARY, journal, "journal exposed configuration comment")
         CONFIG.write_text(CONFIG.read_text().replace("invalid-openeigrpd-netlab-directive\n", ""))
         # Stopping the service may unload it; a new start reloads it.
         run("systemctl", "start", UNIT)
