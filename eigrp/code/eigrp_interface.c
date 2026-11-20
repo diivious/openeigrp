@@ -414,8 +414,7 @@ eigrp_result_t eigrp_intf_config_delete(eigrp_af_config_t *af,
 				if (!remaining)
 					remaining = eigrp_intf_config_read(
 						af, "default");
-				if (remaining)
-					eigrp_intf_config_update(ei, remaining);
+				eigrp_intf_config_update(ei, remaining);
 			}
 		}
 		eigrp_intf_config_free(interface);
@@ -491,23 +490,25 @@ eigrp_intf_effective_default(eigrp_intf_t *runtime)
 void eigrp_intf_config_update(eigrp_intf_t *runtime,
 			      const eigrp_intf_config_t *config)
 {
-	eigrp_intf_context_t context = {.runtime = runtime};
-	const eigrp_intf_config_t *defaults;
+	const eigrp_intf_config_t *defaults, *auth;
+	const char *keychain = NULL;
 	bool old_passive;
 
-	if (!runtime || !config)
+	if (!runtime)
 		return;
 	old_passive = eigrp_intf_is_passive(runtime);
+	defaults = eigrp_intf_effective_default(runtime);
 
-	/* Rebuild inheritable named af-interface state from protocol defaults,
-	 * then layer the default template and the specific interface object.
-	 */
+	/* Rebuild inherited values before applying interface overrides. */
 	runtime->params.v_hello = EIGRP_HELLO_INTERVAL_DEFAULT;
 	runtime->params.v_wait = EIGRP_HOLD_INTERVAL_DEFAULT;
 	runtime->params.passive_interface = EIGRP_INTF_ACTIVE;
 	runtime->split_horizon = true;
-	defaults = eigrp_intf_effective_default(runtime);
-	if (defaults && defaults != config) {
+	runtime->next_hop_self = true;
+	runtime->bandwidth_percent = 50;
+	runtime->params.bandwidth = EIGRP_BANDWIDTH_DEFAULT;
+	runtime->params.delay = EIGRP_DELAY_DEFAULT;
+	if (defaults) {
 		if (defaults->bandwidth_configured)
 			runtime->params.bandwidth = defaults->bandwidth;
 		if (defaults->delay_configured)
@@ -520,43 +521,47 @@ void eigrp_intf_config_update(eigrp_intf_t *runtime,
 			runtime->params.passive_interface =
 				defaults->passive ? EIGRP_INTF_PASSIVE
 						  : EIGRP_INTF_ACTIVE;
-		runtime->split_horizon = defaults->split_horizon;
-		runtime->next_hop_self = defaults->next_hop_self;
+		if (defaults->split_horizon_configured)
+			runtime->split_horizon = defaults->split_horizon;
+		if (defaults->next_hop_self_configured)
+			runtime->next_hop_self = defaults->next_hop_self;
 		if (defaults->bandwidth_percent_configured)
 			runtime->bandwidth_percent =
 				defaults->bandwidth_percent;
 	}
+	if (config && config != defaults) {
+		if (config->bandwidth_configured)
+			runtime->params.bandwidth = config->bandwidth;
+		if (config->delay_configured)
+			runtime->params.delay = config->delay;
+		if (config->hello_interval_configured)
+			runtime->params.v_hello = config->hello_interval;
+		if (config->hold_time_configured)
+			runtime->params.v_wait = config->hold_time;
+		if (config->passive_configured)
+			runtime->params.passive_interface =
+				config->passive ? EIGRP_INTF_PASSIVE
+						: EIGRP_INTF_ACTIVE;
+		if (config->split_horizon_configured)
+			runtime->split_horizon = config->split_horizon;
+		if (config->next_hop_self_configured)
+			runtime->next_hop_self = config->next_hop_self;
+		if (config->bandwidth_percent_configured)
+			runtime->bandwidth_percent = config->bandwidth_percent;
+	}
 
-	if (config->bandwidth_configured)
-		runtime->params.bandwidth = config->bandwidth;
-	if (config->delay_configured)
-		runtime->params.delay = config->delay;
-	if (config->hello_interval_configured)
-		runtime->params.v_hello = config->hello_interval;
-	if (config->hold_time_configured)
-		runtime->params.v_wait = config->hold_time;
-	if (config == defaults || config->passive_configured)
-		runtime->params.passive_interface = config->passive
-							    ? EIGRP_INTF_PASSIVE
-							    : EIGRP_INTF_ACTIVE;
-	runtime->split_horizon = config->split_horizon;
-	runtime->next_hop_self = config->next_hop_self;
-	if (config->bandwidth_percent_configured)
-		runtime->bandwidth_percent = config->bandwidth_percent;
-
-	/* Authentication is retained on the named af-interface object.  When a
-	 * network statement creates the runtime interface after configuration
-	 * was committed, bind the already-supported MD5/key-chain state as part
-	 * of the same interface configuration handoff.  Direct-password SHA-256
-	 * remains explicitly unsupported by the authentication target.
+	/* Authentication mode and keychain inherit independently. A reset
+	 * removes an interface override rather than disabling its default.
+	 * The auth module retains ownership of runtime secret material.
 	 */
-	if (config->authentication_mode_configured
-	    && config->authentication_mode == EIGRP_AUTHENTICATION_MD5)
-		(void)eigrp_auth_mode_update(EIGRP_SET, &context,
-					     EIGRP_AUTHENTICATION_MD5, NULL);
-	if (config->keychain)
-		(void)eigrp_auth_keychain_update(EIGRP_SET, &context,
-						 config->keychain);
+	auth = config && config->authentication_mode_configured	      ? config
+	       : defaults && defaults->authentication_mode_configured ? defaults
+								      : NULL;
+	if (config && config->keychain)
+		keychain = config->keychain;
+	else if (defaults)
+		keychain = defaults->keychain;
+	(void)eigrp_auth_runtime_apply(runtime, auth, keychain);
 
 	if (old_passive != eigrp_intf_is_passive(runtime))
 		eigrp_intf_eventlog_state(
@@ -567,23 +572,28 @@ void eigrp_intf_config_update(eigrp_intf_t *runtime,
 			runtime->curr_mtu);
 }
 
-static void eigrp_intf_context_runtime_rebind(eigrp_intf_context_t *context)
+void eigrp_intf_config_rebind(eigrp_intf_context_t *context)
 {
 	eigrp_intf_config_t *specific;
 	eigrp_intf_t *ei;
 	eigrp_list_item_t *node;
 
 	if (!context || !context->address_family
-	    || !context->address_family->runtime || !context->config
-	    || strcmp(context->config->interface_name, "default") != 0)
+	    || !context->address_family->runtime || !context->config)
 		return;
 
 	for (EIGRP_LIST_ITERATE_RO(context->address_family->runtime->eiflist,
 				   node, ei)) {
+		if (strcmp(context->config->interface_name, "default") != 0
+		    && strcmp(ei->name, context->config->interface_name) != 0)
+			continue;
 		specific = eigrp_intf_config_read(context->address_family,
 						  ei->name);
-		eigrp_intf_config_update(ei,
-					 specific ? specific : context->config);
+		eigrp_intf_config_update(
+			ei,
+			specific ? specific
+				 : eigrp_intf_config_read(
+					   context->address_family, "default"));
 	}
 }
 
@@ -652,7 +662,7 @@ eigrp_intf_bandwidth_percent_update(eigrp_operation_t operation,
 		}
 		if (context->runtime)
 			context->runtime->bandwidth_percent = 50;
-		eigrp_intf_context_runtime_rebind(context);
+		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
 
@@ -669,7 +679,7 @@ eigrp_intf_bandwidth_percent_update(eigrp_operation_t operation,
 	}
 	if (context->runtime)
 		context->runtime->bandwidth_percent = percent;
-	eigrp_intf_context_runtime_rebind(context);
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -875,7 +885,7 @@ eigrp_result_t eigrp_intf_hello_interval_update(eigrp_operation_t operation,
 		if (context->runtime)
 			context->runtime->params.v_hello =
 				EIGRP_HELLO_INTERVAL_DEFAULT;
-		eigrp_intf_context_runtime_rebind(context);
+		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
 
@@ -892,7 +902,7 @@ eigrp_result_t eigrp_intf_hello_interval_update(eigrp_operation_t operation,
 	}
 	if (context->runtime)
 		context->runtime->params.v_hello = seconds;
-	eigrp_intf_context_runtime_rebind(context);
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -941,7 +951,7 @@ eigrp_result_t eigrp_intf_hold_time_update(eigrp_operation_t operation,
 		if (context->runtime)
 			context->runtime->params.v_wait =
 				EIGRP_HOLD_INTERVAL_DEFAULT;
-		eigrp_intf_context_runtime_rebind(context);
+		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
 
@@ -958,7 +968,7 @@ eigrp_result_t eigrp_intf_hold_time_update(eigrp_operation_t operation,
 	}
 	if (context->runtime)
 		context->runtime->params.v_wait = seconds;
-	eigrp_intf_context_runtime_rebind(context);
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -1025,7 +1035,7 @@ eigrp_result_t eigrp_intf_passive_update(eigrp_operation_t operation,
 				context->runtime->curr_mtu);
 		eigrp_intf_multicast_update(EIGRP_SET, context->runtime);
 	}
-	eigrp_intf_context_runtime_rebind(context);
+	eigrp_intf_config_rebind(context);
 	/* A configured passive IPv6 interface may already have a global
 	 * connected address before its AF configuration is applied.  Rescan
 	 * host interfaces now so an existing loopback can originate its route
@@ -1078,11 +1088,13 @@ eigrp_result_t eigrp_intf_nexthop_self_update(eigrp_operation_t operation,
 	enabled = operation == EIGRP_SET;
 	if (!eigrp_intf_context_valid(context))
 		return EIGRP_RESULT_NOT_FOUND;
-	if (context->config)
+	if (context->config) {
 		context->config->next_hop_self = enabled;
+		context->config->next_hop_self_configured = true;
+	}
 	if (context->runtime)
 		context->runtime->next_hop_self = enabled;
-	eigrp_intf_context_runtime_rebind(context);
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -1122,10 +1134,13 @@ eigrp_result_t eigrp_intf_split_horizon_update(eigrp_operation_t operation,
 	enabled = operation == EIGRP_SET;
 	if (!eigrp_intf_context_valid(context))
 		return EIGRP_RESULT_NOT_FOUND;
-	if (context->config)
+	if (context->config) {
 		context->config->split_horizon = enabled;
+		context->config->split_horizon_configured = true;
+	}
 	if (context->runtime)
 		context->runtime->split_horizon = enabled;
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -1175,7 +1190,7 @@ eigrp_result_t eigrp_intf_shutdown_update(eigrp_operation_t operation,
 			(void)eigrp_instance_start(context->runtime->eigrp);
 		}
 	}
-	eigrp_intf_context_runtime_rebind(context);
+	eigrp_intf_config_rebind(context);
 	if (context->address_family && context->address_family->runtime
 	    && strcmp(context->config->interface_name, "default") == 0) {
 		eigrp_intf_t *ei;

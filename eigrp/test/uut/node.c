@@ -113,19 +113,24 @@ static eigrp_result_t accounting_cb(const eigrp_stat_nbr_limit_t *s, void *arg)
 }
 static eigrp_result_t intf_cb(const eigrp_intf_state_t *s, void *arg)
 {
+	eigrp_intf_t *ei =
+		s->interface_name && runtime
+			? eigrp_intf_lookup_by_name(runtime, s->interface_name)
+			: NULL;
 	(void)arg;
-	printf("INTF|name=%s|config_present=%u|runtime_present=%u|passive=%u|shutdown=%u|multicast_enabled=%u|auth_configured=%u|auth_mode=%u|bandwidth=%u|bandwidth_percent=%u|delay=%u|mtu=%u|hello_interval=%u|hold_time=%u|peer_count=%u|output_queue=%lu|reliable_queue=%lu|reliability=%u|load=%u|tlv1_peers=%u|tlv2_peers=%u|split_horizon=%u|next_hop_self=%u|hello_timer_running=%u|hello_timer_remaining=%u|unreliable_multicast_sent=%llu|reliable_multicast_sent=%llu|unreliable_unicast_sent=%llu|reliable_unicast_sent=%llu|multicast_exceptions=%llu|cr_packets_sent=%llu|retransmissions_sent=%llu\n",
+	printf("INTF|name=%s|config_present=%u|runtime_present=%u|passive=%u|shutdown=%u|multicast_enabled=%u|auth_configured=%u|auth_mode=%u|auth_material=%u|bandwidth=%u|bandwidth_percent=%u|delay=%u|mtu=%u|hello_interval=%u|hold_time=%u|peer_count=%u|output_queue=%lu|reliable_queue=%lu|reliability=%u|load=%u|tlv1_peers=%u|tlv2_peers=%u|split_horizon=%u|next_hop_self=%u|hello_timer_running=%u|hello_timer_remaining=%u|unreliable_multicast_sent=%llu|reliable_multicast_sent=%llu|unreliable_unicast_sent=%llu|reliable_unicast_sent=%llu|multicast_exceptions=%llu|cr_packets_sent=%llu|retransmissions_sent=%llu\n",
 	       s->interface_name ? s->interface_name : "-",
 	       s->config_present ? 1 : 0, s->runtime_present ? 1 : 0,
 	       s->passive ? 1 : 0, s->shutdown ? 1 : 0,
 	       s->multicast_enabled ? 1 : 0,
 	       s->authentication_configured ? 1 : 0, s->authentication_mode,
-	       s->bandwidth, s->bandwidth_percent, s->delay, s->mtu,
-	       s->hello_interval, s->hold_time, s->peer_count,
-	       s->output_queue_count, s->reliable_queue_count, s->reliability,
-	       s->load, s->tlv1_peer_count, s->tlv2_peer_count,
-	       s->split_horizon ? 1 : 0, s->next_hop_self ? 1 : 0,
-	       s->hello_timer_running ? 1 : 0, s->hello_timer_remaining,
+	       ei && eigrp_auth_material_available(ei) ? 1 : 0, s->bandwidth,
+	       s->bandwidth_percent, s->delay, s->mtu, s->hello_interval,
+	       s->hold_time, s->peer_count, s->output_queue_count,
+	       s->reliable_queue_count, s->reliability, s->load,
+	       s->tlv1_peer_count, s->tlv2_peer_count, s->split_horizon ? 1 : 0,
+	       s->next_hop_self ? 1 : 0, s->hello_timer_running ? 1 : 0,
+	       s->hello_timer_remaining,
 	       (unsigned long long)s->unreliable_multicast_sent,
 	       (unsigned long long)s->reliable_multicast_sent,
 	       (unsigned long long)s->unreliable_unicast_sent,
@@ -438,6 +443,70 @@ typedef struct uut_limit_args {
 	char address[128];
 	char operation[32];
 } uut_limit_args_t;
+
+/* UUT-only interface configuration operations run on the owning AF worker.
+ * All updates use the same semantic targets as the CLI adapters.
+ */
+typedef struct uut_intf_cfg_args {
+	char ifname[256];
+	char operation[32];
+	char value[256];
+} uut_intf_cfg_args_t;
+
+static eigrp_result_t uut_intf_cfg_update(eigrp_instance_t *e, void *arg)
+{
+	const uut_intf_cfg_args_t *request = arg;
+	eigrp_intf_context_t context = {
+		.address_family = af,
+		.config = eigrp_intf_config_read(af, request->ifname),
+		.runtime = eigrp_intf_lookup_by_name(e, request->ifname),
+	};
+	const char *op = request->operation;
+
+	if (!strcmp(op, "create"))
+		return eigrp_intf_config_create(af, request->ifname);
+	if (!strcmp(op, "delete"))
+		return eigrp_intf_config_delete(af, request->ifname);
+	if (!strcmp(op, "replay")) {
+		if (!context.runtime)
+			return EIGRP_RESULT_NOT_FOUND;
+		eigrp_intf_config_update(
+			context.runtime,
+			context.config ? context.config
+				       : eigrp_intf_config_read(af, "default"));
+		return EIGRP_RESULT_SUCCESS;
+	}
+	if (!context.config)
+		return EIGRP_RESULT_NOT_FOUND;
+	if (!strcmp(op, "md5"))
+		return eigrp_auth_mode_update(EIGRP_SET, &context,
+					      EIGRP_AUTHENTICATION_MD5, NULL);
+	if (!strcmp(op, "hmac") || !strcmp(op, "type7")) {
+		eigrp_auth_hmac_config_t hmac = {
+			.password = request->value,
+			.encryption_type = !strcmp(op, "type7") ? 7 : 0,
+		};
+		return eigrp_auth_mode_update(EIGRP_SET, &context,
+					      EIGRP_AUTHENTICATION_HMAC_SHA256,
+					      &hmac);
+	}
+	if (!strcmp(op, "mode-reset"))
+		return eigrp_auth_mode_update(EIGRP_RESET, &context, 0, NULL);
+	if (!strcmp(op, "keychain"))
+		return eigrp_auth_keychain_update(EIGRP_SET, &context,
+						  request->value);
+	if (!strcmp(op, "keychain-reset"))
+		return eigrp_auth_keychain_update(EIGRP_RESET, &context, NULL);
+	if (!strcmp(op, "next-hop-self"))
+		return eigrp_intf_nexthop_self_update(EIGRP_SET, &context);
+	if (!strcmp(op, "no-next-hop-self"))
+		return eigrp_intf_nexthop_self_update(EIGRP_RESET, &context);
+	if (!strcmp(op, "split-horizon"))
+		return eigrp_intf_split_horizon_update(EIGRP_SET, &context);
+	if (!strcmp(op, "no-split-horizon"))
+		return eigrp_intf_split_horizon_update(EIGRP_RESET, &context);
+	return EIGRP_RESULT_INVALID_ARGUMENT;
+}
 
 static eigrp_result_t uut_nbr_limit_update(eigrp_instance_t *e, void *arg)
 {
@@ -1065,7 +1134,17 @@ int main(int argc, char **argv)
 			tech();
 		else if (!strcmp(verb, "EVENTS"))
 			events();
-		else if (!strcmp(verb, "UP")) {
+		else if (!strcmp(verb, "INTF-CFG")) {
+			uut_intf_cfg_args_t request = {0};
+			eigrp_result_t result = EIGRP_RESULT_INVALID_ARGUMENT;
+			if (sscanf(line, "%*s %255s %31s %255s", request.ifname,
+				   request.operation, request.value)
+			    >= 2)
+				result = eigrp_instance_message_call(
+					runtime, uut_intf_cfg_update, &request);
+			printf("RESULT|%d\n", (int)result);
+			fflush(stdout);
+		} else if (!strcmp(verb, "UP")) {
 			printf("RESULT|%d\n",
 			       (int)eigrp_unix_interface_up(ifname));
 			fflush(stdout);

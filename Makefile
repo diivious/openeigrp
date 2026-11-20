@@ -69,18 +69,30 @@ version='$(EIGRP_BUILD_VERSION)'; \
   $(MAKE) $(1) EIGRP_BUILD_VERSION="$$version" TAG='$(TAG)' ARCH=all GITHUB= VERSION= RELEASE=0
 endef
 
+# Runs a qualification and prints Success/Fail based on its exit status.
+# Usage: $(call qualify,_all)
+define qualification_status
+@$(call qualification,$(1)); \
+if [ $$? -eq 0 ]; then \
+	echo '\nSuccess'; \
+else \
+	echo '\nFail'; \
+	exit 1; \
+fi
+endef
+
 # make: host build and full-tree style validation; no Docker required.
 _default:
-	@$(call qualification,_base)
+	@$(call qualification_status,_base)
 
 # make all: default build and fast tests, then build both Linux image/package
 # architectures. Do not start runtime Docker or dpkg lifecycle UUTs here.
 all:
-	@$(call qualification,_all)
+	@$(call qualification_status,_all)
 
 # make pre-commit: full local regression qualification, once per build.
 pre-commit:
-	@$(call qualification,_pre-commit)
+	@$(call qualification_status,_pre-commit)
 
 _portable:
 	$(MAKE) -C eigrp/code

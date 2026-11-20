@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+# Runtime checks use the real AF configuration and authentication targets.
+schema: eigrp-uut-test/v1
+name: ipv4-named-authentication-inheritance-replay
+# Start with an unauthenticated two-router network and configure named AF live.
+topology: ../examples/two-router.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 15}
+  - validate-interface: {uut: r1, interface: eth0, config: false, auth_mode: 0, auth_material: false, next_hop_self: true, split_horizon: true}
+
+  # A default template must immediately reach an already-running interface.
+  - interface-config: {uut: r1, interface: default, operation: create}
+  - interface-config: {uut: r1, interface: default, operation: md5}
+  - interface-config: {uut: r1, interface: default, operation: keychain, value: testkeychain}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 2, auth_material: true}
+  - interface-config: {uut: r1, interface: default, operation: no-next-hop-self}
+  - interface-config: {uut: r1, interface: default, operation: no-split-horizon}
+  - validate-interface: {uut: r1, interface: eth0, next_hop_self: false, split_horizon: false}
+
+  # An empty per-interface object may not mask default-template values.
+  - interface-config: {uut: r1, interface: eth0, operation: create}
+  - interface-config: {uut: r1, interface: eth0, operation: replay}
+  - validate-interface: {uut: r1, interface: eth0, config: true, auth_mode: 2, auth_material: true, next_hop_self: false, split_horizon: false}
+  - interface-config: {uut: r1, interface: eth0, operation: keychain, value: specificchain}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 2, auth_material: true}
+  - interface-config: {uut: r1, interface: eth0, operation: keychain-reset}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 2, auth_material: true}
+  - interface-config: {uut: r1, interface: eth0, operation: next-hop-self}
+  - interface-config: {uut: r1, interface: eth0, operation: split-horizon}
+  - validate-interface: {uut: r1, interface: eth0, next_hop_self: true, split_horizon: true}
+  - interface-config: {uut: r1, interface: eth0, operation: no-next-hop-self}
+  - interface-config: {uut: r1, interface: eth0, operation: no-split-horizon}
+  - validate-interface: {uut: r1, interface: eth0, next_hop_self: false, split_horizon: false}
+
+  # HMAC plaintext overrides MD5, replay and reset restore inherited MD5.
+  - interface-config: {uut: r1, interface: eth0, operation: hmac, value: directkey}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: true}
+  - interface-config: {uut: r1, interface: eth0, operation: replay}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: true}
+  - interface-config: {uut: r1, interface: eth0, operation: mode-reset}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 2, auth_material: true}
+
+  # Type-7 is retained but must never fall back to unauthenticated runtime.
+  - interface-config: {uut: r1, interface: eth0, operation: type7, value: 070C285F4D06}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: false}
+  - interface-config: {uut: r1, interface: eth0, operation: replay}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: false}
+  # Missing runtime key material must suppress even the next periodic Hello.
+  - packet-mark: type7-no-key
+  - wait: 6
+  - validate-packet: {uut: r1, interface: eth0, event: sent, since: type7-no-key, min: 0, max: 0, timeout: 1}
+  - interface-config: {uut: r1, interface: eth0, operation: mode-reset}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 2, auth_material: true}
+
+  # Default HMAC mode/key selection is rebuilt for a specific object.
+  - interface-config: {uut: r1, interface: default, operation: hmac, value: inheritedkey}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: true}
+  - interface-config: {uut: r1, interface: eth0, operation: replay}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: true}
+  - interface-config: {uut: r1, interface: default, operation: mode-reset}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 0}
+  - interface-config: {uut: r1, interface: default, operation: keychain-reset}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 0, auth_material: false}
+
+  # Deleting default and last specific config clears all previous overrides.
+  - interface-config: {uut: r1, interface: default, operation: md5}
+  - interface-config: {uut: r1, interface: default, operation: keychain, value: testkeychain}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 2, auth_material: true}
+  - interface-config: {uut: r1, interface: default, operation: delete}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 0, auth_material: false, next_hop_self: false, split_horizon: false}
+  - interface-config: {uut: r1, interface: eth0, operation: delete}
+  - validate-interface: {uut: r1, interface: eth0, config: false, auth_mode: 0, auth_material: false, next_hop_self: true, split_horizon: true}
+  - interface-config: {uut: r1, interface: eth0, operation: replay}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 0, auth_material: false}
+  - stop: all

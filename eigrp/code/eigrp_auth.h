@@ -61,6 +61,9 @@ extern void eigrp_auth_tlv_md5_delete(struct TLV_MD5_Authentication_Type *);
 extern uint16_t eigrp_auth_tlv_md5_encode(eigrp_stream_t *, eigrp_intf_t *);
 extern uint16_t eigrp_auth_tlv_sha256_encode(eigrp_stream_t *, eigrp_intf_t *);
 
+eigrp_result_t eigrp_auth_runtime_apply(eigrp_intf_t *runtime,
+					const eigrp_intf_config_t *auth,
+					const char *keychain);
 eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 				      eigrp_intf_context_t *context,
 				      eigrp_authentication_mode_t mode,

@@ -43,7 +43,9 @@ struct eigrp_intf_config {
 	char *authentication_password;
 	char *keychain;
 	bool next_hop_self;
+	bool next_hop_self_configured;
 	bool split_horizon;
+	bool split_horizon_configured;
 	bool shutdown_configured;
 	bool shutdown;
 	eigrp_summary_config_t *summaries;
@@ -102,6 +104,7 @@ eigrp_result_t eigrp_intf_config_delete(eigrp_af_config_t *af,
 void eigrp_intf_config_delete_all(eigrp_af_config_t *af);
 void eigrp_intf_config_update(eigrp_intf_t *runtime,
 			      const eigrp_intf_config_t *config);
+void eigrp_intf_config_rebind(eigrp_intf_context_t *context);
 
 eigrp_result_t
 eigrp_intf_bandwidth_percent_update(eigrp_operation_t operation,

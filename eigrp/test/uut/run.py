@@ -228,6 +228,8 @@ PACKET_GROUP_KEYS = {"source_uut", "destination_uut", "source_interface", "desti
                      "segment", "afi", "opcode", "multicast", "sequence", "auth_sequence", "ack", "cr", "event"}
 STEP_FIELDS = {
     "link-up": {"uut", "interface"}, "link-down": {"uut", "interface"},
+    "interface-config": {"uut", "interface", "operation", "value"},
+    "validate-interface": {"uut", "interface", "config", "runtime", "auth_mode", "auth_material", "next_hop_self", "split_horizon", "bandwidth_percent", "timeout"},
     "clear-neighbors": {"uut", "target", "soft"},
     "clear-topology": {"uut", "prefix"},
     "clear-events": {"uut"},
@@ -339,7 +341,7 @@ def validate_scenario(s):
     if s.get("schema")!=TEST_SCHEMA: raise SpecError(f"scenario schema must be {TEST_SCHEMA}")
     if not isinstance(s.get("topology"),str) or not s["topology"]: raise SpecError("scenario.topology must name its topology YAML")
     if not isinstance(s.get("steps"),list) or not s["steps"]: raise SpecError("scenario.steps must be a non-empty list")
-    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-accounting","validate-capability","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","clear-neighbors","clear-topology","clear-events","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
+    allowed={"start","stop","link-up","link-down","links-up","links-down","wait","packet-mark","fault-add","fault-remove","validate-fault","validate-neighbor","validate-interface","interface-config","validate-accounting","validate-capability","validate-route","validate-packet","validate-retransmission","validate-retry","validate-convergence","validate-event","validate-log","clear-neighbors","clear-topology","clear-events","peer-limit","peer-limit-config","redist-limit-config","process-limit-config","inbound-filter-config","process-limit-clear","process-limit-expire","process-limit-reset-expire","process-limit-stale","process-limit-age","validate-process-limit","source-route-add","source-route-remove","redistribute-add","redistribute-remove","redistribute-metric","default-metric","redist-limit-clear","redist-limit-expire","validate-redist-limit","checkpoint"}
     marks=set()
     for idx,step in enumerate(s["steps"],1):
         if not isinstance(step,dict) or len(step)!=1: raise SpecError(f"step {idx}: exactly one operation required")
@@ -352,6 +354,19 @@ def validate_scenario(s):
             marks.add(arg)
         elif op=="validate-capability": validate_capability_assertion(arg,where)
         elif op=="validate-neighbor": validate_neighbor_assertion(arg,where)
+        elif op == "validate-interface":
+            if not isinstance(arg,dict): raise SpecError(f"{where}: mapping required")
+            check_keys(arg, STEP_FIELDS[op], where)
+            if not all(isinstance(arg.get(k),str) and arg[k] for k in ("uut","interface")):
+                raise SpecError(f"{where}: uut and interface required")
+            if len(arg) == 2: raise SpecError(f"{where}: at least one assertion required")
+            for k in ("config","runtime","auth_material","next_hop_self","split_horizon"):
+                if k in arg and type(arg[k]) is not bool:
+                    raise SpecError(f"{where}: {k} must be boolean")
+            for k in ("auth_mode","bandwidth_percent"):
+                if k in arg: _count(arg[k], f"{where}.{k}")
+            if "timeout" in arg and (type(arg["timeout"]) not in (float,int) or arg["timeout"] <= 0):
+                raise SpecError(f"{where}: invalid timeout")
         elif op=="validate-accounting": validate_accounting_assertion(arg,where)
         elif op=="validate-route": validate_route_assertion(arg,where)
         elif op=="validate-packet": validate_packet_assertion(arg,where,marks)
@@ -419,6 +434,18 @@ def validate_scenario(s):
                     "validate-event":("uut","contains"),
                     "validate-log":("uut","contains")}.get(op,())
             if any(k not in arg for k in needed): raise SpecError(f"{where}: missing required fields {needed}")
+            if op == "interface-config":
+                if not all(isinstance(arg.get(k),str) and arg[k] and not any(c.isspace() for c in arg[k])
+                           for k in ("uut","interface","operation")):
+                    raise SpecError(f"{where}: uut, interface and operation required")
+                valid = {"create", "delete", "replay", "md5", "hmac", "type7", "mode-reset", "keychain", "keychain-reset", "next-hop-self", "no-next-hop-self", "split-horizon", "no-split-horizon"}
+                if arg["operation"] not in valid:
+                    raise SpecError(f"{where}: invalid operation")
+                needs_value = arg["operation"] in ("hmac", "type7", "keychain")
+                if needs_value != ("value" in arg):
+                    raise SpecError(f"{where}: wrong value presence")
+                if needs_value and (not isinstance(arg["value"],str) or not arg["value"] or len(arg["value"]) > 32 or any(c.isspace() for c in arg["value"])):
+                    raise SpecError(f"{where}: invalid value")
             if op == "clear-neighbors":
                 target = arg.get("target", "all")
                 if not isinstance(target, str) or not target or any(c.isspace() for c in target):
@@ -570,7 +597,7 @@ class Node:
         rows=self.cmd("STATE",until="END"); st={"interfaces":[],"neighbors":[],"accounting":[],"topology":[],"paths":[],"rib":[],"source":[]}; current_prefix=None
         for row in rows:
             f=row.split("|"); typ=f[0]; kv=dict(part.split("=",1) for part in f[1:] if "=" in part)
-            if typ=="INTF": st["interfaces"].append({"interface":kv["name"],"runtime":kv["runtime_present"]=="1","shutdown":kv["shutdown"]=="1","peers":int(kv["peer_count"]),"output_q":int(kv["output_queue"]),"reliable_q":int(kv["reliable_queue"])})
+            if typ=="INTF": st["interfaces"].append({"interface":kv["name"],"config":kv["config_present"]=="1","runtime":kv["runtime_present"]=="1","shutdown":kv["shutdown"]=="1","auth_mode":int(kv["auth_mode"]),"auth_material":kv.get("auth_material")=="1","next_hop_self":kv["next_hop_self"]=="1","split_horizon":kv["split_horizon"]=="1","bandwidth_percent":int(kv["bandwidth_percent"]),"peers":int(kv["peer_count"]),"output_q":int(kv["output_queue"]),"reliable_q":int(kv["reliable_queue"])})
             elif typ=="NBR": st["neighbors"].append({"address":kv["address"],"interface":kv["interface"],"state":kv["state"],"runtime":kv["runtime_present"]=="1","reliable_q":int(kv["reliable_queue"]),"rto":int(kv["rto_ms"]),"srtt_valid":kv["srtt_valid"]=="1","srtt":int(kv["srtt_ms"]),"retransmissions":int(kv["retransmits"])})
             elif typ=="ACCOUNT": st["accounting"].append({"address":kv["address"],"interface":kv["interface"],"status":kv["status"],"prefix_count":int(kv["prefix_count"]),"restart_count":int(kv["restart_count"]),"restart_active":int(kv["restart_seconds"])>0,"reset_active":int(kv["reset_seconds"])>0})
             elif typ=="TOPO":
@@ -587,6 +614,13 @@ class Node:
         # result instead of declaring a live UUT dead under dense-mesh load.
         r=self.cmd(("UP" if up else "DOWN")+" "+ifname,timeout=10)
         if r!="RESULT|0": raise RuntimeError(f"{self.name}:{ifname}: link operation failed: {r}")
+    def interface_config(self, interface, operation, value=None):
+        command = f"INTF-CFG {interface} {operation}" + (f" {value}" if value else "")
+        result = self.cmd(command, timeout=10)
+        # A type-7 secret is intentionally retained but unsupported at runtime.
+        if result != "RESULT|0" and not (operation == "type7" and result == "RESULT|5"):
+            raise RuntimeError(f"{self.name}: interface configuration failed: {result}")
+
     def peer_limit(self, interface, neighbor, operation):
         result = self.cmd(f"LIMIT {interface} {neighbor} {operation}", timeout=10)
         if result != "RESULT|0":
@@ -1047,6 +1081,18 @@ class Runner:
             actual = capability_record(self.nodes[arg["uut"]].cmd("TECH", until="END", timeout=5))
             if not capability_matches(actual, arg):
                 raise AssertionError(f"UUT capabilities mismatch: actual={actual}, expected={arg}")
+        elif op=="interface-config":
+            self.nodes[arg["uut"]].interface_config(arg["interface"], arg["operation"], arg.get("value"))
+        elif op=="validate-interface":
+            last=[]
+            def matches():
+                nonlocal last
+                last=[row for row in self.nodes[arg["uut"]].state()["interfaces"]
+                      if row["interface"] == arg["interface"] and row["runtime"]]
+                return len(last)==1 and all(last[0].get(k)==v for k,v in arg.items()
+                    if k not in ("uut","interface","timeout"))
+            if not self.poller(.05).until(matches, float(arg.get("timeout",3))):
+                raise AssertionError(f"validate-interface mismatch: {arg} actual={last}")
         elif op=="validate-neighbor": self.expect("neighbor",arg)
         elif op=="validate-accounting": self.expect("accounting",arg)
         elif op=="validate-route": self.expect("route",arg)

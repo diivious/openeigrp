@@ -72,7 +72,7 @@ eigrp_result_t eigrp_sys_interface_walk(eigrp_instance_t *instance,
 #define eigrp_intf_context_valid(ctx)                                          \
 	((ctx) && ((ctx)->config || (ctx)->runtime))
 #define eigrp_intf_eventlog_state(...) ((void)0)
-#define eigrp_intf_context_runtime_rebind(...) ((void)0)
+#define eigrp_intf_config_rebind(...) ((void)0)
 
 bool eigrp_intf_is_passive(eigrp_intf_t *ei)
 {

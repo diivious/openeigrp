@@ -517,6 +517,76 @@ typedef struct eigrp_auth_message_args {
 static eigrp_result_t eigrp_auth_message_process(eigrp_instance_t *eigrp,
 						 void *arg);
 
+/* Reconcile retained named authentication into independently owned runtime
+ * material. An unsupported encoded secret must not downgrade to cleartext
+ * EIGRP: keep its configured authentication mode with no usable key.
+ */
+eigrp_result_t eigrp_auth_runtime_apply(eigrp_intf_t *runtime,
+					const eigrp_intf_config_t *auth,
+					const char *keychain)
+{
+	char *password = NULL, *chain = NULL;
+	int mode = EIGRP_AUTH_TYPE_NONE;
+	eigrp_result_t result = EIGRP_RESULT_SUCCESS;
+
+	if (!runtime)
+		return EIGRP_RESULT_INVALID_ARGUMENT;
+	if (auth && auth->authentication_mode_configured) {
+		switch (auth->authentication_mode) {
+		case EIGRP_AUTHENTICATION_MD5:
+			mode = EIGRP_AUTH_TYPE_MD5;
+			break;
+		case EIGRP_AUTHENTICATION_HMAC_SHA256:
+			mode = EIGRP_AUTH_TYPE_SHA256;
+			if (auth->authentication_encryption_type == 7) {
+				result = EIGRP_RESULT_UNSUPPORTED;
+				keychain = NULL;
+			} else if (auth->authentication_encryption_type != 0
+				   || !auth->authentication_password
+				   || !auth->authentication_password[0]) {
+				result = EIGRP_RESULT_INVALID_ARGUMENT;
+				keychain = NULL;
+			} else {
+				password = eigrp_auth_string_dup(
+					auth->authentication_password);
+				if (!password)
+					result = EIGRP_RESULT_INTERNAL_FAILURE;
+			}
+			break;
+		default:
+			/* Never treat an unknown configured mode as no auth. */
+			mode = -1;
+			result = EIGRP_RESULT_UNSUPPORTED;
+			keychain = NULL;
+			break;
+		}
+	}
+	if (keychain && result == EIGRP_RESULT_SUCCESS) {
+		chain = eigrp_auth_string_dup(keychain);
+		if (!chain)
+			result = EIGRP_RESULT_INTERNAL_FAILURE;
+	}
+	if (result != EIGRP_RESULT_SUCCESS) {
+		if (password) {
+			memset(password, 0, strlen(password));
+			free(password);
+			password = NULL;
+		}
+		free(chain);
+		chain = NULL;
+	}
+	if (runtime->params.auth_password) {
+		memset(runtime->params.auth_password, 0,
+		       strlen(runtime->params.auth_password));
+		free(runtime->params.auth_password);
+	}
+	free(runtime->params.auth_keychain);
+	runtime->params.auth_password = password;
+	runtime->params.auth_keychain = chain;
+	runtime->params.auth_type = mode;
+	return result;
+}
+
 eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 				      eigrp_intf_context_t *context,
 				      eigrp_authentication_mode_t mode,
@@ -566,6 +636,7 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 				context->runtime->params.auth_password = NULL;
 			}
 		}
+		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
 
@@ -622,6 +693,9 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 		 * encoded text as HMAC key material until type-7 decoding is
 		 * implemented. */
 		free(runtime_password);
+		(void)eigrp_auth_runtime_apply(context->runtime,
+					       context->config, NULL);
+		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_UNSUPPORTED;
 	}
 
@@ -637,6 +711,7 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 				? EIGRP_AUTH_TYPE_SHA256
 				: EIGRP_AUTH_TYPE_MD5;
 	}
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
@@ -697,6 +772,7 @@ eigrp_result_t eigrp_auth_keychain_update(eigrp_operation_t operation,
 			free(context->runtime->params.auth_keychain);
 			context->runtime->params.auth_keychain = NULL;
 		}
+		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
 
@@ -736,6 +812,7 @@ eigrp_result_t eigrp_auth_keychain_update(eigrp_operation_t operation,
 		free(context->runtime->params.auth_keychain);
 		context->runtime->params.auth_keychain = runtime_copy;
 	}
+	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
 
