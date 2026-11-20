@@ -153,6 +153,13 @@ bool eigrp_summary_query_route_build(eigrp_instance_t *e, eigrp_intf_t *ei,
 	(void)sr;
 	return false;
 }
+/* This receive/DUAL fixture does not instantiate the asynchronous packetizer.
+ * Neighbor teardown has no outstanding packetizer work to retire here. */
+void eigrp_packetizer_nbr_remove(eigrp_instance_t *e, eigrp_nbr_t *nbr)
+{
+	(void)e;
+	(void)nbr;
+}
 void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *e,
 					eigrp_prefix_descriptor_t *p)
 {

@@ -37,6 +37,7 @@
 #include "eigrp_filter.h"
 #include "eigrp_sys.h"
 #include "eigrp_timer.h"
+#include "eigrp_packetizer.h"
 #include "eigrp_rib.h"
 static bool eigrp_intf_destination(const eigrp_intf_t *ei,
 				   eigrp_prefix_t *destination)
@@ -1723,6 +1724,7 @@ int eigrp_intf_down(eigrp_intf_t *ei)
 	 * control Hellos and CR state from the previous adjacency lifetime. */
 	eigrp_timer_cancel(ei->eigrp, &ei->t_multicast_retry);
 	eigrp_packet_queue_clear(&ei->multicast_pending);
+	eigrp_intf_stream_update(EIGRP_RESET, ei);
 	eigrp_packet_interface_output_clear(ei);
 	ei->multicast_backoff = false;
 	ei->multicast_waiting = false;
@@ -1731,7 +1733,6 @@ int eigrp_intf_down(eigrp_intf_t *ei)
 	if (ei->t_hello)
 		eigrp_timer_cancel(ei->eigrp, &ei->t_hello);
 
-	eigrp_intf_stream_update(EIGRP_RESET, ei);
 	if (ei->member_allrouters) {
 		(void)eigrp_sys_multicast_leave(ei->eigrp, ei);
 		ei->member_allrouters = false;
@@ -1746,6 +1747,9 @@ int eigrp_intf_down(eigrp_intf_t *ei)
 		eigrp_nbr_delete(nbr);
 	}
 	eigrp_topology_connected_interface_down(ei->eigrp, ei);
+	/* DUAL may enqueue output while retiring the last adjacency. */
+	eigrp_intf_stream_update(EIGRP_RESET, ei);
+	eigrp_packet_interface_output_clear(ei);
 	eigrp_intf_encoder_clear(ei);
 	eigrp_intf_eventlog_state(ei, EIGRP_EVENTLOG_INTERFACE_STATE_DOWN,
 				  ei->curr_mtu);
@@ -1789,6 +1793,10 @@ void eigrp_intf_free(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	eigrp_prefix_t destination;
 	eigrp_prefix_descriptor_t *pe = NULL;
 
+	/* The distribute callback owns a raw ei pointer; link-down preserves
+	 * this timer, but interface destruction must retire it. */
+	eigrp_timer_cancel(ei->eigrp, &ei->t_distribute);
+
 	if (reason == EIGRP_INTERFACE_REMOVE_CONFIG) {
 		eigrp_timer_cancel(ei->eigrp, &ei->t_hello);
 		eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN, NULL);
@@ -1802,6 +1810,7 @@ void eigrp_intf_free(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 					       pe);
 
 	eigrp_intf_down(ei);
+	eigrp_packetizer_intf_detach(eigrp, ei);
 
 	pthread_mutex_lock(&ei->eigrp->peer_lock);
 	eigrp_list_delete_data(ei->eigrp->eiflist, ei);

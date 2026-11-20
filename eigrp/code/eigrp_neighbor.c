@@ -33,6 +33,7 @@
 #include "eigrp_eventlog.h"
 #include "eigrp_debug.h"
 #include "eigrp_metric.h"
+#include "eigrp_packetizer.h"
 
 #define EIGRP_NEIGHBOR_SRTT_ALPHA_SHIFT 3U  /* alpha = 1/8 */
 #define EIGRP_NEIGHBOR_RTTVAR_BETA_SHIFT 2U /* beta = 1/4 */
@@ -1374,6 +1375,8 @@ void eigrp_nbr_delete(eigrp_nbr_t *nbr)
 	}
 	eigrp_nbr_limit_timers_cancel(nbr);
 	eigrp_nbr_down(nbr);
+	if (nbr->ei)
+		eigrp_packetizer_nbr_remove(nbr->ei->eigrp, nbr);
 	eigrp_packet_queue_free(nbr->retrans_queue);
 	nbr->retrans_queue = NULL;
 	nbr->retiring = true;

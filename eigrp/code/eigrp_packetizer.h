@@ -27,6 +27,8 @@ struct eigrp_packetizer_work {
 
 void eigrp_packetizer_init(eigrp_instance_t *eigrp);
 void eigrp_packetizer_delete(eigrp_instance_t *eigrp);
+void eigrp_packetizer_intf_detach(eigrp_instance_t *eigrp, eigrp_intf_t *ei);
+void eigrp_packetizer_nbr_remove(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr);
 
 eigrp_packetizer_work_t *eigrp_packetizer_work_create(uint8_t opcode);
 void eigrp_packetizer_work_free(eigrp_packetizer_work_t *work);

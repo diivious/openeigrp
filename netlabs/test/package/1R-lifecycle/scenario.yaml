@@ -31,6 +31,7 @@ objectives:
   - package manifest, identity, architecture, executables, tools and dependencies
   - APT install and negative package/dependency validation
   - systemd service, permissions, capabilities, hardening and failure-journal diagnostics
+  - failure journal excludes the configuration canary, with a regression test that detects a leaked canary
   - credential mount propagation during initial boot and container restart
   - installed credential directive and running daemon credential-backed config path
   - systemd container restart and enablement persistence (not kernel reboot), failed-start recovery after stop

@@ -30,12 +30,13 @@ class RecoveryTests(unittest.TestCase):
         self.purged = False
         self.commands = []
         self.reject_recovery = False
+        self.journal_output = "invalid or unsupported configuration\n"
 
     def command(self, *argv, check=True, **kwargs):
         self.commands.append(argv)
         if argv[:1] == ("journalctl",):
             return SimpleNamespace(returncode=0,
-                                   stdout="invalid or unsupported configuration\n",
+                                   stdout=self.journal_output,
                                    stderr="")
         if argv[:2] == ("systemctl", "disable"):
             self.enabled = False
@@ -88,11 +89,18 @@ class RecoveryTests(unittest.TestCase):
     def test_stopped_unloaded_unit_recovers_after_bad_config(self):
         self.check()
         self.assertTrue(self.purged)
+        self.assertIn(uut.JOURNAL_CANARY, self.config.read_text())
         self.assertNotIn("invalid-openeigrpd-netlab-directive", self.config.read_text())
         self.assertEqual([cmd[:2] for cmd in self.commands if cmd[:1] == ("systemctl",)],
                          [("systemctl", "stop"), ("systemctl", "disable"),
                           ("systemctl", "start"), ("systemctl", "stop"),
                           ("systemctl", "start"), ("systemctl", "stop")])
+
+    def test_journal_canary_leak_is_rejected(self):
+        self.journal_output += uut.JOURNAL_CANARY + "\n"
+        with self.assertRaisesRegex(AssertionError, "journal exposed configuration comment"):
+            self.check()
+        self.assertFalse(self.purged)
 
     def test_recovery_start_error_is_not_ignored(self):
         self.reject_recovery = True

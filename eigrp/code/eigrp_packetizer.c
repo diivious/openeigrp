@@ -774,6 +774,56 @@ void eigrp_packetizer_delete(eigrp_instance_t *eigrp)
 	}
 }
 
+/* Remove references to an interface that is about to be freed.  The
+ * advertisement still belongs to the AF and must reach surviving peers. */
+void eigrp_packetizer_intf_detach(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
+{
+	eigrp_packetizer_work_t *work;
+
+	if (!eigrp || !ei)
+		return;
+	pthread_mutex_lock(&eigrp->work_lock);
+	for (work = eigrp->packetizer_head; work; work = work->next)
+		if (work->exception == ei)
+			work->exception = NULL;
+	pthread_mutex_unlock(&eigrp->work_lock);
+}
+
+/* Work addressed to a retired neighbor cannot be transmitted.  Discard it
+ * before releasing the neighbor; other queued AF work remains intact. */
+void eigrp_packetizer_nbr_remove(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr)
+{
+	eigrp_packetizer_work_t *work, *prev = NULL;
+	eigrp_packetizer_work_t *retired = NULL;
+	eigrp_packetizer_work_t **link;
+
+	if (!eigrp || !nbr)
+		return;
+	pthread_mutex_lock(&eigrp->work_lock);
+	for (link = &eigrp->packetizer_head; *link;) {
+		work = *link;
+		if (work->nbr != nbr) {
+			prev = work;
+			link = &work->next;
+			continue;
+		}
+		*link = work->next;
+		if (eigrp->packetizer_tail == work)
+			eigrp->packetizer_tail = prev;
+		if (eigrp->packetizer_count)
+			eigrp->packetizer_count--;
+		work->next = retired;
+		retired = work;
+	}
+	pthread_mutex_unlock(&eigrp->work_lock);
+	while (retired) {
+		work = retired;
+		retired = work->next;
+		work->next = NULL;
+		eigrp_packetizer_work_free(work);
+	}
+}
+
 eigrp_packetizer_work_t *eigrp_packetizer_work_create(uint8_t opcode)
 {
 	eigrp_packetizer_work_t *work;
