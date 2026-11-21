@@ -380,7 +380,7 @@ struct keychain {
 	int dummy;
 };
 struct key {
-	int index;
+	uint32_t index;
 	char *string;
 };
 struct message {
@@ -441,6 +441,13 @@ static inline struct key *key_lookup_for_send(struct keychain *kc)
 	(void)kc;
 	static struct key k = {.index = 1, .string = "stub"};
 	return &k;
+}
+static inline struct key *key_lookup_for_accept(struct keychain *kc,
+						uint32_t id, bool exact)
+{
+	struct key *key = key_lookup_for_send(kc);
+	(void)exact;
+	return key && key->index == id ? key : NULL;
 }
 
 #define ALL_LIST_ELEMENTS(list, node, nnode, datum)                            \

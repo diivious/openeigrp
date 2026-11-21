@@ -175,7 +175,11 @@ eigrp_result_t
 eigrp_sys_summary_leak_map_evaluate(eigrp_instance_t *eigrp, const char *name,
 				    const eigrp_prefix_t *prefix,
 				    eigrp_filter_decision_t *decision);
+/* Send selects the currently valid send key. Receive resolves the exact
+ * packet key ID under its independent accept lifetime. */
 bool eigrp_sys_auth_key_lookup(const char *keychain_name, uint32_t *key_id,
+			       char *key_string, size_t key_string_size);
+bool eigrp_sys_auth_key_accept(const char *keychain_name, uint32_t key_id,
 			       char *key_string, size_t key_string_size);
 
 /* Normalized host lifecycle notifications into portable EIGRP. */

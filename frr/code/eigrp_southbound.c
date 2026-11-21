@@ -805,9 +805,29 @@ bool eigrp_sys_auth_key_lookup(const char *keychain_name, uint32_t *key_id,
 	if (!keychain)
 		return false;
 	key = key_lookup_for_send(keychain);
-	if (!key || !key->string)
+	if (!key || !key->string || strlen(key->string) >= key_string_size)
 		return false;
 	*key_id = key->index;
+	strlcpy(key_string, key->string, key_string_size);
+	return true;
+}
+
+bool eigrp_sys_auth_key_accept(const char *keychain_name, uint32_t key_id,
+			       char *key_string, size_t key_string_size)
+{
+	struct keychain *keychain;
+	struct key *key;
+
+	if (!keychain_name || !keychain_name[0] || !key_string
+	    || key_string_size == 0)
+		return false;
+	keychain = keychain_lookup(keychain_name);
+	if (!keychain)
+		return false;
+	key = key_lookup_for_accept(keychain, key_id, true);
+	if (!key || key->index != key_id || !key->string
+	    || strlen(key->string) >= key_string_size)
+		return false;
 	strlcpy(key_string, key->string, key_string_size);
 	return true;
 }

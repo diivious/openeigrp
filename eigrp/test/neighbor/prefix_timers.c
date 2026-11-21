@@ -30,6 +30,16 @@ bool eigrp_sys_auth_key_lookup(const char *name, uint32_t *id, char *key,
 	return false;
 }
 
+bool eigrp_sys_auth_key_accept(const char *name, uint32_t id, char *key,
+			       size_t size)
+{
+	(void)name;
+	(void)id;
+	(void)key;
+	(void)size;
+	return false;
+}
+
 static void address_init(eigrp_addr_t *address, int afi, unsigned id)
 {
 	memset(address, 0, sizeof(*address));

@@ -28,6 +28,16 @@ bool eigrp_sys_auth_key_lookup(const char *name, uint32_t *id, char *key,
 	return false;
 }
 
+bool eigrp_sys_auth_key_accept(const char *name, uint32_t id, char *key,
+			       size_t size)
+{
+	(void)name;
+	(void)id;
+	(void)key;
+	(void)size;
+	return false;
+}
+
 struct nbr_limit_view {
 	unsigned rows;
 	char status;

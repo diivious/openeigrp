@@ -17,6 +17,7 @@ GROUPS = {
     "md5-security": {
         "auth-topology/md5-duplicate.yaml", "auth-topology/md5-lost-ack.yaml",
         "auth-topology/md5-mixed-lan.yaml",
+        "auth-topology/md5-key-id-isolation.yaml",
     },
     "dual-diamond": {"dual-diamond/feasible-successor.yaml"},
     "kite-topology": {
@@ -87,7 +88,7 @@ class UutMakeTest(unittest.TestCase):
             "[ \"$5\" = run.py ] || exit 12\n"
             "grep -Fq 'schema: eigrp-uut-topology/v1' \"$6\" || exit 13\n"
             "grep -Fq 'schema: eigrp-uut-test/v1' \"$7\" || exit 14\n"
-            "printf '%s\\n' \"$7\" >> \"$LOG_FILE\"\n")
+            "printf '%s %s\\n' \"$6\" \"$7\" >> \"$LOG_FILE\"\n")
         self.wrapper.chmod(0o755)
 
     def make(self, target):
@@ -103,9 +104,17 @@ class UutMakeTest(unittest.TestCase):
                 if self.log.exists():
                     self.log.unlink()
                 self.make(target)
-                selected = self.log.read_text().splitlines()
+                selected = [line.split(" ", 1) for line in self.log.read_text().splitlines()]
                 self.assertEqual(len(selected), len(expected))
-                self.assertEqual(set(selected), expected)
+                self.assertEqual({scenario for _, scenario in selected}, expected)
+                if target == "md5-security":
+                    for topology, scenario in selected:
+                        expected_topology = (
+                            "auth-topology/ipv4-md5-key-ids.yaml"
+                            if scenario == "auth-topology/md5-key-id-isolation.yaml"
+                            else "auth-topology/ipv4-md5-mixed-lan.yaml"
+                        )
+                        self.assertEqual(topology, expected_topology, scenario)
 
     def test_clean_removes_macos_debug_bundle(self):
         bundle = self.uut / "eigrp-uut-node.dSYM"

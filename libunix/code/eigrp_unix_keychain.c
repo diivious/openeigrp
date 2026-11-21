@@ -110,6 +110,31 @@ bool eigrp_sys_auth_key_lookup(const char *name, uint32_t *key_id, char *key,
 	return found;
 }
 
+bool eigrp_sys_auth_key_accept(const char *name, uint32_t key_id, char *key,
+			       size_t size)
+{
+	eigrp_unix_keychain_t *entry;
+	bool found = false;
+
+	if (!name || !key || !size)
+		return false;
+
+	pthread_mutex_lock(&keychain_lock);
+	for (entry = keychains; entry; entry = entry->next) {
+		size_t length;
+		if (entry->id != key_id || strcmp(entry->name, name) != 0)
+			continue;
+		length = strlen(entry->secret);
+		if (length >= size)
+			break;
+		memcpy(key, entry->secret, length + 1);
+		found = true;
+		break;
+	}
+	pthread_mutex_unlock(&keychain_lock);
+	return found;
+}
+
 void eigrp_unix_keychain_reset(void)
 {
 	eigrp_unix_keychain_t *entry, *next;

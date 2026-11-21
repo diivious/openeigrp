@@ -1026,10 +1026,12 @@ static void load(const char *path)
 					die("interface delay", r);
 			} else if (!strcmp(op, "auth-md5")) {
 				char name[256], keychain[256], secret[256];
+				unsigned key_id;
 				eigrp_intf_context_t ic;
-				if (sscanf(line, "%*s %255s %255s %255s", name,
-					   keychain, secret)
-				    != 3)
+				if (sscanf(line, "%*s %255s %255s %255s %u",
+					   name, keychain, secret, &key_id)
+					    != 4
+				    || !key_id)
 					die("auth-md5 parse",
 					    EIGRP_RESULT_INVALID_ARGUMENT);
 				ic = (eigrp_intf_context_t){
@@ -1046,7 +1048,7 @@ static void load(const char *path)
 						af, name);
 				}
 				if (!ic.runtime
-				    || eigrp_unix_keychain_add(keychain, 1,
+				    || eigrp_unix_keychain_add(keychain, key_id,
 							       secret)
 					       != EIGRP_RESULT_SUCCESS)
 					die("auth-md5 keychain",

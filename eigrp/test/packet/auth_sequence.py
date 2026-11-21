@@ -34,6 +34,14 @@ bool eigrp_sys_auth_key_lookup(const char *name, uint32_t *id,
     memcpy(key, secret, sizeof(secret));
     return true;
 }
+bool eigrp_sys_auth_key_accept(const char *name, uint32_t id, char *key,
+                               size_t capacity)
+{
+    uint32_t selected = 0;
+    return id == 11 && eigrp_sys_auth_key_lookup(name, &selected, key,
+                                                      capacity);
+}
+
 void eigrp_log(eigrp_log_level_t level, const char *format, ...)
 {
     (void)level; (void)format;

@@ -58,7 +58,11 @@ md5-mixed-lan: eigrp-uut-node
 md5-security: eigrp-uut-node
 	@set -e; \
 	for scenario in auth-topology/md5-*.yaml; do \
-		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py auth-topology/ipv4-md5-mixed-lan.yaml $$scenario; \
+		topology=auth-topology/ipv4-md5-mixed-lan.yaml; \
+		if [ "$$scenario" = auth-topology/md5-key-id-isolation.yaml ]; then \
+			topology=auth-topology/ipv4-md5-key-ids.yaml; \
+		fi; \
+		$(PYTHON) $(LOG_TEST) uut/eigrp -- $(PYTHON) run.py $$topology $$scenario; \
 	done
 
 basic-core: eigrp-uut-node

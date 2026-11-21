@@ -55,7 +55,10 @@ def validate_topology(t):
             auth=i.get("authentication")
             if auth is not None:
                 if not isinstance(auth,dict): raise SpecError(f"{rn}.{name}.authentication must be a mapping")
-                check_keys(auth,{"mode","keychain","key"},f"{rn}.{name}.authentication")
+                check_keys(auth,{"mode","keychain","key","key_id"},f"{rn}.{name}.authentication")
+                key_id=auth.get("key_id",1)
+                if type(key_id) is not int or not 1 <= key_id <= 0xffffffff:
+                    raise SpecError(f"{rn}.{name}: authentication.key_id must be 1..4294967295")
                 if auth.get("mode")!="md5": raise SpecError(f"{rn}.{name}: only MD5 UUT authentication is supported")
                 for field in ("keychain","key"):
                     value=auth.get(field)
@@ -790,7 +793,7 @@ class Runner:
             for name,i in r.get("interfaces",{}).items():
                 auth=i.get("authentication")
                 if auth:
-                    lines.append(f"auth-md5 {name} {auth['keychain']} {auth['key']}")
+                    lines.append(f"auth-md5 {name} {auth['keychain']} {auth['key']} {auth.get('key_id',1)}")
             for sm in r.get("summary_metrics",[]):
                 lines.append(f"summary-metric {ipaddress.ip_network(sm['prefix'],strict=False)} {int(sm['bandwidth'])} {int(sm['delay'])} {int(sm.get('reliability',255))} {int(sm.get('load',1))} {int(sm.get('mtu',1500))}")
             path=self.work/f"{rn}.conf"; path.write_text("\n".join(lines)+"\n"); self.nodes[rn]=Node(rn,path,str(self.work/"wire.sock"))

@@ -23,6 +23,10 @@ int main(void)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(eigrp_sys_auth_key_lookup("md5-lan", &id, key, sizeof(key)));
 	assert(id == 1 && strcmp(key, "eigrprocks") == 0);
+	assert(eigrp_sys_auth_key_accept("md5-lan", 1, key, sizeof(key)));
+	assert(strcmp(key, "eigrprocks") == 0);
+	assert(!eigrp_sys_auth_key_accept("md5-lan", 2, key, sizeof(key)));
+	assert(!eigrp_sys_auth_key_accept("md5-lan", 0, key, sizeof(key)));
 
 	/* Idempotency does not silently replace an existing secret or ID. */
 	assert(eigrp_unix_keychain_add("md5-lan", 1, "eigrprocks")
@@ -42,6 +46,8 @@ int main(void)
 	assert(!eigrp_sys_auth_key_lookup("md5-lan", &id, small,
 					  sizeof(small)));
 	assert(id == 1 && strcmp(small, "zz") == 0);
+	assert(!eigrp_sys_auth_key_accept("md5-lan", 1, small, sizeof(small)));
+	assert(strcmp(small, "zz") == 0);
 	assert(!eigrp_sys_auth_key_lookup("missing", &id, key, sizeof(key)));
 	assert(eigrp_unix_keychain_add("second", 17, "second-secret")
 	       == EIGRP_RESULT_SUCCESS);

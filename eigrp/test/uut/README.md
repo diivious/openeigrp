@@ -271,6 +271,9 @@ keychains fail closed. The portable authentication implementation is unchanged.
 
 The topology schema accepts optional per-interface `authentication` mappings,
 e.g. `authentication: {mode: md5, keychain: md5-lan, key: eigrprocks}`.
+The optional `key_id` defaults to 1. `auth-topology/md5-key-id-isolation.yaml`
+uses distinct IDs with the same secret to verify that mismatched key IDs cannot
+form an adjacency while matching IDs still converge.
 Negative neighbor expectations may specify `state: down, observe: N` to assert
 that no adjacency forms for the *whole* N-second interval, rather than only
 at one instant. These cases are also discovered by `make uut`.

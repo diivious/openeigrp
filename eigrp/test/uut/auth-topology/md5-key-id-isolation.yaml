@@ -1,0 +1,23 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-md5-key-ids.yaml
+name: MD5 authentication isolates mismatched key IDs even with equal secrets
+steps:
+  - start: all
+  - validate-packet: {source_uut: r2, destination_uut: r1, opcode: hello, event: delivered, min: 1, timeout: 9}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.51.0.3, state: up}
+        - neighbor: {uut: r3, neighbor: 10.51.0.1, state: up}
+        - route: {uut: r1, prefix: 10.63.0.0/24, table: rib, next_hop: 10.51.0.3}
+        - route: {uut: r3, prefix: 10.61.0.0/24, table: rib, next_hop: 10.51.0.1}
+        - neighbor: {uut: r1, neighbor: 10.51.0.2, state: down}
+        - neighbor: {uut: r2, neighbor: 10.51.0.1, state: down}
+        - neighbor: {uut: r2, neighbor: 10.51.0.3, state: down}
+  - validate-neighbor: {uut: r1, neighbor: 10.51.0.2, state: down, observe: 3}
+  - validate-neighbor: {uut: r2, neighbor: 10.51.0.1, state: down, observe: 3}
+  - validate-neighbor: {uut: r2, neighbor: 10.51.0.3, state: down, observe: 3}
+  - validate-route: {uut: r1, prefix: 10.62.0.0/24, table: rib, present: false}
+  - validate-route: {uut: r2, prefix: 10.61.0.0/24, table: rib, present: false}
+  - validate-route: {uut: r2, prefix: 10.63.0.0/24, table: rib, present: false}
+  - stop: all

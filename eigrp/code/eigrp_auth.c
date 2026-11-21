@@ -94,6 +94,17 @@ static bool eigrp_auth_key_get(eigrp_intf_t *ei, uint32_t *key_id, char *key,
 					    key, key_size);
 }
 
+/* MD5 receive keys are selected by the exact on-wire ID, not by the
+ * locally active send key. The host enforces the independent accept lifetime.
+ */
+static bool eigrp_auth_md5_key_accept(eigrp_intf_t *ei, uint32_t key_id,
+				      char *key, size_t size)
+{
+	return ei && ei->params.auth_keychain
+	       && eigrp_sys_auth_key_accept(ei->params.auth_keychain, key_id,
+					    key, size);
+}
+
 static bool eigrp_auth_sha256_source(eigrp_intf_t *ei, eigrp_nbr_t *nbr,
 				     char *text, size_t text_size)
 {
@@ -185,14 +196,16 @@ int eigrp_make_md5_digest(eigrp_intf_t *ei, eigrp_stream_t *s, uint8_t flags)
 	if (!eigrp_auth_key_get(ei, &key_id, key_string, sizeof(key_string)))
 		return 0;
 
+	/* Selection may change between packet construction and paced send. */
+	auth_tlv = (struct TLV_MD5_Authentication_Type *)(s->data
+							  + EIGRP_HEADER_LEN);
+	auth_tlv->key_id = htonl(key_id);
 	valid = eigrp_auth_md5_compute(s->data, s->endp, key_string, flags,
 				       digest);
 	memset(key_string, 0, sizeof(key_string));
 	if (!valid)
 		return 0;
 
-	auth_tlv = (struct TLV_MD5_Authentication_Type *)(s->data
-							  + EIGRP_HEADER_LEN);
 	memcpy(auth_tlv->digest, digest, sizeof(digest));
 	return EIGRP_AUTH_TYPE_MD5_LEN;
 }
@@ -205,7 +218,6 @@ int eigrp_check_md5_digest(eigrp_stream_t *s,
 	unsigned char original[EIGRP_AUTH_TYPE_MD5_LEN];
 	char key_string[PLAINTEXT_LENGTH + 1] = {0};
 	struct eigrp_header *header;
-	uint32_t key_id = 0;
 	uint16_t saved_checksum;
 	bool valid;
 
@@ -231,8 +243,8 @@ int eigrp_check_md5_digest(eigrp_stream_t *s,
 		return 0;
 	}
 
-	if (!eigrp_auth_key_get(nbr->ei, &key_id, key_string,
-				sizeof(key_string))) {
+	if (!eigrp_auth_md5_key_accept(nbr->ei, ntohl(authTLV->key_id),
+				       key_string, sizeof(key_string))) {
 		eigrp_log(
 			EIGRP_LOG_WARNING,
 			"Interface %s: Expected key value not found in config",
@@ -342,6 +354,10 @@ int eigrp_check_sha256_digest(eigrp_stream_t *s,
 	    || ntohs(authTLV->length) != EIGRP_AUTH_SHA256_TLV_SIZE
 	    || ntohs(authTLV->auth_type) != EIGRP_AUTH_TYPE_SHA256
 	    || ntohs(authTLV->auth_length) != EIGRP_AUTH_TYPE_SHA256_LEN)
+		return 0;
+	/* Direct-password SHA256 uses key ID zero. The separate Cisco
+	 * SHA256 keychain wire profile needs packet-capture validation. */
+	if (nbr->ei->params.auth_password && authTLV->key_id != 0)
 		return 0;
 	if (!eigrp_auth_sequence_newer(authTLV->key_sequence,
 				       nbr->crypt_seqnum))

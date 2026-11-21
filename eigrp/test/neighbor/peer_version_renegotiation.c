@@ -31,6 +31,16 @@ bool eigrp_sys_auth_key_lookup(const char *name, uint32_t *id, char *key,
 	return false;
 }
 
+bool eigrp_sys_auth_key_accept(const char *name, uint32_t id, char *key,
+			       size_t size)
+{
+	(void)name;
+	(void)id;
+	(void)key;
+	(void)size;
+	return false;
+}
+
 const char *eigrp_message_lookup(const eigrp_message_t *messages, int value,
 				 const char *fallback)
 {
