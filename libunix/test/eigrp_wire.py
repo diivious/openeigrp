@@ -88,6 +88,41 @@ def _packet_meta(payload, afi):
             "sequence":sequence,"auth_sequence":auth_sequence,"ack":ack,
             "cr":bool(flags&CR_FLAG),"prefixes":_route_prefixes(payload,afi)}
 
+def _topology_id_set(frame, afi, topology_id, prefix=None):
+    """Rewrite selected MP TLVs, recalculating the EIGRP packet checksum.
+
+    This test fault operates on unauthenticated virtual-wire traffic only.
+    The portable decoder still processes the resulting real TLV bytes.
+    """
+    out = bytearray(frame)
+    _, _, _, _, _, sl, il, pl, _, _, _ = HDR.unpack_from(out)
+    start = HDR.size + sl + il
+    end = start + pl
+    offset = start + 20
+    changed = False
+    while offset + 4 <= end:
+        typ, length = struct.unpack_from('!HH', out, offset)
+        if length < 4 or offset + length > end:
+            break
+        if typ in (0x0602, 0x0603) and length >= 12:
+            route = bytes(out[start:start + 20] + out[offset:offset + length])
+            if prefix is None or prefix in _route_prefixes(route, afi):
+                struct.pack_into('!H', out, offset + 4, topology_id)
+                changed = True
+        offset += length
+    if changed:
+        struct.pack_into('!H', out, start + 2, 0)
+        data = out[start:end]
+        total = sum((data[i] << 8) | data[i + 1]
+                    for i in range(0, len(data) - 1, 2))
+        if len(data) & 1:
+            total += data[-1] << 8
+        while total >> 16:
+            total = (total & 0xffff) + (total >> 16)
+        struct.pack_into('!H', out, start + 2, (~total) & 0xffff)
+    return bytes(out)
+
+
 class Broker(threading.Thread):
     """Shared-segment delivery broker. Faults affect delivery only, never EIGRP state."""
     def __init__(self,path,address_owner):
@@ -97,13 +132,17 @@ class Broker(threading.Thread):
         self._endpoint_cv=threading.Condition(); self._registered={}
     def add_fault(self,spec):
         if not isinstance(spec,dict): raise WireFaultError("fault must be a mapping")
-        allowed={"name","action","source_uut","destination_uut","source_interface","destination_interface","segment","afi","multicast","opcode","prefix","sequence","ack","cr","delay_ms","copies","count"}
+        allowed={"name","action","source_uut","destination_uut","source_interface","destination_interface","segment","afi","multicast","opcode","prefix","sequence","ack","cr","delay_ms","copies","count","topology_id"}
         extra=set(spec)-allowed
         if extra: raise WireFaultError(f"unsupported fault keys: {', '.join(sorted(extra))}")
         action=str(spec.get("action","")).lower()
-        if action not in {"drop","delay","duplicate","disconnect","reconnect"}: raise WireFaultError(f"unsupported fault action {action}")
+        if action not in {"drop","delay","duplicate","disconnect","reconnect","set-topology-id"}: raise WireFaultError(f"unsupported fault action {action}")
         if action=="delay" and float(spec.get("delay_ms",0))<0: raise WireFaultError("delay_ms must be >= 0")
         if action=="duplicate" and int(spec.get("copies",1))<1: raise WireFaultError("copies must be >= 1")
+        if action == "set-topology-id":
+            topology_id = spec.get("topology_id")
+            if type(topology_id) is not int or not 0 <= topology_id <= 65535:
+                raise WireFaultError("set-topology-id requires topology_id in 0..65535")
         if "count" in spec and int(spec["count"])<1: raise WireFaultError("count must be >= 1")
         with self._lock:
             fid=str(spec.get("name") or f"fault-{self._next_fault}"); self._next_fault+=1
@@ -195,7 +234,7 @@ class Broker(threading.Thread):
                     self.journal.append({**base,"destination_uut":None,"destination_interface":None,"event":"sent"})
                     for e in destinations:
                         meta={**base,"destination_uut":e[6],"destination_interface":e[4]}; actions=self._actions(meta)
-                        copies=1; delay=0.0; drop=False
+                        copies=1; delay=0.0; drop=False; topology_fault=None
                         for f in actions:
                             self.journal.append({**meta,"event":"fault","fault":f["name"],"action":f["action"],"fault_hit":f["hits"],"fault_remaining":f["remaining"]})
                             if f["action"]=="drop": drop=True
@@ -203,12 +242,16 @@ class Broker(threading.Thread):
                             elif f["action"]=="duplicate": copies+=int(f.get("copies",1))
                             elif f["action"]=="disconnect": self._disconnected.add((e[6],e[4])); drop=True
                             elif f["action"]=="reconnect": self._disconnected.discard((e[6],e[4]))
+                            elif f["action"]=="set-topology-id": topology_fault=f
                         if (e[6],e[4]) in self._disconnected: drop=True
                         if drop: self.journal.append({**meta,"event":"dropped"}); continue
+                        delivery = (_topology_id_set(frame, afi, topology_fault["topology_id"],
+                                                     topology_fault.get("prefix"))
+                                    if topology_fault else frame)
                         for copy in range(copies):
                             cm={**meta,"copy":copy}
-                            if delay: self._queue_delay(time.monotonic()+delay,e,frame,cm)
-                            else: self._send(e,frame,cm,"duplicated" if copy else "delivered")
+                            if delay: self._queue_delay(time.monotonic()+delay,e,delivery,cm)
+                            else: self._send(e,delivery,cm,"duplicated" if copy else "delivered")
             self._flush_delayed()
             for key in list(sel.get_map().values()):
                 try: key.fileobj.close()

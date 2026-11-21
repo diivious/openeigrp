@@ -236,6 +236,12 @@ void eigrp_query_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			continue;
 		}
 
+		/* A decoded route can belong to an unsupported topology. */
+		if (!eigrp_topo_route_supported(route)) {
+			eigrp_topo_route_free(route);
+			continue;
+		}
+
 
 		/* Manual summaries are local query boundaries.  The aggregate
 		 * is synthesized on advertisement, so answer a QUERY for the

@@ -44,6 +44,12 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		if (!route)
 			break;
 
+		/* A decoded route can belong to an unsupported topology. */
+		if (!eigrp_topo_route_supported(route)) {
+			eigrp_topo_route_free(route);
+			continue;
+		}
+
 		prefix = eigrp_topo_table_lookup(eigrp->topology_table,
 						 &route->dest);
 		(void)eigrp_eventlog_msg_add(

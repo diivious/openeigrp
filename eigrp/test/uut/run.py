@@ -249,7 +249,7 @@ STEP_FIELDS = {
     "default-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "wait": {"seconds"}, "fault-add": {"name", "action", "source_uut", "destination_uut",
                "source_interface", "destination_interface", "segment", "afi", "multicast",
-               "opcode", "prefix", "sequence", "ack", "cr", "delay_ms", "copies", "count"},
+               "opcode", "prefix", "sequence", "ack", "cr", "delay_ms", "copies", "count", "topology_id"},
     "fault-remove": {"name"}, "validate-fault": {"name", "hits", "remaining", "timeout"},
     "validate-event": {"uut", "contains", "after", "min", "max", "timeout"},
     "validate-log": {"uut", "contains", "min", "timeout"},

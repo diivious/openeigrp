@@ -1,0 +1,60 @@
+schema: eigrp-uut-test/v1
+name: MP topology ID base runtime isolation
+topology: ../examples/two-router.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 15}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: true}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: true}
+  - redistribute-add: {uut: r2, source: static}
+  # These are valid MP TLVs with a non-base topology ID, not malformed TLVs.
+  - fault-add: {name: foreign-update, action: set-topology-id, source_uut: r2, destination_uut: r1, opcode: update, prefix: 198.18.66.1/32, topology_id: 7}
+  - packet-mark: foreign-new-route
+  - source-route-add: {uut: r2, prefix: 198.18.66.1/32, metric: 20}
+  - validate-fault: {name: foreign-update, hits: 1, timeout: 15}
+  - validate-packet: {uut: r2, destination_uut: r1, opcode: update, prefix: 198.18.66.1/32, event: delivered, since: foreign-new-route, min: 1, timeout: 15}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.5
+      expect:
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: topology, present: false}
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: path, present: false}
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: rib, present: false}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: true}
+  - fault-remove: {name: foreign-update}
+  - source-route-remove: {uut: r2, prefix: 198.18.66.1/32}
+  - validate-route: {uut: r2, prefix: 198.18.66.1/32, table: source, present: false, timeout: 15}
+  - packet-mark: base-admission
+  - source-route-add: {uut: r2, prefix: 198.18.66.1/32, metric: 20}
+  - validate-packet: {uut: r2, destination_uut: r1, opcode: update, prefix: 198.18.66.1/32, event: delivered, since: base-admission, min: 1, timeout: 15}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: rib, present: true}
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: path, present: true}
+  # Once the fault is removed, an ordinary base withdrawal must work.
+  - packet-mark: base-withdrawal
+  - source-route-remove: {uut: r2, prefix: 198.18.66.1/32}
+  - validate-packet: {uut: r2, destination_uut: r1, opcode: update, prefix: 198.18.66.1/32, event: delivered, since: base-withdrawal, min: 1, timeout: 15}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: path, present: false}
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: rib, present: false}
+  - source-route-add: {uut: r2, prefix: 198.18.66.1/32, metric: 20}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 198.18.66.1/32, table: rib, present: true}
+        - neighbor: {uut: r1, neighbor: 10.0.0.2, state: up}
+  - source-route-remove: {uut: r2, prefix: 198.18.66.1/32}
+  - validate-route: {uut: r1, prefix: 198.18.66.1/32, table: rib, present: false, timeout: 15}
+  - redistribute-remove: {uut: r2, source: static}
+  - stop: all

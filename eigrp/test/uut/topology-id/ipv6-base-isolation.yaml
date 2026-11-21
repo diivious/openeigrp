@@ -1,0 +1,44 @@
+schema: eigrp-uut-test/v1
+name: IPv6 MP topology ID base runtime isolation
+topology: ../examples/ipv6-basic-core.yaml
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r2, neighbor: 'fe80::3', interface: eth23, state: up}
+        - route: {uut: r1, prefix: '2001:db8:3::/64', table: rib, present: true}
+  - redistribute-add: {uut: r3, source: static}
+  - fault-add: {name: foreign-ipv6, action: set-topology-id, source_uut: r3, destination_uut: r2, opcode: update, prefix: '2001:db8:66::/64', topology_id: 65535}
+  - packet-mark: foreign-ipv6-route
+  - source-route-add: {uut: r3, prefix: '2001:db8:66::/64', metric: 20}
+  - validate-fault: {name: foreign-ipv6, hits: 1, timeout: 15}
+  - validate-packet: {uut: r3, destination_uut: r2, opcode: update, prefix: '2001:db8:66::/64', event: delivered, since: foreign-ipv6-route, min: 1, timeout: 15}
+  - validate-convergence:
+      timeout: 10
+      stable_for: 0.4
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:66::/64', table: topology, present: false}
+        - route: {uut: r2, prefix: '2001:db8:66::/64', table: path, present: false}
+        - route: {uut: r2, prefix: '2001:db8:66::/64', table: rib, present: false}
+        - route: {uut: r1, prefix: '2001:db8:66::/64', table: rib, present: false}
+  - fault-remove: {name: foreign-ipv6}
+  - source-route-remove: {uut: r3, prefix: '2001:db8:66::/64'}
+  - validate-route: {uut: r3, prefix: '2001:db8:66::/64', table: source, present: false, timeout: 15}
+  - source-route-add: {uut: r3, prefix: '2001:db8:66::/64', metric: 20}
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:66::/64', table: rib, present: true}
+        - route: {uut: r1, prefix: '2001:db8:66::/64', table: rib, present: true}
+  - source-route-remove: {uut: r3, prefix: '2001:db8:66::/64'}
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:66::/64', table: rib, present: false}
+        - route: {uut: r1, prefix: '2001:db8:66::/64', table: rib, present: false}
+  - redistribute-remove: {uut: r3, source: static}
+  - stop: all

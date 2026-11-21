@@ -26,6 +26,14 @@
 #include "eigrp_rib.h"
 #include "eigrp.h"
 
+/* The runtime topology table currently owns base TID only. Keep decoding
+ * topology-neutral and check ownership before prefix lookup or DUAL. */
+static inline bool
+eigrp_topo_route_supported(const eigrp_route_descriptor_t *route)
+{
+	return route && route->topology_id == EIGRP_TOPOLOGY_ID_BASE;
+}
+
 /* EIGRP Route Descriptor related functions. */
 extern eigrp_route_descriptor_t *eigrp_topo_route_create(eigrp_intf_t *);
 /* Neighbor path insertions share one count-update point. */

@@ -419,6 +419,12 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			continue;
 		}
 
+		/* A decoded route can belong to an unsupported topology. */
+		if (!eigrp_topo_route_supported(route)) {
+			eigrp_topo_route_free(route);
+			continue;
+		}
+
 		// should have got route off the packet, but one never knows
 		if (route) {
 			prefix = eigrp_topo_table_lookup(eigrp->topology_table,
