@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 Donnie V. Savage
 """Execute the actual portable interface teardown and timer implementation."""
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -26,11 +27,13 @@ def test_interface_teardown_timer_and_write_queue():
 
     with tempfile.TemporaryDirectory() as folder:
         binary = Path(folder) / "interface_teardown"
+        sanitize = (["-fsanitize=address", "-fno-omit-frame-pointer"]
+                    if os.getenv("EIGRP_AUTH_SANITIZE") else [])
         subprocess.run([
-            "cc", "-std=c11", "-D_POSIX_C_SOURCE=200809L",
-            "-DEIGRP_DISABLE_SNMP", "-pthread", "-g", "-O0",
+            os.getenv("CC", "cc"), "-std=c11", "-D_POSIX_C_SOURCE=200809L",
+            "-DEIGRP_DISABLE_SNMP", "-pthread", "-g", "-O0", *sanitize,
             f"-I{ROOT / 'eigrp/code'}", f"-I{ROOT / 'libunix/code'}",
-            *flags, str(source), *link, "-o", str(binary)
+            *flags, str(source), *link, *sanitize, "-o", str(binary)
         ], check=True)
         subprocess.run([str(binary)], check=True)
 

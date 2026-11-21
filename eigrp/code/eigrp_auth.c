@@ -473,6 +473,49 @@ void eigrp_auth_tlv_sha256_delete(
 }
 
 
+/* Runtime credentials are read by packet ingress with peer_lock held.
+ * Writers prepare copies first and publish pointers and mode together under
+ * that same lock. Retired material is unreachable after the lock is released.
+ * Never acquire work_lock or dispatch to the AF while holding peer_lock.
+ */
+static void eigrp_auth_password_free(char *password)
+{
+	volatile unsigned char *ptr;
+	size_t length;
+
+	if (!password)
+		return;
+	length = strlen(password);
+	ptr = (volatile unsigned char *)password;
+	while (length--)
+		*ptr++ = 0;
+	free(password);
+}
+
+static void eigrp_auth_runtime_mode_set(eigrp_intf_t *ei, int mode,
+					char *password)
+{
+	char *old;
+
+	pthread_mutex_lock(&ei->eigrp->peer_lock);
+	old = ei->params.auth_password;
+	ei->params.auth_password = password;
+	ei->params.auth_type = mode;
+	pthread_mutex_unlock(&ei->eigrp->peer_lock);
+	eigrp_auth_password_free(old);
+}
+
+static void eigrp_auth_runtime_keychain_set(eigrp_intf_t *ei, char *keychain)
+{
+	char *old;
+
+	pthread_mutex_lock(&ei->eigrp->peer_lock);
+	old = ei->params.auth_keychain;
+	ei->params.auth_keychain = keychain;
+	pthread_mutex_unlock(&ei->eigrp->peer_lock);
+	free(old);
+}
+
 static char *eigrp_auth_string_dup(const char *value)
 {
 	size_t len;
@@ -526,6 +569,7 @@ eigrp_result_t eigrp_auth_runtime_apply(eigrp_intf_t *runtime,
 					const char *keychain)
 {
 	char *password = NULL, *chain = NULL;
+	char *old_password, *old_chain;
 	int mode = EIGRP_AUTH_TYPE_NONE;
 	eigrp_result_t result = EIGRP_RESULT_SUCCESS;
 
@@ -567,23 +611,21 @@ eigrp_result_t eigrp_auth_runtime_apply(eigrp_intf_t *runtime,
 			result = EIGRP_RESULT_INTERNAL_FAILURE;
 	}
 	if (result != EIGRP_RESULT_SUCCESS) {
-		if (password) {
-			memset(password, 0, strlen(password));
-			free(password);
-			password = NULL;
-		}
+		eigrp_auth_password_free(password);
+		password = NULL;
 		free(chain);
 		chain = NULL;
 	}
-	if (runtime->params.auth_password) {
-		memset(runtime->params.auth_password, 0,
-		       strlen(runtime->params.auth_password));
-		free(runtime->params.auth_password);
-	}
-	free(runtime->params.auth_keychain);
+
+	pthread_mutex_lock(&runtime->eigrp->peer_lock);
+	old_password = runtime->params.auth_password;
+	old_chain = runtime->params.auth_keychain;
 	runtime->params.auth_password = password;
 	runtime->params.auth_keychain = chain;
 	runtime->params.auth_type = mode;
+	pthread_mutex_unlock(&runtime->eigrp->peer_lock);
+	eigrp_auth_password_free(old_password);
+	free(old_chain);
 	return result;
 }
 
@@ -621,21 +663,13 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 				EIGRP_AUTHENTICATION_NONE;
 			context->config->authentication_mode_configured = false;
 			context->config->authentication_encryption_type = 0;
-			free(context->config->authentication_password);
+			eigrp_auth_password_free(
+				context->config->authentication_password);
 			context->config->authentication_password = NULL;
 		}
-		if (context->runtime) {
-			context->runtime->params.auth_type =
-				EIGRP_AUTH_TYPE_NONE;
-			if (context->runtime->params.auth_password) {
-				memset(context->runtime->params.auth_password,
-				       0,
-				       strlen(context->runtime->params
-						      .auth_password));
-				free(context->runtime->params.auth_password);
-				context->runtime->params.auth_password = NULL;
-			}
-		}
+		if (context->runtime)
+			eigrp_auth_runtime_mode_set(context->runtime,
+						    EIGRP_AUTH_TYPE_NONE, NULL);
 		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -669,7 +703,7 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 			runtime_password =
 				eigrp_auth_string_dup(hmac->password);
 			if (!runtime_password) {
-				free(config_password);
+				eigrp_auth_password_free(config_password);
 				return EIGRP_RESULT_INTERNAL_FAILURE;
 			}
 		}
@@ -680,7 +714,8 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 	if (context->config) {
 		context->config->authentication_mode = (uint8_t)mode;
 		context->config->authentication_mode_configured = true;
-		free(context->config->authentication_password);
+		eigrp_auth_password_free(
+			context->config->authentication_password);
 		context->config->authentication_password = config_password;
 		context->config->authentication_encryption_type =
 			mode == EIGRP_AUTHENTICATION_HMAC_SHA256
@@ -692,25 +727,20 @@ eigrp_result_t eigrp_auth_mode_update(eigrp_operation_t operation,
 		/* Retain Cisco type-7 configuration, but do not treat the
 		 * encoded text as HMAC key material until type-7 decoding is
 		 * implemented. */
-		free(runtime_password);
+		eigrp_auth_password_free(runtime_password);
 		(void)eigrp_auth_runtime_apply(context->runtime,
 					       context->config, NULL);
 		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_UNSUPPORTED;
 	}
 
-	if (context->runtime) {
-		if (context->runtime->params.auth_password) {
-			memset(context->runtime->params.auth_password, 0,
-			       strlen(context->runtime->params.auth_password));
-			free(context->runtime->params.auth_password);
-		}
-		context->runtime->params.auth_password = runtime_password;
-		context->runtime->params.auth_type =
+	if (context->runtime)
+		eigrp_auth_runtime_mode_set(
+			context->runtime,
 			mode == EIGRP_AUTHENTICATION_HMAC_SHA256
 				? EIGRP_AUTH_TYPE_SHA256
-				: EIGRP_AUTH_TYPE_MD5;
-	}
+				: EIGRP_AUTH_TYPE_MD5,
+			runtime_password);
 	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }
@@ -768,10 +798,8 @@ eigrp_result_t eigrp_auth_keychain_update(eigrp_operation_t operation,
 			free(context->config->keychain);
 			context->config->keychain = NULL;
 		}
-		if (context->runtime) {
-			free(context->runtime->params.auth_keychain);
-			context->runtime->params.auth_keychain = NULL;
-		}
+		if (context->runtime)
+			eigrp_auth_runtime_keychain_set(context->runtime, NULL);
 		eigrp_intf_config_rebind(context);
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -808,10 +836,8 @@ eigrp_result_t eigrp_auth_keychain_update(eigrp_operation_t operation,
 		free(context->config->keychain);
 		context->config->keychain = config_copy;
 	}
-	if (context->runtime) {
-		free(context->runtime->params.auth_keychain);
-		context->runtime->params.auth_keychain = runtime_copy;
-	}
+	if (context->runtime)
+		eigrp_auth_runtime_keychain_set(context->runtime, runtime_copy);
 	eigrp_intf_config_rebind(context);
 	return EIGRP_RESULT_SUCCESS;
 }

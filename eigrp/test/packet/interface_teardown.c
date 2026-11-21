@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "eigrp.h"
+#include "eigrp_auth.h"
 #include "eigrp_filter.h"
 #include "eigrp_interface.h"
 #include "eigrp_list.h"
@@ -50,6 +51,11 @@ static void check(bool link_down_first, eigrp_intf_remove_reason_t reason)
 {
 	eigrp_instance_t eigrp = {0};
 	eigrp_intf_runtime_state_t state = {0};
+	eigrp_intf_config_t auth = {
+		.authentication_mode_configured = true,
+		.authentication_mode = EIGRP_AUTHENTICATION_HMAC_SHA256,
+		.authentication_password = "retire-me",
+	};
 	eigrp_intf_t *ei;
 	eigrp_timer_event_t *timer;
 	eigrp_packetizer_work_t *broadcast, *peer_work, *work;
@@ -73,6 +79,9 @@ static void check(bool link_down_first, eigrp_intf_remove_reason_t reason)
 	       == 1);
 	ei = eigrp_intf_runtime_create(&eigrp, &state);
 	assert(ei);
+	assert(eigrp_auth_runtime_apply(ei, &auth, "retire-chain")
+	       == EIGRP_RESULT_SUCCESS);
+	assert(ei->params.auth_password && ei->params.auth_keychain);
 	ei->obuf = eigrp_packet_queue_create();
 	assert(ei->obuf);
 

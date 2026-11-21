@@ -87,8 +87,9 @@ struct eigrp_instance {
 	/* Process packet thread -> AF packet handoff.  The AF owns the consumer
 	 * thread and packet queue for its entire published runtime lifetime. */
 	pthread_mutex_t work_lock;
-	pthread_mutex_t peer_lock; /* Protects interface/neighbor publication
-				      and ingress auth. */
+	pthread_mutex_t
+		peer_lock; /* Protects interface/neighbor publication,
+			      ingress auth and runtime auth replacement. */
 	uint64_t next_neighbor_generation; /* Protected by peer_lock. */
 	pthread_cond_t work_cond;
 	pthread_t thread;

@@ -1608,7 +1608,12 @@ void eigrp_del_intf_params(eigrp_intf_params_t *eip)
 	if (eip->auth_keychain)
 		free(eip->auth_keychain);
 	if (eip->auth_password) {
-		memset(eip->auth_password, 0, strlen(eip->auth_password));
+		volatile unsigned char *ptr =
+			(volatile unsigned char *)eip->auth_password;
+		size_t length = strlen(eip->auth_password);
+
+		while (length--)
+			*ptr++ = 0;
 		free(eip->auth_password);
 	}
 }
@@ -1830,6 +1835,8 @@ void eigrp_intf_free(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	pthread_mutex_lock(&ei->eigrp->peer_lock);
 	eigrp_list_delete_data(ei->eigrp->eiflist, ei);
 	pthread_mutex_unlock(&ei->eigrp->peer_lock);
+	/* No ingress reader can retain the unpublished interface. */
+	eigrp_del_intf_params(&ei->params);
 	eigrp_list_delete(&ei->nbrs);
 	eigrp_packet_queue_free(ei->obuf);
 	eigrp_filter_runtime_state_clear(&ei->filter);

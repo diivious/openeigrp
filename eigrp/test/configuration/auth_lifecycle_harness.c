@@ -79,6 +79,8 @@ int main(void)
 	};
 	int i;
 
+	check(pthread_mutex_init(&instance.peer_lock, NULL) == 0,
+	      "peer lock initialization");
 	af.runtime = &instance;
 	af.interfaces = &specific;
 	instance.eiflist = eigrp_list_create();
@@ -171,6 +173,8 @@ int main(void)
 
 	eigrp_list_delete_data(instance.eiflist, &ei);
 	eigrp_list_delete(&instance.eiflist);
+	check(pthread_mutex_destroy(&instance.peer_lock) == 0,
+	      "peer lock destruction");
 	puts("PASS: portable auth configuration replay");
 	return 0;
 }

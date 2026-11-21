@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: ISC
+# Copyright (C) 2026 Donnie V. Savage
+# Live AF-thread authentication replacement while the ingress receiver runs.
+schema: eigrp-uut-test/v1
+name: ipv4-authentication-live-reconfiguration
+# The UUT runs an independent packet-ingress thread and AF worker per router.
+topology: ../examples/two-router.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 15}
+  - interface-config: {uut: r1, interface: default, operation: create}
+  - interface-config: {uut: r2, interface: default, operation: create}
+
+  # Both peers replace their unauthenticated runtime with live HMAC secrets.
+  - interface-config: {uut: r1, interface: default, operation: hmac, value: SHA-key-one}
+  - interface-config: {uut: r2, interface: default, operation: hmac, value: SHA-key-one}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: true}
+  - validate-interface: {uut: r2, interface: eth0, auth_mode: 3, auth_material: true}
+  - clear-neighbors: {uut: r1, target: all}
+  - clear-neighbors: {uut: r2, target: all}
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 20}
+  - validate-neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, timeout: 20}
+  - packet-mark: first-hmac
+  - validate-packet: {source_uut: r1, destination_uut: r2, opcode: hello, event: delivered, since: first-hmac, min: 1, timeout: 8}
+
+  # A single-ended key rotation must fail closed after adjacency clear.
+  - interface-config: {uut: r1, interface: default, operation: hmac, value: SHA-key-two}
+  - clear-neighbors: {uut: r1, target: all}
+  - clear-neighbors: {uut: r2, target: all}
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: down, observe: 3}
+  - validate-neighbor: {uut: r2, neighbor: 10.0.0.1, state: down, observe: 3}
+
+  # Once both sides agree, adjacency and authenticated traffic recover.
+  - interface-config: {uut: r2, interface: default, operation: hmac, value: SHA-key-two}
+  - validate-interface: {uut: r2, interface: eth0, auth_mode: 3, auth_material: true}
+  - clear-neighbors: {uut: r1, target: all}
+  - clear-neighbors: {uut: r2, target: all}
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 20}
+  - validate-neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, timeout: 20}
+
+  # Unsupported encoded secrets must suppress output rather than disable auth.
+  - interface-config: {uut: r1, interface: default, operation: type7, value: 070C285F4D06}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 3, auth_material: false}
+  - packet-mark: type7-no-key
+  - wait: 6
+  - validate-packet: {uut: r1, interface: eth0, event: sent, since: type7-no-key, min: 0, max: 0, timeout: 1}
+  - interface-config: {uut: r1, interface: default, operation: hmac, value: SHA-key-two}
+  - clear-neighbors: {uut: r1, target: all}
+  - clear-neighbors: {uut: r2, target: all}
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 20}
+
+  # Removal returns both endpoints to ordinary unauthenticated neighbors.
+  - interface-config: {uut: r1, interface: default, operation: mode-reset}
+  - interface-config: {uut: r2, interface: default, operation: mode-reset}
+  - validate-interface: {uut: r1, interface: eth0, auth_mode: 0, auth_material: false}
+  - validate-interface: {uut: r2, interface: eth0, auth_mode: 0, auth_material: false}
+  - clear-neighbors: {uut: r1, target: all}
+  - clear-neighbors: {uut: r2, target: all}
+  - validate-neighbor: {uut: r1, neighbor: 10.0.0.2, state: up, timeout: 20}
+  - validate-neighbor: {uut: r2, neighbor: 10.0.0.1, state: up, timeout: 20}
+  - stop: all
