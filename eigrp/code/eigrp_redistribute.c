@@ -24,14 +24,15 @@
 #include <stdint.h>
 
 eigrp_result_t
-eigrp_topology_redistributed_route_update(eigrp_instance_t *eigrp,
-					  const eigrp_rib_route_t *source_route,
-					  const eigrp_metrics_t *metric);
-eigrp_result_t eigrp_topology_redistributed_route_remove(
-	eigrp_instance_t *eigrp, const eigrp_rib_route_t *source_route);
+eigrp_topo_redist_route_update(eigrp_instance_t *eigrp,
+			       const eigrp_rib_route_t *source_route,
+			       const eigrp_metrics_t *metric);
 eigrp_result_t
-eigrp_topology_redistributed_source_remove(eigrp_instance_t *eigrp,
-					   const eigrp_redist_source_t *source);
+eigrp_topo_redist_route_remove(eigrp_instance_t *eigrp,
+			       const eigrp_rib_route_t *source_route);
+eigrp_result_t
+eigrp_topo_redist_source_remove(eigrp_instance_t *eigrp,
+				const eigrp_redist_source_t *source);
 
 /* Retain the original host snapshot: an installed topology metric alone cannot
  * reconstruct an overridden seed after configuration changes. Each source has
@@ -481,8 +482,8 @@ eigrp_result_t eigrp_redist_remove(eigrp_instance_context_t *context,
 
 	if (context->runtime) {
 		eigrp_result_t withdraw_result =
-			eigrp_topology_redistributed_source_remove(
-				context->runtime, source);
+			eigrp_topo_redist_source_remove(context->runtime,
+							source);
 
 		if (withdraw_result != EIGRP_RESULT_SUCCESS
 		    && withdraw_result != EIGRP_RESULT_NOT_FOUND)
@@ -566,8 +567,7 @@ void eigrp_redist_routes_withdraw(eigrp_instance_t *runtime)
 	if (!af)
 		return;
 	for (cfg = af->redistributions; cfg; cfg = cfg->next)
-		(void)eigrp_topology_redistributed_source_remove(runtime,
-								 &cfg->source);
+		(void)eigrp_topo_redist_source_remove(runtime, &cfg->source);
 }
 
 void eigrp_redist_routes_replay(eigrp_instance_t *runtime)
@@ -770,9 +770,9 @@ bool eigrp_redist_prefix_admit(eigrp_instance_t *runtime,
 	if (!af || !af->redistribute_policy
 	    || !af->redistribute_policy->maximum_prefix_configured)
 		return true;
-	prefix = eigrp_topology_table_lookup(runtime->topology_table,
-					     &route->prefix);
-	if (eigrp_topology_redist_present(runtime, prefix))
+	prefix = eigrp_topo_table_lookup(runtime->topology_table,
+					 &route->prefix);
+	if (eigrp_topo_redist_present(runtime, prefix))
 		return true;
 	limit = &af->redistribute_policy->maximum_prefix;
 	{
@@ -836,8 +836,7 @@ eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
 		eigrp_redist_event_add(
 			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_WITHDRAW,
 			route, 0);
-		return eigrp_topology_redistributed_route_remove(runtime,
-								 route);
+		return eigrp_topo_redist_route_remove(runtime, route);
 	}
 
 	if (importing && config->route_map) {
@@ -856,8 +855,7 @@ eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
 				EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_FILTERED,
 				route, 0);
 			eigrp_result_t withdrawn =
-				eigrp_topology_redistributed_route_remove(
-					runtime, route);
+				eigrp_topo_redist_route_remove(runtime, route);
 			return withdrawn == EIGRP_RESULT_NOT_FOUND
 				       ? EIGRP_RESULT_SUCCESS
 				       : withdrawn;
@@ -869,13 +867,12 @@ eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
 		eigrp_redist_event_add(
 			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
 			route, EIGRP_REDIST_REJECT_NO_METRIC);
-		withdraw = eigrp_topology_redistributed_route_remove(runtime,
-								     route);
+		withdraw = eigrp_topo_redist_route_remove(runtime, route);
 		return withdraw == EIGRP_RESULT_NOT_FOUND ? EIGRP_RESULT_SUCCESS
 							  : withdraw;
 	}
 	if (!eigrp_redist_prefix_admit(runtime, route)
-	    || !eigrp_topology_prefix_admit(runtime, &route->prefix)) {
+	    || !eigrp_topo_pfx_admit(runtime, &route->prefix)) {
 		eigrp_redist_event_add(
 			runtime, EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_REJECT,
 			route, EIGRP_REDIST_REJECT_PREFIX_LIMIT);
@@ -884,8 +881,7 @@ eigrp_redist_source_route_receive(eigrp_instance_t *runtime,
 	eigrp_redist_event_add(runtime,
 			       EIGRP_EVENTLOG_OPCODE_REDIST_ROUTE_UPDATE, route,
 			       (eventmsg_arg_t)metric.delay);
-	return eigrp_topology_redistributed_route_update(runtime, route,
-							 &metric);
+	return eigrp_topo_redist_route_update(runtime, route, &metric);
 }
 
 eigrp_result_t eigrp_rib_event_process(eigrp_instance_t *runtime,

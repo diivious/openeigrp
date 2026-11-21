@@ -46,8 +46,8 @@ def test_prefix_limit_scopes_are_wired_to_real_lifecycle_points():
     topology = (ROOT / "eigrp/code/eigrp_topology.c").read_text()
     assert "eigrp_nbr_route_admit(eigrp, nbr" in update
     assert "eigrp_nbr_prefix_admit(eigrp, nbr, dest)" in neighbor
-    assert "eigrp_topology_prefix_admit(eigrp, dest)" in neighbor
+    assert "eigrp_topo_pfx_admit(eigrp, dest)" in neighbor
     assert "!eigrp_redist_prefix_admit(runtime, route)" in redist
     assert "eigrp_nbr_prefix_count(runtime, neighbor)" in neighbor
-    assert "eigrp_topology_prefix_count(runtime)" in topology
+    assert "eigrp_topo_pfx_count_read(runtime)" in topology
     assert "eigrp_redist_prefix_count(runtime)" in redist

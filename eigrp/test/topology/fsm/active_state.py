@@ -63,14 +63,14 @@ def test_active_state_handlers_do_not_recompute_successor_list_to_adopt_metric()
 
     for function in ACTIVE_STATE_FUNCTIONS:
         body = function_body(source, function)
-        assert "eigrp_topology_successors_read" not in body
+        assert "eigrp_topo_successors_read" not in body
         assert "listnode_head(successors)" not in body
 
 
 def test_route_metric_updates_are_still_recorded_before_fsm_event_selection():
     body = function_body(read(FSM), "eigrp_fsm_event_select")
 
-    assert "change = eigrp_topology_update_distance(msg);" in body
+    assert "change = eigrp_topo_route_distance_update(msg);" in body
     assert "msg->change = change;" in body
 
 
@@ -100,7 +100,7 @@ def test_active_query_origin_is_retained_for_deferred_reply_without_successor_lo
     assert "msg->prefix->query_origin = msg->adv_router;" in qact
 
     for body in (lr, lr_fcs):
-        assert "eigrp_topology_successors_read" not in body
+        assert "eigrp_topo_successors_read" not in body
         assert "assert(successors)" not in body
         assert "prefix->query_origin" in body
         assert "eigrp_reply_send(eigrp, prefix->query_origin, prefix);" in body

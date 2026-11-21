@@ -38,7 +38,7 @@ void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *eigrp,
 {
 	(void)eigrp;
 	/* There is no outstanding packet work in this focused fixture. */
-	eigrp_topology_prefix_free(prefix);
+	eigrp_topo_pfx_free(prefix);
 }
 unsigned long term_debug_eigrp = 0;
 void eigrp_timer_cancel(eigrp_instance_t *eigrp, eigrp_timer_event_t **owner)
@@ -87,8 +87,8 @@ void eigrp_reply_send_route(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	       == (EIGRP_PACKETIZER_WORK_F_OWN_PREFIX
 		   | EIGRP_PACKETIZER_WORK_F_OWN_ROUTE));
 	replies++;
-	eigrp_topology_route_free(route);
-	eigrp_topology_prefix_free(prefix);
+	eigrp_topo_route_free(route);
+	eigrp_topo_pfx_free(prefix);
 }
 
 eigrp_packetizer_work_t *eigrp_packetizer_work_create(uint8_t opcode)
@@ -159,7 +159,7 @@ static void receive_one(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 static eigrp_route_descriptor_t *query_route(eigrp_intf_t *ei, uint8_t last,
 					     bool poisoned)
 {
-	eigrp_route_descriptor_t *route = eigrp_topology_route_create(ei);
+	eigrp_route_descriptor_t *route = eigrp_topo_route_create(ei);
 	assert(route);
 	route->dest = prefix_ipv4(last);
 	route->type = EIGRP_TLV_IPv4_INT;
@@ -179,7 +179,7 @@ int main(void)
 	eigrp_route_descriptor_t *finite, *poison, *stored;
 	eigrp_prefix_descriptor_t *prefix;
 
-	eigrp.topology_table = eigrp_topology_table_create();
+	eigrp.topology_table = eigrp_topo_table_create();
 	assert(eigrp.topology_table);
 	eigrp.af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
 	eigrp.max_hops = 100;
@@ -194,8 +194,7 @@ int main(void)
 	const eigrp_metrics_t advertised = finite->metric;
 	receive_one(&eigrp, &nbr, &ei, finite);
 	assert(replies == 1 && acks == 1);
-	prefix = eigrp_topology_table_lookup(eigrp.topology_table,
-					     &finite->dest);
+	prefix = eigrp_topo_table_lookup(eigrp.topology_table, &finite->dest);
 	assert(prefix);
 	assert(prefix->state == EIGRP_FSM_STATE_PASSIVE);
 	assert(prefix->fdistance == EIGRP_MAX_METRIC
@@ -203,7 +202,7 @@ int main(void)
 	assert(prefix->reported_metric.delay == EIGRP_MAX_METRIC);
 	assert(prefix->req_action == 0 && !prefix->t_active);
 	assert(eigrp.topology_changes == NULL);
-	assert(eigrp_prefix_descriptor_lookup(prefix, &nbr) == finite);
+	assert(eigrp_topo_route_lookup(prefix, &nbr) == finite);
 	assert(prefix->internal_routes->count == 1
 	       && prefix->external_routes->count == 0);
 	assert(finite->flags == EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG);
@@ -214,8 +213,8 @@ int main(void)
 	       == (uint32_t)eigrp_metric_calculate(&eigrp,
 						   finite->total_metric));
 	assert(finite->distance < EIGRP_MAX_METRIC);
-	assert(eigrp_topology_route_select(prefix) == NULL);
-	assert(eigrp_topology_route_read(prefix) == NULL);
+	assert(eigrp_topo_route_select(prefix) == NULL);
+	assert(eigrp_topo_route_read(prefix) == NULL);
 
 	/* A second finite QUERY for the same destination must update the
 	 * retained neighbor metric without promoting it to a successor. */
@@ -224,7 +223,7 @@ int main(void)
 		again->metric.delay = eigrp_delay_to_scaled(25);
 		receive_one(&eigrp, &nbr, &ei, again);
 		assert(replies == 2 && acks == 2);
-		assert(eigrp_prefix_descriptor_lookup(prefix, &nbr) == finite);
+		assert(eigrp_topo_route_lookup(prefix, &nbr) == finite);
 		assert(finite->reported_metric.delay
 		       == eigrp_delay_to_scaled(25));
 		assert(prefix->state == EIGRP_FSM_STATE_PASSIVE);
@@ -237,13 +236,12 @@ int main(void)
 	poison = query_route(&ei, 2, true);
 	receive_one(&eigrp, &nbr, &ei, poison);
 	assert(replies == 3 && acks == 3);
-	assert(!eigrp_topology_table_lookup(eigrp.topology_table,
-					    &poison->dest));
+	assert(!eigrp_topo_table_lookup(eigrp.topology_table, &poison->dest));
 
 
 	/* A newly received UPDATE with the same finite vector must be able
 	 * to move the retained path through the normal DUAL update path. */
-	stored = eigrp_prefix_descriptor_lookup(prefix, &nbr);
+	stored = eigrp_topo_route_lookup(prefix, &nbr);
 	assert(stored == finite);
 	assert(stored->metric.delay == eigrp_delay_to_scaled(25));
 	printf("Unknown finite QUERY retained as passive non-successor; poison skipped\n");

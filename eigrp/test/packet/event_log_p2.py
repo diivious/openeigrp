@@ -49,8 +49,8 @@ def test_interface_lifecycle_events_cover_failure_and_state_changes():
 
 def test_successor_change_compares_selected_set_to_installed_set():
     src = read(CODE / "eigrp_topology.c")
-    start = src.index("void eigrp_update_routing_table")
-    body = src[start : src.index("void eigrp_topology_connected_interface_down", start)]
+    start = src.index("void eigrp_topo_rib_update")
+    body = src[start : src.index("void eigrp_topo_connected_intf_down", start)]
 
     assert "EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG" in body
     assert "EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG" in body

@@ -239,7 +239,7 @@ def test_named_exec_state_walkers_consume_address_family_runtime_binding():
     assert "eigrp_lookup_by_as_vrf" not in runtime_lookup
     assert "eigrp_intf_state_iterate(" in named_cli
     assert "eigrp_nbr_state_iterate(" in named_cli
-    assert "eigrp_topology_state_iterate(" in named_cli
+    assert "eigrp_topo_pfx_routes_iterate(" in named_cli
 
 
 

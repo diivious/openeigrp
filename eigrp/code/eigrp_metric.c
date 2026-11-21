@@ -540,7 +540,7 @@ eigrp_metric_weights_update(eigrp_operation_t operation,
 				eigrp_metric_peers_restart(context->runtime);
 				memcpy(context->runtime->k_values, defaults,
 				       sizeof(defaults));
-				eigrp_topology_metric_update(context->runtime);
+				eigrp_topo_metric_update(context->runtime);
 			}
 		}
 		return EIGRP_RESULT_SUCCESS;
@@ -573,7 +573,7 @@ eigrp_metric_weights_update(eigrp_operation_t operation,
 			eigrp_metric_peers_restart(context->runtime);
 			memcpy(context->runtime->k_values, updated,
 			       sizeof(updated));
-			eigrp_topology_metric_update(context->runtime);
+			eigrp_topo_metric_update(context->runtime);
 		}
 	}
 	return EIGRP_RESULT_SUCCESS;
@@ -632,7 +632,7 @@ eigrp_result_t eigrp_metric_variance_update(eigrp_operation_t operation,
 		}
 		if (context->runtime) {
 			context->runtime->variance = EIGRP_VARIANCE_DEFAULT;
-			eigrp_topology_multipath_update(context->runtime);
+			eigrp_topo_multipath_update(context->runtime);
 		}
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -655,7 +655,7 @@ eigrp_result_t eigrp_metric_variance_update(eigrp_operation_t operation,
 	}
 	if (context->runtime) {
 		context->runtime->variance = variance;
-		eigrp_topology_multipath_update(context->runtime);
+		eigrp_topo_multipath_update(context->runtime);
 	}
 	return EIGRP_RESULT_SUCCESS;
 }
@@ -719,7 +719,7 @@ eigrp_traffic_share_balanced_update(eigrp_operation_t operation,
 	}
 	if (context->runtime) {
 		context->runtime->traffic_share_balanced = enabled;
-		eigrp_topology_traffic_share_update(context->runtime);
+		eigrp_topo_traffic_share_update(context->runtime);
 	}
 	return EIGRP_RESULT_SUCCESS;
 }
@@ -840,7 +840,7 @@ eigrp_result_t eigrp_metric_version_update(eigrp_operation_t operation,
 			/* Only already-DOWN peers remain; rebind their codecs.
 			 */
 			eigrp_nbr_codec_update(context->runtime);
-			eigrp_topology_metric_update(context->runtime);
+			eigrp_topo_metric_update(context->runtime);
 		}
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -864,7 +864,7 @@ eigrp_result_t eigrp_metric_version_update(eigrp_operation_t operation,
 		context->runtime->metric_version = EIGRP_TLV_32B_VERSION;
 		/* Only already-DOWN peers remain; rebind their codecs. */
 		eigrp_nbr_codec_update(context->runtime);
-		eigrp_topology_metric_update(context->runtime);
+		eigrp_topo_metric_update(context->runtime);
 	}
 	return EIGRP_RESULT_SUCCESS;
 }

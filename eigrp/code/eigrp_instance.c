@@ -314,7 +314,7 @@ eigrp_instance_t *eigrp_instance_create(eigrp_virt_router_t *virt_router,
 	eigrp->passive_interface_default = EIGRP_INTF_ACTIVE;
 	eigrp->networks = NULL;
 	eigrp->oi_write_q = eigrp_list_create();
-	eigrp->topology_table = eigrp_topology_table_create();
+	eigrp->topology_table = eigrp_topo_table_create();
 	eigrp->variance = EIGRP_VARIANCE_DEFAULT;
 	eigrp->traffic_share_balanced = true;
 	eigrp->max_paths = EIGRP_MAX_PATHS_DEFAULT;
@@ -513,7 +513,7 @@ void eigrp_instance_delete_final(eigrp_instance_t *eigrp)
 	eigrp_list_delete(&eigrp->eiflist);
 	eigrp_list_delete(&eigrp->oi_write_q);
 
-	eigrp_topology_table_delete(eigrp, eigrp->topology_table);
+	eigrp_topo_table_delete(eigrp, eigrp->topology_table);
 	if (eigrp->neighbor_self)
 		eigrp_nbr_delete(eigrp->neighbor_self);
 

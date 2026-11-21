@@ -18,7 +18,7 @@ def process_executable(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("process")
     binary = tmp_path / "process_limit_100k"
     sources = (
-        "eigrp_redistribute.c", "eigrp_pfxlimits.c", "eigrp_topology.c",
+        "eigrp_redistribute.c", "eigrp_pfxlimits.c", "eigrp_topology.c", "eigrp_nexthop.c",
         "eigrp_fsm.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
         "eigrp_table.c", "eigrp_prefix.c",
     )

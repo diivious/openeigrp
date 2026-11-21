@@ -97,20 +97,20 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
             eigrp_instance_t *eigrp, eigrp_prefix_descriptor_t *prefix,
             uint32_t distance, uint32_t rd, uint16_t type)
         {
-            eigrp_route_descriptor_t *route = eigrp_topology_route_create(NULL);
+            eigrp_route_descriptor_t *route = eigrp_topo_route_create(NULL);
             assert(route != NULL);
             route->distance = distance;
             route->reported_distance = rd;
             route->type = type;
             route->prefix = prefix;
-            eigrp_route_descriptor_add(eigrp, prefix, route);
+            eigrp_topo_route_add(eigrp, prefix, route);
             return route;
         }
 
         int main(void)
         {
             eigrp_instance_t eigrp = {0};
-            eigrp_prefix_descriptor_t *prefix = eigrp_topology_prefix_create();
+            eigrp_prefix_descriptor_t *prefix = eigrp_topo_pfx_create();
             eigrp_route_descriptor_t *a, *b, *c, *d, *poison;
 
             assert(prefix != NULL);
@@ -132,7 +132,7 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
             poison = add_route(&eigrp, prefix, EIGRP_MAX_METRIC,
                                EIGRP_MAX_METRIC, EIGRP_TLV_IPv6_INT);
 
-            eigrp_topology_update_node_flags(&eigrp, prefix);
+            eigrp_topo_pfx_flags_update(&eigrp, prefix);
             assert(a->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
             assert(b->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
             assert(c->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG);
@@ -142,27 +142,27 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
 
             /* max-paths expands the selected variance set. */
             eigrp.max_paths = 3;
-            eigrp_topology_update_node_flags(&eigrp, prefix);
+            eigrp_topo_pfx_flags_update(&eigrp, prefix);
             assert(c->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
             assert(!(c->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG));
 
             /* Tightening variance retains the unequal path only as an FS. */
             eigrp.variance = 1;
-            eigrp_topology_update_node_flags(&eigrp, prefix);
+            eigrp_topo_pfx_flags_update(&eigrp, prefix);
             assert(c->flags & EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG);
 
             /* Strict FC: RD == FD is not feasible. */
             b->reported_distance = prefix->fdistance;
-            eigrp_topology_update_node_flags(&eigrp, prefix);
+            eigrp_topo_pfx_flags_update(&eigrp, prefix);
             assert(!(b->flags & (EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG |
                                  EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)));
 
             /* Must not install/remove IPv6 routes in the host RIB. */
-            eigrp_update_routing_table(&eigrp, prefix);
+            eigrp_topo_rib_update(&eigrp, prefix);
             assert(rib_installs == 0);
             assert(rib_removes == 0);
 
-            eigrp_topology_prefix_free(prefix);
+            eigrp_topo_pfx_free(prefix);
             return 0;
         }
     '''))
@@ -174,6 +174,7 @@ def test_ipv6_dual_successor_selection_executes(tmp_path):
         "-ffunction-sections", "-fdata-sections",
         f"-I{ROOT}", f"-I{ROOT / 'test' / 'build' / 'include'}",
         str(source), str(ROOT / "eigrp" / "code" / "eigrp_topology.c"),
+        str(ROOT / "eigrp" / "code" / "eigrp_nexthop.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_timer.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_list.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
@@ -201,18 +202,18 @@ def test_passive_fd_and_active_freeze_rules_are_preserved():
     # A lower-CD infeasible path must not hide a higher-CD feasible successor.
     event = fsm[fsm.index("static enum eigrp_fsm_events"):
                 fsm.index("int eigrp_fsm_event(")]
-    assert "eigrp_topology_route_select(prefix)" in event
+    assert "eigrp_topo_route_select(prefix)" in event
     assert "if (selected)" in event
 
-    flags_start = topology.index("void eigrp_topology_update_node_flags")
+    flags_start = topology.index("void eigrp_topo_pfx_flags_update")
     flags = topology[
-        flags_start:topology.index("void eigrp_update_routing_table", flags_start)
+        flags_start:topology.index("void eigrp_topo_rib_update", flags_start)
     ]
-    assert "eigrp_topology_route_select(dest)" in flags
+    assert "eigrp_topo_route_select(dest)" in flags
 
     # Carry the selected IPv6 successor set through the common RIB path.
-    rib = topology[topology.index("void eigrp_update_routing_table"):
-                   topology.index("void eigrp_topology_neighbor_down")]
+    rib = topology[topology.index("void eigrp_topo_rib_update"):
+                   topology.index("void eigrp_topo_nbr_down")]
     assert "Stops at IPv6 DUAL/topology selection" not in rib
     assert "eigrp_rib_route_add" in rib
-    assert "eigrp_topology_southbound_nexthops" in rib
+    assert "eigrp_topo_rib_nexthops_set" in rib

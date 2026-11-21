@@ -280,7 +280,7 @@ bool eigrp_filter_prefix_update(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	    || direction >= EIGRP_FILTER_MAX)
 		return false;
 
-	if (eigrp_topology_default_information_denies(
+	if (eigrp_topo_default_info_denies(
 		    eigrp,
 		    direction == EIGRP_FILTER_IN
 			    ? EIGRP_DEFAULT_INFORMATION_IN

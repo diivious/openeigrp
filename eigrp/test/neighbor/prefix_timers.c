@@ -63,7 +63,7 @@ static void run_timers(int afi)
 		true; /* Real timer queue enabled on the test AF. */
 	eigrp.tlv2_codec.encoder = eigrp_packet_encoder_safe;
 	eigrp.eiflist = eigrp_list_create();
-	eigrp.topology_table = eigrp_topology_table_create();
+	eigrp.topology_table = eigrp_topo_table_create();
 	eigrp.topology_changes = eigrp_list_create();
 	ei.eigrp = &eigrp;
 	ei.nbrs = eigrp_list_create();
@@ -201,7 +201,7 @@ static void run_timers(int afi)
 	assert(!ei.nbrs->count && !eigrp.timer_head);
 
 	eigrp_packetizer_delete(&eigrp);
-	eigrp_topology_table_delete(&eigrp, eigrp.topology_table);
+	eigrp_topo_table_delete(&eigrp, eigrp.topology_table);
 	eigrp_list_delete(&eigrp.topology_changes);
 	eigrp_list_delete(&ei.nbrs);
 	eigrp_list_delete(&eigrp.eiflist);

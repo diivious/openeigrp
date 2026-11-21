@@ -36,10 +36,10 @@ int main(void)
 	/* Look up the real destination rather than relying on traversal order.
 	 */
 	eigrp_prefix_t target = dest(42);
-	prefix = eigrp_topology_table_lookup(runtime.topology_table, &target);
+	prefix = eigrp_topo_table_lookup(runtime.topology_table, &target);
 	assert(prefix && prefix->state == EIGRP_FSM_STATE_PASSIVE);
-	first = eigrp_prefix_descriptor_lookup(prefix, &peer);
-	other = eigrp_prefix_descriptor_lookup(prefix, &second);
+	first = eigrp_topo_route_lookup(prefix, &peer);
+	other = eigrp_topo_route_lookup(prefix, &second);
 	assert(first && other && first->distance == other->distance);
 	assert((first->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
 	       && (other->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG));
@@ -52,24 +52,24 @@ int main(void)
 
 	/* A surviving equal-cost successor needs no metric UPDATE. The dead
 	 * neighbor's poisoned DRDB still must be retired. */
-	eigrp_topology_neighbor_down(&runtime, &second);
-	prefix = eigrp_topology_table_lookup(runtime.topology_table, &target);
+	eigrp_topo_nbr_down(&runtime, &second);
+	prefix = eigrp_topo_table_lookup(runtime.topology_table, &target);
 	assert(prefix && prefix->state == EIGRP_FSM_STATE_PASSIVE);
 	assert(prefix->fdistance == fd);
-	assert(eigrp_prefix_descriptor_lookup(prefix, &peer));
-	assert(!eigrp_prefix_descriptor_lookup(prefix, &second));
+	assert(eigrp_topo_route_lookup(prefix, &peer));
+	assert(!eigrp_topo_route_lookup(prefix, &second));
 	assert(second.topo_refs == 0 && second.limit_prefix_count == 0);
 
 	/* Repeated neighbor teardown must not affect surviving paths. */
-	eigrp_topology_neighbor_down(&runtime, &second);
-	assert(eigrp_prefix_descriptor_lookup(prefix, &peer));
-	assert(!eigrp_prefix_descriptor_lookup(prefix, &second));
+	eigrp_topo_nbr_down(&runtime, &second);
+	assert(eigrp_topo_route_lookup(prefix, &peer));
+	assert(!eigrp_topo_route_lookup(prefix, &second));
 
 	/* A new finite path from the recovered peer must be admitted again. */
 	update(&second, 42, false);
-	assert(eigrp_prefix_descriptor_lookup(prefix, &second));
-	eigrp_topology_neighbor_down(&runtime, &second);
-	assert(!eigrp_prefix_descriptor_lookup(prefix, &second));
+	assert(eigrp_topo_route_lookup(prefix, &second));
+	eigrp_topo_nbr_down(&runtime, &second);
+	assert(!eigrp_topo_route_lookup(prefix, &second));
 	finish();
 	puts("ECMP neighbor withdrawal, retirement and recovery OK");
 	return 0;

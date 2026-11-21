@@ -14,7 +14,7 @@ def test_ipv6_update_receive_decodes_and_uses_af_external_type():
     assert "received_route->type == eigrp->af_vectors.classic_external_tlv_type" in update
     assert "prefix->destination = route->dest;" in update
     assert "eigrp_prefix_normalize(&prefix->destination);" in update
-    assert "eigrp_route_descriptor_add(eigrp, prefix, route);" in update
+    assert "eigrp_topo_route_add(eigrp, prefix, route);" in update
 
 def test_ipv6_update_processing_is_bounded_to_passive_state():
     update = read("eigrp/code/eigrp_update.c")
@@ -33,8 +33,8 @@ def test_ipv6_withdrawal_poison_uses_destination_family():
 
 def test_ipv6_update_reaches_common_host_rib_path():
     topology = read("eigrp/code/eigrp_topology.c")
-    rib = topology[topology.index("void eigrp_update_routing_table"):
-                   topology.index("void eigrp_topology_neighbor_down")]
+    rib = topology[topology.index("void eigrp_topo_rib_update"):
+                   topology.index("void eigrp_topo_nbr_down")]
     assert "Stops at IPv6 DUAL/topology selection" not in rib
     assert "eigrp_rib_route_add(eigrp, &rib_route)" in rib
     assert "eigrp_rib_route_del(eigrp, &prefix->destination)" in rib
@@ -42,5 +42,5 @@ def test_ipv6_update_reaches_common_host_rib_path():
 def test_named_ipv6_topology_show_uses_common_state_walk():
     cli = read("frr/code/eigrp_frr_named.c")
     assert '"show eigrp address-family <ipv4|ipv6>$afi' in cli
-    assert "eigrp_topology_state_iterate(" in cli
+    assert "eigrp_topo_pfx_routes_iterate(" in cli
     assert "INET6_ADDRSTRLEN" in cli

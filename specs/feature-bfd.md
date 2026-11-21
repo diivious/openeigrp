@@ -490,7 +490,7 @@ normal DUAL convergence
 
 This should use the existing EIGRP neighbor-down machinery rather than a BFD-specific route withdrawal path.
 
-The current OpenEIGRP implementation already centralizes neighbor deletion in `eigrp_nbr_delete()`. That function unpublishes the neighbor, transitions it down, calls `eigrp_topology_neighbor_down()`, cancels neighbor-owned timers, releases retransmission state, and frees the neighbor. BFD should enter this path in the same manner as hold expiration, Goodbye, interface failure, RTP retry exhaustion, administrative clear, or SIA neighbor loss.
+The current OpenEIGRP implementation already centralizes neighbor deletion in `eigrp_nbr_delete()`. That function unpublishes the neighbor, transitions it down, calls `eigrp_topo_nbr_down()`, cancels neighbor-owned timers, releases retransmission state, and frees the neighbor. BFD should enter this path in the same manner as hold expiration, Goodbye, interface failure, RTP retry exhaustion, administrative clear, or SIA neighbor loss.
 
 A BFD-specific neighbor event-log reason should be added so the exact location of the state transition records why the neighbor was removed.
 

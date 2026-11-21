@@ -22,7 +22,7 @@ def test_interface_teardown_timer_and_write_queue():
         link = libraries * 2
     else:
         flags = ["-DEIGRP_TEST_WRAP_TOPOLOGY",
-                 "-Wl,--wrap=eigrp_topology_connected_interface_down"]
+                 "-Wl,--wrap=eigrp_topo_connected_intf_down"]
         link = ["-Wl,--start-group", *libraries, "-Wl,--end-group"]
 
     with tempfile.TemporaryDirectory() as folder:

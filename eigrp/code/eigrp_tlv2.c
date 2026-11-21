@@ -392,7 +392,7 @@ static eigrp_route_descriptor_t *eigrp_tlv2_decoder(eigrp_instance_t *eigrp,
 		return NULL;
 	}
 
-	route = eigrp_topology_route_create(nbr->ei);
+	route = eigrp_topo_route_create(nbr->ei);
 	if (!route) {
 		eigrp_stream_set_endp(pkt, packet_end);
 		eigrp_tlv2_decode_skip(pkt, tlv_end);
@@ -452,7 +452,7 @@ malformed:
 			length, bytes);
 	}
 	if (route)
-		eigrp_topology_route_free(route);
+		eigrp_topo_route_free(route);
 	eigrp_stream_set_endp(pkt, packet_end);
 	eigrp_tlv2_decode_abort(pkt);
 	return NULL;

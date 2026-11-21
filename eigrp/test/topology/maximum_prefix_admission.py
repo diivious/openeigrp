@@ -12,7 +12,7 @@ ROOT = next(p for p in Path(__file__).resolve().parents if (p / 'eigrp' / 'code'
 def test_maximum_prefix_query_retention_and_replacement(tmp_path):
     binary = tmp_path / 'maximum_prefix_admission'
     topology_only = os.getenv('EIGRP_PREFIX_TEST_TOPOLOGY_ONLY') == '1'
-    sources = ['eigrp_topology.c', *([] if topology_only else ['eigrp_neighbor.c']), 'eigrp_timer.c', 'eigrp_metric.c',
+    sources = ['eigrp_topology.c', "eigrp_nexthop.c", *([] if topology_only else ['eigrp_neighbor.c']), 'eigrp_timer.c', 'eigrp_metric.c',
                'eigrp_list.c', 'eigrp_table.c', 'eigrp_prefix.c']
     cmd = [os.environ.get('CC', 'cc'), '-std=gnu11', '-O0', '-Wall', '-Wextra',
            '-Werror', '-Wno-unused-function', '-Wno-unused-parameter',

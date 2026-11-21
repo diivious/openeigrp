@@ -270,7 +270,7 @@ bool eigrp_summary_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 			    &summary_prefix->destination,
 			    &candidate->destination.address))
 			continue;
-		candidate_route = eigrp_topology_route_read(candidate);
+		candidate_route = eigrp_topo_route_read(candidate);
 		if (!candidate_route
 		    || candidate_route->distance == EIGRP_MAX_METRIC
 		    || (candidate->distance == EIGRP_MAX_METRIC
@@ -369,7 +369,7 @@ bool eigrp_summary_query_route_build(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 				    destination,
 				    &component->destination.address))
 				continue;
-			component_route = eigrp_topology_route_read(component);
+			component_route = eigrp_topo_route_read(component);
 			if (component_route
 			    && eigrp_summary_route_build(
 				    eigrp, ei, component, component_route,
@@ -433,12 +433,12 @@ static void eigrp_summary_withdraw(eigrp_instance_t *eigrp,
 	(void)eigrp_eventlog_msg_add(eigrp,
 				     EIGRP_EVENTLOG_OPCODE_SUMMARY_WITHDRAW,
 				     prefix, 0, 0, 0, 0);
-	withdraw_prefix = eigrp_topology_prefix_create();
-	withdraw_route = eigrp_topology_route_create(NULL);
+	withdraw_prefix = eigrp_topo_pfx_create();
+	withdraw_route = eigrp_topo_route_create(NULL);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_UPDATE);
 	if (!withdraw_prefix || !withdraw_route || !work) {
-		eigrp_topology_prefix_free(withdraw_prefix);
-		eigrp_topology_route_free(withdraw_route);
+		eigrp_topo_pfx_free(withdraw_prefix);
+		eigrp_topo_route_free(withdraw_route);
 		eigrp_packetizer_work_free(work);
 		return;
 	}

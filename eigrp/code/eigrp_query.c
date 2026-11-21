@@ -37,16 +37,16 @@ eigrp_query_unknown_reply_send(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	if (!eigrp || !nbr || !query_route)
 		return;
 
-	prefix = eigrp_topology_prefix_create();
+	prefix = eigrp_topo_pfx_create();
 	if (!prefix)
 		return;
 
 	prefix->destination = query_route->dest;
 	eigrp_prefix_normalize(&prefix->destination);
 
-	reply_route = eigrp_topology_route_create(nbr->ei);
+	reply_route = eigrp_topo_route_create(nbr->ei);
 	if (!reply_route) {
-		eigrp_topology_prefix_free(prefix);
+		eigrp_topo_pfx_free(prefix);
 		return;
 	}
 
@@ -80,7 +80,7 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 	if (!eigrp || !nbr || !route || !nbr->ei || !eigrp->topology_table)
 		return false;
 
-	previous = prefix ? eigrp_prefix_descriptor_lookup(prefix, nbr) : NULL;
+	previous = prefix ? eigrp_topo_route_lookup(prefix, nbr) : NULL;
 	if (route->metric.delay == EIGRP_MAX_METRIC
 	    || route->metric.delay == EIGRP_METRIC_MAX
 	    || eigrp_filter_prefix_update(eigrp, nbr->ei, EIGRP_FILTER_IN,
@@ -88,9 +88,9 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 		if (previous
 		    && (previous->flags
 			& EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)) {
-			eigrp_route_descriptor_delete(eigrp, prefix, previous);
-			eigrp_update_topology_table_prefix(
-				eigrp, eigrp->topology_table, prefix);
+			eigrp_topo_route_remove(eigrp, prefix, previous);
+			eigrp_topo_pfx_update(eigrp, eigrp->topology_table,
+					      prefix);
 		}
 		return false;
 	}
@@ -102,7 +102,7 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 		return false;
 
 	if (new_prefix) {
-		prefix = eigrp_topology_prefix_create();
+		prefix = eigrp_topo_pfx_create();
 		if (!prefix)
 			return false;
 		prefix->destination = route->dest;
@@ -142,7 +142,7 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 			 || route->type == EIGRP_TLV_MP_EXT)
 				? EIGRP_EXT
 				: EIGRP_INT;
-		(void)eigrp_topology_update_distance(&msg);
+		(void)eigrp_topo_route_distance_update(&msg);
 		return false; /* The caller still owns the decoded QUERY TLV. */
 	}
 
@@ -153,15 +153,15 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 	route->reported_distance =
 		eigrp_metric_calculate(eigrp, route->reported_metric);
 	route->distance = eigrp_metric_total_calculate(eigrp, route);
-	if (!eigrp_topology_route_insert(eigrp, prefix, route, true)) {
+	if (!eigrp_topo_route_insert(eigrp, prefix, route, true)) {
 		if (new_prefix)
-			eigrp_topology_prefix_free(prefix);
+			eigrp_topo_pfx_free(prefix);
 		return false;
 	}
 	/* Route storage is intentionally separate from route_descriptor_add(),
 	 * which can install the first path into the host RIB. */
 	if (new_prefix)
-		eigrp_prefix_descriptor_add(eigrp->topology_table, prefix);
+		eigrp_topo_pfx_add(eigrp->topology_table, prefix);
 	return true;
 }
 
@@ -242,10 +242,9 @@ void eigrp_query_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		 * aggregate directly from its currently reachable components.
 		 */
 		{
-			eigrp_prefix_descriptor_t *sp =
-				eigrp_topology_prefix_create();
+			eigrp_prefix_descriptor_t *sp = eigrp_topo_pfx_create();
 			eigrp_route_descriptor_t *sr =
-				eigrp_topology_route_create(ei);
+				eigrp_topo_route_create(ei);
 			if (sp && sr
 			    && eigrp_summary_query_route_build(
 				    eigrp, ei, &route->dest, sp, sr)) {
@@ -253,15 +252,15 @@ void eigrp_query_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 					eigrp, nbr, sp, sr,
 					EIGRP_PACKETIZER_WORK_F_OWN_PREFIX
 						| EIGRP_PACKETIZER_WORK_F_OWN_ROUTE);
-				eigrp_topology_route_free(route);
+				eigrp_topo_route_free(route);
 				continue;
 			}
-			eigrp_topology_prefix_free(sp);
-			eigrp_topology_route_free(sr);
+			eigrp_topo_pfx_free(sp);
+			eigrp_topo_route_free(sr);
 		}
 
-		prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						     &route->dest);
+		prefix = eigrp_topo_table_lookup(eigrp->topology_table,
+						 &route->dest);
 		(void)eigrp_eventlog_msg_add(
 			eigrp, EIGRP_EVENTLOG_OPCODE_QUERY_RX, &route->dest,
 			route->distance,
@@ -291,12 +290,12 @@ void eigrp_query_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			eigrp_query_unknown_reply_send(eigrp, nbr, route);
 			if (!eigrp_query_unknown_route_record(eigrp, nbr, route,
 							      prefix))
-				eigrp_topology_route_free(route);
+				eigrp_topo_route_free(route);
 			continue;
 		}
 		eigrp_route_descriptor_t *received_route = route;
 		eigrp_route_descriptor_t *topology_route =
-			eigrp_prefix_descriptor_lookup(prefix, nbr);
+			eigrp_topo_route_lookup(prefix, nbr);
 		bool free_received_route = false;
 
 		if (topology_route) {
@@ -331,7 +330,7 @@ void eigrp_query_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		eigrp_fsm_event(&msg);
 
 		if (free_received_route || msg.transient_route)
-			eigrp_topology_route_free(received_route);
+			eigrp_topo_route_free(received_route);
 	}
 
 	eigrp_hello_send_ack(nbr);

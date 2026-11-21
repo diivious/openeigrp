@@ -158,12 +158,12 @@ eigrp_result_t eigrp_metric_variance_update(eigrp_operation_t operation, eigrp_i
 eigrp_result_t eigrp_traffic_share_balanced_update(eigrp_operation_t operation, eigrp_instance_context_t *context);
 eigrp_result_t eigrp_metric_maximum_hops_update(eigrp_operation_t operation, eigrp_instance_context_t *context, uint8_t maximum_hops);
 eigrp_result_t eigrp_metric_version_update(eigrp_operation_t operation, eigrp_instance_context_t *context);
-eigrp_result_t eigrp_topology_create(eigrp_instance_context_t *context);
-eigrp_result_t eigrp_topology_delete(eigrp_instance_context_t *context);
-eigrp_result_t eigrp_topology_default_information_update(eigrp_operation_t operation, eigrp_instance_context_t *context, eigrp_default_information_direction_t direction, const char *access_list);
-eigrp_result_t eigrp_topology_max_prefix_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_prefix_limit_t *limit);
-eigrp_result_t eigrp_topology_maximum_paths_update(eigrp_operation_t operation, eigrp_instance_context_t *context, uint8_t maximum_paths);
-eigrp_result_t eigrp_topology_clear(eigrp_instance_context_t *context, const eigrp_topology_clear_request_t *request, size_t *affected_count);
+eigrp_result_t eigrp_topo_config_create(eigrp_instance_context_t *context);
+eigrp_result_t eigrp_topo_config_delete(eigrp_instance_context_t *context);
+eigrp_result_t eigrp_topo_default_info_update(eigrp_operation_t operation, eigrp_instance_context_t *context, eigrp_default_information_direction_t direction, const char *access_list);
+eigrp_result_t eigrp_topo_max_pfx_update(eigrp_operation_t operation, eigrp_instance_context_t *context, const eigrp_prefix_limit_t *limit);
+eigrp_result_t eigrp_topo_max_paths_update(eigrp_operation_t operation, eigrp_instance_context_t *context, uint8_t maximum_paths);
+eigrp_result_t eigrp_topo_clear(eigrp_instance_context_t *context, const eigrp_topology_clear_request_t *request, size_t *affected_count);
 eigrp_result_t eigrp_offset_add(eigrp_instance_context_t *context, const char *access_list, eigrp_offset_direction_t direction, uint32_t offset, const char *interface_name);
 eigrp_result_t eigrp_offset_remove(eigrp_instance_context_t *context, const char *access_list, eigrp_offset_direction_t direction, uint32_t offset, const char *interface_name);
 eigrp_result_t eigrp_distribute_add(eigrp_instance_context_t *context, eigrp_distribute_list_type_t type, const char *name, eigrp_offset_direction_t direction, const char *interface_name);
@@ -186,8 +186,8 @@ const char *eigrp_debug_packet_category_cli_name(eigrp_debug_packet_category_t c
 ```c
 eigrp_result_t eigrp_intf_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime, const char *interface_name, eigrp_intf_state_iterate_cb callback, void *arg);
 eigrp_result_t eigrp_nbr_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime, const char *interface_name, bool static_only, eigrp_nbr_state_iterate_cb callback, void *arg);
-eigrp_result_t eigrp_topology_state_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime, const eigrp_prefix_t *destination, bool all_links, eigrp_topology_prefix_state_cb prefix_callback, eigrp_topology_route_state_cb route_callback, void *arg);
-eigrp_result_t eigrp_topology_instance_iterate(eigrp_afi_t afi, eigrp_vrf_id_t vrf_id, uint16_t asn, eigrp_topology_instance_iterate_cb callback, void *arg);
+eigrp_result_t eigrp_topo_pfx_routes_iterate(eigrp_af_config_t *config, eigrp_instance_t *runtime, const eigrp_prefix_t *destination, bool all_links, eigrp_topology_prefix_state_cb prefix_callback, eigrp_topology_route_state_cb route_callback, void *arg);
+eigrp_result_t eigrp_topo_instance_iterate(eigrp_afi_t afi, eigrp_vrf_id_t vrf_id, uint16_t asn, eigrp_topology_instance_iterate_cb callback, void *arg);
 eigrp_result_t eigrp_timer_state_iterate(const eigrp_instance_context_t *context, eigrp_timer_state_cb callback, void *arg);
 eigrp_result_t eigrp_eventlog_state_read(const eigrp_instance_context_t *context, eigrp_eventlog_state_t *state);
 eigrp_result_t eigrp_eventlog_msg_iterate(const eigrp_instance_context_t *context, eigrp_eventlog_msg_cb callback, void *arg);

@@ -33,6 +33,7 @@ eigrpd_eigrpd_SOURCES = \
 	eigrpd/eigrp_memory.c \
 	eigrpd/eigrp_metric.c \
 	eigrpd/eigrp_neighbor.c \
+	eigrpd/eigrp_nexthop.c \
 	eigrpd/eigrp_network.c \
 	eigrpd/eigrp_northbound.c \
 	eigrpd/eigrp_frr_ipv4.c \

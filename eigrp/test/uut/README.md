@@ -60,6 +60,9 @@ Scenario operations in v1 are `start`, `stop`, `link-up`, `link-down`, `links-up
 `links-down`, `wait`, `packet-mark`, `validate-neighbor`, `validate-route`,
 `validate-packet`, `validate-convergence`, `source-route-add`,
 `source-route-remove`, `redistribute-add`, and `redistribute-remove`.
+`source-route-add` accepts an optional `gateway` with the same address family
+as `prefix`; it is delivered through the real static-source RIB and
+redistribution path for explicit forwarding next-hop tests.
 `links-up` / `links-down` issue a
 batched physical-event transition to multiple UUT interfaces, which is useful for
 full-mesh and shared-failure qualification. Packet marks let later phases require packets emitted after a

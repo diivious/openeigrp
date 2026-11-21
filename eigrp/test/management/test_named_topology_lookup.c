@@ -54,10 +54,10 @@ static eigrp_prefix_t prefix_make(eigrp_afi_t afi, const char *address,
 static eigrp_prefix_descriptor_t *prefix_add(eigrp_instance_t *runtime,
 					     eigrp_prefix_t destination)
 {
-	eigrp_prefix_descriptor_t *desc = eigrp_topology_prefix_create();
+	eigrp_prefix_descriptor_t *desc = eigrp_topo_pfx_create();
 	assert(desc);
 	desc->destination = destination;
-	eigrp_prefix_descriptor_add(runtime->topology_table, desc);
+	eigrp_topo_pfx_add(runtime->topology_table, desc);
 	return desc;
 }
 
@@ -79,30 +79,30 @@ static void check(eigrp_afi_t afi, const char *cover, uint8_t cover_len,
 
 	/* A covering route is NOT a valid answer to a selected-prefix query. */
 	request = prefix_make(afi, inside, afi == EIGRP_AFI_IPV4 ? 32 : 128);
-	assert(eigrp_topology_state_iterate(NULL, &runtime, &request, true,
-					    prefix_observe, route_observe,
-					    &seen)
+	assert(eigrp_topo_pfx_routes_iterate(NULL, &runtime, &request, true,
+					     prefix_observe, route_observe,
+					     &seen)
 	       == EIGRP_RESULT_NOT_FOUND);
 	assert(seen.prefixes == 0 && seen.routes == 0);
 
 	/* Prefix addresses with host bits are normalized for exact matching. */
 	request = prefix_make(afi, inside, network_len);
-	assert(eigrp_topology_state_iterate(NULL, &runtime, &request, true,
-					    prefix_observe, route_observe,
-					    &seen)
+	assert(eigrp_topo_pfx_routes_iterate(NULL, &runtime, &request, true,
+					     prefix_observe, route_observe,
+					     &seen)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(seen.prefixes == 1 && seen.routes == 0);
 
 	/* An unrelated address is never displayed as the covering route. */
 	request = prefix_make(afi, outside, afi == EIGRP_AFI_IPV4 ? 32 : 128);
-	assert(eigrp_topology_state_iterate(NULL, &runtime, &request, true,
-					    prefix_observe, route_observe,
-					    &seen)
+	assert(eigrp_topo_pfx_routes_iterate(NULL, &runtime, &request, true,
+					     prefix_observe, route_observe,
+					     &seen)
 	       == EIGRP_RESULT_NOT_FOUND);
 
 	/* A retained inaccessible path exists in detail/all-links but not in
 	 * the ordinary successor/feasible-successor listing. */
-	withdrawn = eigrp_topology_route_create(NULL);
+	withdrawn = eigrp_topo_route_create(NULL);
 	assert(withdrawn);
 	withdrawn->reported_distance = EIGRP_MAX_METRIC;
 	withdrawn->distance = EIGRP_MAX_METRIC;
@@ -110,15 +110,15 @@ static void check(eigrp_afi_t afi, const char *cover, uint8_t cover_len,
 	assert(eigrp_list_add(narrow->internal_routes, withdrawn));
 	request = prefix_make(afi, network, network_len);
 	seen = (struct observed){0};
-	assert(eigrp_topology_state_iterate(NULL, &runtime, &request, false,
-					    prefix_observe, route_observe,
-					    &seen)
+	assert(eigrp_topo_pfx_routes_iterate(NULL, &runtime, &request, false,
+					     prefix_observe, route_observe,
+					     &seen)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(seen.prefixes == 1 && seen.routes == 0);
 	seen = (struct observed){0};
-	assert(eigrp_topology_state_iterate(NULL, &runtime, &request, true,
-					    prefix_observe, route_observe,
-					    &seen)
+	assert(eigrp_topo_pfx_routes_iterate(NULL, &runtime, &request, true,
+					     prefix_observe, route_observe,
+					     &seen)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(seen.prefixes == 1 && seen.routes == 1 && seen.inaccessible);
 

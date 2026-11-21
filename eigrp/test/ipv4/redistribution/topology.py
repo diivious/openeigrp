@@ -189,16 +189,16 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
             {
                 eigrp_route_descriptor_t *head;
 
-                msg->change = eigrp_topology_update_distance(msg);
+                msg->change = eigrp_topo_route_distance_update(msg);
                 if (msg->prefix->state != EIGRP_FSM_STATE_PASSIVE)
                     return 1;
 
-                head = eigrp_topology_route_read(msg->prefix);
+                head = eigrp_topo_route_read(msg->prefix);
                 msg->prefix->fdistance = head->distance;
                 msg->prefix->distance = head->distance;
                 msg->prefix->rdistance = head->distance;
                 msg->prefix->reported_metric = head->total_metric;
-                eigrp_topology_update_node_flags(msg->eigrp, msg->prefix);
+                eigrp_topo_pfx_flags_update(msg->eigrp, msg->prefix);
                 return 1;
             }
 
@@ -206,7 +206,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 eigrp_instance_t *runtime, const eigrp_prefix_t *prefix)
             {
                 eigrp_prefix_descriptor_t *pd =
-                    eigrp_topology_table_lookup(runtime->topology_table, prefix);
+                    eigrp_topo_table_lookup(runtime->topology_table, prefix);
                 assert(pd != NULL);
                 assert(pd->external_routes->count == 1);
                 assert(pd->internal_routes->count == 0);
@@ -267,7 +267,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 runtime.k_values[2] = 1;
                 runtime.af_vectors.afi = EIGRP_AFI_IPV4;
                 runtime.af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
-                runtime.topology_table = eigrp_topology_table_create();
+                runtime.topology_table = eigrp_topo_table_create();
                 runtime.topology_changes = eigrp_list_create();
                 runtime.neighbor_self = &self;
                 assert(inet_pton(AF_INET, "192.0.2.45", &runtime.router_id) == 1);
@@ -293,7 +293,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 assert(eigrp_rib_redist_add(&runtime, &candidate)
                        == EIGRP_RESULT_SUCCESS);
                 assert(update_work == 1);
-                pd = eigrp_topology_table_lookup(runtime.topology_table,
+                pd = eigrp_topo_table_lookup(runtime.topology_table,
                                                  &candidate.prefix);
                 assert(pd != NULL);
                 assert(pd->nt == EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL);
@@ -332,7 +332,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 assert(eigrp_rib_redist_add(&runtime, &candidate)
                        == EIGRP_RESULT_SUCCESS);
                 assert(update_work == 3);
-                pd = eigrp_topology_table_lookup(runtime.topology_table,
+                pd = eigrp_topo_table_lookup(runtime.topology_table,
                                                  &candidate.prefix);
                 assert(pd->external_routes->count == 1);
                 assert(pd->internal_routes->count == 0);
@@ -388,7 +388,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 pd->state = EIGRP_FSM_STATE_PASSIVE;
                 assert(eigrp_rib_redist_del(&runtime, &candidate)
                        == EIGRP_RESULT_SUCCESS);
-                pd = eigrp_topology_table_lookup(runtime.topology_table,
+                pd = eigrp_topo_table_lookup(runtime.topology_table,
                                                  &candidate.prefix);
                 assert(pd != NULL);
                 assert(pd->req_action & EIGRP_FSM_NEED_UPDATE);
@@ -402,7 +402,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                  */
                 runtime.k_values[0] = 2;
                 runtime.metric_version = EIGRP_TLV_64B_VERSION;
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert(route->reported_distance == 0);
                 assert(route->distance == EIGRP_MAX_METRIC);
 
@@ -411,7 +411,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                  */
                 assert(eigrp_rib_redist_add(&runtime, &candidate)
                        == EIGRP_RESULT_SUCCESS);
-                pd = eigrp_topology_table_lookup(runtime.topology_table,
+                pd = eigrp_topo_table_lookup(runtime.topology_table,
                                                  &candidate.prefix);
                 route = only_route(&runtime, &candidate.prefix);
                 assert(route->metric.delay == 400 * EIGRP_CLASSIC_SCALE);
@@ -446,8 +446,8 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                     local_metric.reliability = link.params.reliability;
                     set_ipv4(&local_destination.address, 10, 88, 0, 0);
                     local_destination.prefix_length = 24;
-                    local_pd = eigrp_topology_prefix_create();
-                    local_route = eigrp_topology_route_create(&link);
+                    local_pd = eigrp_topo_pfx_create();
+                    local_route = eigrp_topo_route_create(&link);
                     assert(local_pd && local_route);
                     local_pd->destination = local_destination;
                     local_pd->nt = EIGRP_TOPOLOGY_TYPE_CONNECTED;
@@ -465,15 +465,15 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                     local_route->reported_distance = 0;
                     local_route->distance = local_pd->distance;
                     local_route->flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
-                    eigrp_prefix_descriptor_add(runtime.topology_table, local_pd);
-                    eigrp_route_descriptor_add(&runtime, local_pd, local_route);
+                    eigrp_topo_pfx_add(runtime.topology_table, local_pd);
+                    eigrp_topo_route_add(&runtime, local_pd, local_route);
                     old_local_distance = local_route->distance;
 
                     /* Simulate an interface delay update and a K-value
                      * recomputation in the same topology refresh. */
                     link.params.delay = 200;
                     runtime.k_values[2] = 2;
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     eigrp_metric_link_set(&local_metric,
                                          link.params.bandwidth,
                                          link.params.delay, false);
@@ -512,7 +512,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                      * delay growth and no change of the selected metrics. */
                     old_local_distance = local_route->distance;
                     old_redist_distance = route->distance;
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     assert(local_route->distance == old_local_distance);
                     assert(route->distance == old_redist_distance);
                     assert(local_route->total_metric.hop_count == 0);
@@ -521,7 +521,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
                 }
 
                 eigrp_redist_config_delete_all(&af);
-                eigrp_topology_table_delete(&runtime, runtime.topology_table);
+                eigrp_topo_table_delete(&runtime, runtime.topology_table);
                 eigrp_list_delete(&runtime.topology_changes);
                 return 0;
             }
@@ -547,6 +547,7 @@ bool eigrp_intf_delay_is_default(eigrp_intf_t *ei)
             str(source),
             str(ROOT / "eigrp" / "code" / "eigrp_redistribute.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_topology.c"),
+        str(ROOT / "eigrp" / "code" / "eigrp_nexthop.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_timer.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_metric.c"),
             str(ROOT / "eigrp" / "code" / "eigrp_list.c"),

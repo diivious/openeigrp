@@ -103,7 +103,7 @@ void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *eigrp,
 #ifdef EIGRP_TEST_PROCESS_VOLUME
 	/* Model packetizer completion and reclamation on this single-threaded
 	 * fixture only, after the prefix has been detached from topology. */
-	eigrp_topology_prefix_free(prefix);
+	eigrp_topo_pfx_free(prefix);
 #else
 	assert(prefix && deferred_prefix == NULL);
 	deferred_prefix = prefix;
@@ -271,7 +271,7 @@ static eigrp_route_descriptor_t *only_route(eigrp_instance_t *runtime,
 					    const eigrp_prefix_t *prefix)
 {
 	eigrp_prefix_descriptor_t *pd =
-		eigrp_topology_table_lookup(runtime->topology_table, prefix);
+		eigrp_topo_table_lookup(runtime->topology_table, prefix);
 	assert(pd != NULL);
 	assert(pd->external_routes->count == 1);
 	assert(pd->internal_routes->count == 0);
@@ -353,7 +353,7 @@ static void fixture_init_afi(struct fixture *f, eigrp_afi_t afi)
 	f->runtime.af_vectors.afi = afi;
 	f->runtime.af_vectors.classic_external_tlv_type =
 		afi == EIGRP_AFI_IPV4 ? EIGRP_TLV_IPv4_EXT : EIGRP_TLV_IPv6_EXT;
-	f->runtime.topology_table = eigrp_topology_table_create();
+	f->runtime.topology_table = eigrp_topo_table_create();
 	f->runtime.topology_changes = eigrp_list_create();
 	f->runtime.neighbor_self = &f->self;
 	assert(f->runtime.topology_table && f->runtime.topology_changes);
@@ -395,7 +395,7 @@ static void fixture_init(struct fixture *f)
 
 static eigrp_prefix_descriptor_t *fixture_prefix(struct fixture *f)
 {
-	eigrp_prefix_descriptor_t *prefix = eigrp_topology_table_lookup(
+	eigrp_prefix_descriptor_t *prefix = eigrp_topo_table_lookup(
 		f->runtime.topology_table, &f->candidate.prefix);
 	assert(prefix);
 	return prefix;
@@ -414,10 +414,10 @@ static void fixture_drain_initial_update(struct fixture *f)
 static void fixture_delete(struct fixture *f)
 {
 	eigrp_redist_config_delete_all(&f->af);
-	eigrp_topology_table_delete(&f->runtime, f->runtime.topology_table);
+	eigrp_topo_table_delete(&f->runtime, f->runtime.topology_table);
 	eigrp_list_delete(&f->runtime.topology_changes);
 	if (deferred_prefix) {
-		eigrp_topology_prefix_free(deferred_prefix);
+		eigrp_topo_pfx_free(deferred_prefix);
 		deferred_prefix = NULL;
 	}
 }
@@ -498,7 +498,7 @@ static void test_query_waits_for_peer_reply(void)
 	eigrp_fsm_query_sent(&f.runtime, prefix);
 	assert(prefix->state == EIGRP_FSM_STATE_ACTIVE_1);
 
-	peer_route = eigrp_topology_route_create(&intf);
+	peer_route = eigrp_topo_route_create(&intf);
 	assert(peer_route);
 	peer_route->type = EIGRP_TLV_IPv4_EXT;
 	peer_route->adv_router = &peer;
@@ -537,11 +537,10 @@ static void test_query_after_route_descriptor_cleanup(void)
 	/* Path cleanup/neighbor churn can leave no route_descriptor when the
 	 * pending QUERY is processed. This reproduces the missing-route path
 	 * in eigrp_fsm_query_sent(), not a fake FSM implementation. */
-	eigrp_update_topology_table_prefix(&f.runtime, f.runtime.topology_table,
-					   prefix);
+	eigrp_topo_pfx_update(&f.runtime, f.runtime.topology_table, prefix);
 	assert(prefix->external_routes->count == 0);
 	assert(prefix->internal_routes->count == 0);
-	assert(eigrp_topology_route_read(prefix) == NULL);
+	assert(eigrp_topo_route_read(prefix) == NULL);
 
 	/* Expected: no eligible QUERY recipients is the last-reply condition,
 	 * even when the last route_descriptor was removed. This must not
@@ -571,20 +570,18 @@ static void test_empty_destination_retirement(void)
 	assert(old->state == EIGRP_FSM_STATE_PASSIVE);
 	/* DUAL must retain the descriptor until the withdrawal is encoded. */
 	assert(old->req_action & EIGRP_FSM_NEED_UPDATE);
-	eigrp_update_topology_table_prefix(&f.runtime, f.runtime.topology_table,
-					   old);
-	assert(eigrp_topology_table_lookup(f.runtime.topology_table,
-					   &f.candidate.prefix)
+	eigrp_topo_pfx_update(&f.runtime, f.runtime.topology_table, old);
+	assert(eigrp_topo_table_lookup(f.runtime.topology_table,
+				       &f.candidate.prefix)
 	       == old);
 	assert(deferred_prefix == NULL);
 
 	/* Model packetizer successful handoff of the withdrawal. */
 	old->req_action = 0;
 	eigrp_list_delete_data(f.runtime.topology_changes, old);
-	eigrp_update_topology_table_prefix(&f.runtime, f.runtime.topology_table,
-					   old);
-	assert(eigrp_topology_table_lookup(f.runtime.topology_table,
-					   &f.candidate.prefix)
+	eigrp_topo_pfx_update(&f.runtime, f.runtime.topology_table, old);
+	assert(eigrp_topo_table_lookup(f.runtime.topology_table,
+				       &f.candidate.prefix)
 	       == NULL);
 	assert(f.runtime.topology_table->head == NULL);
 	assert(f.runtime.topology_table->tail == NULL);
@@ -832,8 +829,8 @@ static void test_redist_prefix_accounting(void)
 	/* Connected and redistributed routes share neighbor_self but are
 	 * distinct resources. A connected-only destination must not bypass the
 	 * limit. */
-	connected = eigrp_topology_prefix_create();
-	connected_route = eigrp_topology_route_create(NULL);
+	connected = eigrp_topo_pfx_create();
+	connected_route = eigrp_topo_route_create(NULL);
 	assert(connected && connected_route);
 	connected->destination = second.prefix;
 	connected_route->adv_router = &f.self;
@@ -841,9 +838,9 @@ static void test_redist_prefix_accounting(void)
 	connected_intf.eigrp = &f.runtime;
 	connected_intf.ifindex = 3;
 	connected_route->ei = &connected_intf;
-	eigrp_prefix_descriptor_add(f.runtime.topology_table, connected);
-	eigrp_route_descriptor_add(&f.runtime, connected, connected_route);
-	assert(!eigrp_topology_redist_present(&f.runtime, connected));
+	eigrp_topo_pfx_add(f.runtime.topology_table, connected);
+	eigrp_topo_route_add(&f.runtime, connected, connected_route);
+	assert(!eigrp_topo_redist_present(&f.runtime, connected));
 	assert(eigrp_rib_redist_add(&f.runtime, &second)
 	       == EIGRP_RESULT_CONFLICT);
 	assert(f.runtime.redist_prefix_count == 1);
@@ -859,8 +856,7 @@ static void test_redist_prefix_accounting(void)
 
 	first->req_action = 0;
 	eigrp_list_delete_data(f.runtime.topology_changes, first);
-	eigrp_update_topology_table_prefix(&f.runtime, f.runtime.topology_table,
-					   first);
+	eigrp_topo_pfx_update(&f.runtime, f.runtime.topology_table, first);
 	assert(f.runtime.redist_prefix_count == 0);
 	/* A retired descriptor frees accounting, not an active suspension. */
 	assert(f.runtime.redist_limit_state != 0);
@@ -872,7 +868,7 @@ static void test_redist_prefix_accounting(void)
 	assert(eigrp_rib_redist_add(&f.runtime, &second)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(f.runtime.redist_prefix_count == 1);
-	assert(eigrp_topology_redist_present(&f.runtime, connected));
+	assert(eigrp_topo_redist_present(&f.runtime, connected));
 
 	limit.warning_only = true;
 	assert(eigrp_redist_max_prefix_update(EIGRP_SET, &context, &limit)
@@ -913,8 +909,8 @@ static void test_redist_prefix_volume(void)
 		assert(eigrp_rib_redist_add(&f.runtime, &candidate)
 		       == EIGRP_RESULT_SUCCESS);
 		assert(f.runtime.redist_prefix_count == i + 1);
-		prefix = eigrp_topology_table_lookup(f.runtime.topology_table,
-						     &candidate.prefix);
+		prefix = eigrp_topo_table_lookup(f.runtime.topology_table,
+						 &candidate.prefix);
 		assert(prefix);
 		prefix->req_action = 0;
 		eigrp_list_delete_data(f.runtime.topology_changes, prefix);
@@ -1065,11 +1061,11 @@ static void test_process_policy_padding(void)
 	a.restart_minutes = b.restart_minutes = 5;
 	a.restart_count = b.restart_count = 3;
 	assert(memcmp(&a, &b, sizeof(a)) != 0);
-	assert(eigrp_topology_max_prefix_update(EIGRP_SET, &context, &a)
+	assert(eigrp_topo_max_pfx_update(EIGRP_SET, &context, &a)
 	       == EIGRP_RESULT_SUCCESS);
 	f.runtime.eigrp_pfxlimits_af_restart_cnt = 2;
 	f.runtime.eigrp_pfxlimits_af_penalty_q16 = 65536;
-	assert(eigrp_topology_max_prefix_update(EIGRP_SET, &context, &b)
+	assert(eigrp_topo_max_pfx_update(EIGRP_SET, &context, &b)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(f.runtime.eigrp_pfxlimits_af_restart_cnt == 2);
 	assert(f.runtime.eigrp_pfxlimits_af_penalty_q16 == 65536);
@@ -1101,11 +1097,11 @@ static void test_process_policy_padding(void)
 		}
 		f.runtime.eigrp_pfxlimits_af_restart_cnt = 2;
 		f.runtime.eigrp_pfxlimits_af_penalty_q16 = 65536;
-		assert(eigrp_topology_max_prefix_update(EIGRP_SET, &context, &b)
+		assert(eigrp_topo_max_pfx_update(EIGRP_SET, &context, &b)
 		       == EIGRP_RESULT_SUCCESS);
 		assert(f.runtime.eigrp_pfxlimits_af_restart_cnt == 0);
 		assert(f.runtime.eigrp_pfxlimits_af_penalty_q16 == 0);
-		assert(eigrp_topology_max_prefix_update(EIGRP_SET, &context, &a)
+		assert(eigrp_topo_max_pfx_update(EIGRP_SET, &context, &a)
 		       == EIGRP_RESULT_SUCCESS);
 	}
 	fixture_delete(&f);
@@ -1132,7 +1128,7 @@ static void test_process_batch_dual(void)
 	a.eigrp_pfxlimits_af_suspended = b.eigrp_pfxlimits_af_suspended = true;
 
 	owned = fixture_prefix(&f);
-	peer_path = eigrp_topology_route_create(&intf);
+	peer_path = eigrp_topo_route_create(&intf);
 	assert(peer_path);
 	peer_path->adv_router = &a;
 	peer_path->type = EIGRP_TLV_IPv4_INT;
@@ -1146,30 +1142,30 @@ static void test_process_batch_dual(void)
 		eigrp_metric_calculate(&f.runtime, peer_path->metric);
 	peer_path->distance =
 		eigrp_metric_total_calculate(&f.runtime, peer_path);
-	eigrp_route_descriptor_add(&f.runtime, owned, peer_path);
-	assert(eigrp_prefix_descriptor_lookup(owned, &a) == peer_path);
+	eigrp_topo_route_add(&f.runtime, owned, peer_path);
+	assert(eigrp_topo_route_lookup(owned, &a) == peer_path);
 	/* Two neighbors share one DNDB. Both DRDBs must be retired by the
 	 * same pass without processing either neighbor twice. */
-	peer_path_b = eigrp_topology_route_create(&intf);
+	peer_path_b = eigrp_topo_route_create(&intf);
 	assert(peer_path_b);
 	*peer_path_b = *peer_path;
 	/* A new DRDB must acquire its own peer reference on insertion. */
 	peer_path_b->owner_ref = false;
 	peer_path_b->adv_router = &b;
-	eigrp_route_descriptor_add(&f.runtime, owned, peer_path_b);
-	assert(eigrp_prefix_descriptor_lookup(owned, &b) == peer_path_b);
+	eigrp_topo_route_add(&f.runtime, owned, peer_path_b);
+	assert(eigrp_topo_route_lookup(owned, &b) == peer_path_b);
 
-	waiting = eigrp_topology_prefix_create();
+	waiting = eigrp_topo_pfx_create();
 	assert(waiting);
 	set_ipv4(&waiting->destination.address, 192, 0, 2, 254);
 	waiting->destination.prefix_length = 32;
 	waiting->state = EIGRP_FSM_STATE_ACTIVE_1;
 	waiting->query_origin = &a;
-	eigrp_prefix_descriptor_add(f.runtime.topology_table, waiting);
+	eigrp_topo_pfx_add(f.runtime.topology_table, waiting);
 	eigrp_fsm_reply_status_add(waiting, &b);
 	assert(waiting->rij->count == 1);
 
-	eigrp_topology_suspended_neighbors_down(&f.runtime, snapshot, 2);
+	eigrp_topo_suspended_nbrs_down(&f.runtime, snapshot, 2);
 	assert(!a.topo_batch_seen && !b.topo_batch_seen);
 	assert(peer_path->distance == EIGRP_MAX_METRIC);
 	assert(peer_path_b->distance == EIGRP_MAX_METRIC);
@@ -1203,7 +1199,7 @@ static void test_process_prefix_volume(void)
 					     .runtime = &f.runtime,
 					     .topology_id =
 						     EIGRP_TOPOLOGY_ID_BASE};
-	assert(eigrp_topology_max_prefix_update(EIGRP_SET, &context, &limit)
+	assert(eigrp_topo_max_pfx_update(EIGRP_SET, &context, &limit)
 	       == EIGRP_RESULT_SUCCESS);
 	candidate = f.candidate;
 	candidate.prefix.prefix_length = 32;
@@ -1212,8 +1208,8 @@ static void test_process_prefix_volume(void)
 			 (i >> 8) & 255U, i & 255U);
 		assert(eigrp_rib_redist_add(&f.runtime, &candidate)
 		       == EIGRP_RESULT_SUCCESS);
-		prefix = eigrp_topology_table_lookup(f.runtime.topology_table,
-						     &candidate.prefix);
+		prefix = eigrp_topo_table_lookup(f.runtime.topology_table,
+						 &candidate.prefix);
 		assert(prefix && prefix->external_routes->count == 1);
 		prefix->req_action = 0;
 		eigrp_list_delete_data(f.runtime.topology_changes, prefix);
@@ -1228,8 +1224,8 @@ static void test_process_prefix_volume(void)
 	assert(f.runtime.eigrp_pfxlimits_af_restart_cnt == 1);
 	assert(f.runtime.topology_table->size == 100000);
 	assert(f.runtime.redist_prefix_count == 100000);
-	assert(!eigrp_topology_table_lookup(f.runtime.topology_table,
-					    &overflow.prefix));
+	assert(!eigrp_topo_table_lookup(f.runtime.topology_table,
+					&overflow.prefix));
 	/* Every previous external path must now be unreachable, but owned until
 	 * its withdrawal work is consumed. */
 	for (rn = eigrp_table_first(f.runtime.topology_table); rn;
@@ -1247,8 +1243,8 @@ static void test_process_prefix_volume(void)
 		assert(prefix && (prefix->req_action & EIGRP_FSM_NEED_UPDATE));
 		prefix->req_action = 0;
 		eigrp_list_delete_data(f.runtime.topology_changes, prefix);
-		eigrp_update_topology_table_prefix(
-			&f.runtime, f.runtime.topology_table, prefix);
+		eigrp_topo_pfx_update(&f.runtime, f.runtime.topology_table,
+				      prefix);
 	}
 	assert(f.runtime.topology_table->size == 0);
 	assert(f.runtime.redist_prefix_count == 0);

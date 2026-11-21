@@ -147,12 +147,12 @@ typedef eigrp_result_t (*eigrp_topology_route_state_cb)(
 typedef eigrp_result_t (*eigrp_topology_instance_iterate_cb)(
 	eigrp_instance_t *runtime, void *arg);
 
-eigrp_result_t eigrp_topology_state_iterate(
+eigrp_result_t eigrp_topo_pfx_routes_iterate(
 	eigrp_af_config_t *config, eigrp_instance_t *runtime,
 	const eigrp_prefix_t *destination, bool all_links,
 	eigrp_topology_prefix_state_cb prefix_callback,
 	eigrp_topology_route_state_cb route_callback, void *arg);
-eigrp_result_t eigrp_topology_instance_iterate(
+eigrp_result_t eigrp_topo_instance_iterate(
 	eigrp_afi_t afi, eigrp_vrf_id_t vrf_id, uint16_t asn,
 	eigrp_topology_instance_iterate_cb callback, void *arg);
 

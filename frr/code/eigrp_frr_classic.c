@@ -356,7 +356,7 @@ void eigrp_cli_classic_show_variance(struct vty *vty,
  * Mode: Classic router / Named topology
  * XPath: Classic: /frr-eigrpd:eigrpd/instance/maximum-paths; Named:
  * /frr-eigrpd:eigrpd/named/address-family/topology/maximum-paths Target:
- * eigrp_topology_maximum_paths_update(EIGRP_SET)
+ * eigrp_topo_max_paths_update(EIGRP_SET)
  */
 DEFPY_YANG(eigrp_maximum_paths, eigrp_maximum_paths_cmd,
 	   "maximum-paths (1-32)$maximum_paths",
@@ -376,7 +376,7 @@ DEFPY_YANG(eigrp_maximum_paths, eigrp_maximum_paths_cmd,
  * Mode: Classic router / Named topology
  * XPath: Classic: /frr-eigrpd:eigrpd/instance/maximum-paths; Named:
  * /frr-eigrpd:eigrpd/named/address-family/topology/maximum-paths Target:
- * eigrp_topology_maximum_paths_update(EIGRP_RESET, 0)
+ * eigrp_topo_max_paths_update(EIGRP_RESET, 0)
  */
 DEFPY_YANG(no_eigrp_maximum_paths, no_eigrp_maximum_paths_cmd,
 	   "no maximum-paths [(1-32)]",

@@ -1,0 +1,53 @@
+schema: eigrp-uut-test/v1
+name: ipv6 explicit next-hop southbound forwarding
+# A redistributed source route with an explicit on-link gateway is advertised
+# with no next-hop-self. Verify that both the RIB and topology show the
+# forwarding address, not the neighbor which relayed it.
+topology: ../rib-lifecycle/ipv6-rib.yaml
+steps:
+  - start: all
+  - validate-neighbor: {uut: r2, neighbor: 'fe80::1', interface: eth0, state: up, timeout: 15}
+  # A connected route with no explicit next hop still forwards via the peer.
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:1::/64', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:1::/64', table: rib, next_hop: 'fe80::1'}
+  - redistribute-add: {uut: r1, source: static}
+  - source-route-add: {uut: r1, prefix: '2001:db8:77::77/128', metric: 20, gateway: 'fe80::77'}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: rib, next_hop: 'fe80::1'}
+  - source-route-remove: {uut: r1, prefix: '2001:db8:77::77/128'}
+  - validate-convergence:
+      timeout: 20
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: rib, present: false}
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: path, present: false}
+  - interface-config: {uut: r1, interface: eth0, operation: create}
+  - interface-config: {uut: r1, interface: eth0, operation: no-next-hop-self}
+  - validate-interface: {uut: r1, interface: eth0, next_hop_self: false}
+  - source-route-add: {uut: r1, prefix: '2001:db8:77::77/128', metric: 25, gateway: 'fe80::77'}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.2
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: path, next_hop: 'fe80::77', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: rib, next_hop: 'fe80::77'}
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: rib, next_hop: 'fe80::1', present: false}
+  - source-route-remove: {uut: r1, prefix: '2001:db8:77::77/128'}
+  - validate-convergence:
+      timeout: 20
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: rib, present: false}
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: path, present: false}
+  - source-route-add: {uut: r1, prefix: '2001:db8:77::77/128', metric: 30, gateway: 'fe80::77'}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:77::77/128', table: rib, next_hop: 'fe80::77'}
+  - source-route-remove: {uut: r1, prefix: '2001:db8:77::77/128'}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

@@ -50,7 +50,7 @@ def test_route_map_candidate_is_evaluated_at_host_policy_boundary():
 
     assert "eigrp_sys_redistribute_route_map_evaluate" in receive
     assert "EIGRP_FILTER_DECISION_DENY" in receive
-    assert "eigrp_topology_redistributed_route_remove" in receive
+    assert "eigrp_topo_redist_route_remove" in receive
     assert "route_map_lookup_by_name" not in receive
     assert "struct route_map" not in receive
 

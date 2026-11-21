@@ -126,8 +126,7 @@ static void eigrp_pfxlimits_nbr_update(eigrp_instance_t *runtime, bool release)
 		}
 	}
 	if (peers) {
-		eigrp_topology_suspended_neighbors_down(runtime, peers,
-							capacity);
+		eigrp_topo_suspended_nbrs_down(runtime, peers, capacity);
 		free(peers);
 	}
 }

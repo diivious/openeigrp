@@ -24,7 +24,7 @@ def body(path, name):
 def test_default_information_target_owns_directional_state_and_reset():
     topology = ROOT / "eigrp/code/eigrp_topology.c"
     instance = (ROOT / "eigrp/code/eigrp_instance.h").read_text()
-    target = body(topology, "eigrp_topology_default_information_update")
+    target = body(topology, "eigrp_topo_default_info_update")
 
     assert "default_information_enabled[2]" in instance
     assert "default_information_access_list[2]" in instance
@@ -35,11 +35,11 @@ def test_default_information_target_owns_directional_state_and_reset():
 
 def test_default_information_policy_is_default_prefix_only_and_fail_closed():
     topology = ROOT / "eigrp/code/eigrp_topology.c"
-    decision = body(topology, "eigrp_topology_default_information_denies")
+    decision = body(topology, "eigrp_topo_default_info_denies")
 
-    assert "prefix->prefix_length == 0" in body(topology, "eigrp_topology_default_prefix")
-    assert "EIGRP_AFI_IPV4" in body(topology, "eigrp_topology_default_prefix")
-    assert "EIGRP_AFI_IPV6" in body(topology, "eigrp_topology_default_prefix")
+    assert "prefix->prefix_length == 0" in body(topology, "eigrp_topo_default_pfx_match")
+    assert "EIGRP_AFI_IPV4" in body(topology, "eigrp_topo_default_pfx_match")
+    assert "EIGRP_AFI_IPV6" in body(topology, "eigrp_topo_default_pfx_match")
     assert "eigrp_sys_filter_evaluate" in decision
     assert "EIGRP_DIST_ACCESS_LIST" in decision
     assert "result != EIGRP_RESULT_SUCCESS" in decision
@@ -49,9 +49,9 @@ def test_default_information_policy_is_default_prefix_only_and_fail_closed():
 def test_default_information_uses_common_filter_and_resync_paths():
     filter_c = (ROOT / "eigrp/code/eigrp_filter.c").read_text()
     topology = ROOT / "eigrp/code/eigrp_topology.c"
-    refresh = body(topology, "eigrp_topology_default_information_refresh")
+    refresh = body(topology, "eigrp_topo_default_info_refresh")
 
-    assert "eigrp_topology_default_information_denies" in filter_c
+    assert "eigrp_topo_default_info_denies" in filter_c
     assert "eigrp_update_send_process_GR(eigrp, EIGRP_GR_FILTER)" in refresh
     assert "request.soft = true" in refresh
     assert "eigrp_nbr_clear(eigrp, &request" in refresh

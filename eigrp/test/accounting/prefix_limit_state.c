@@ -180,7 +180,7 @@ static void run(int family)
 	runtime.thread_running = true;
 	runtime.tlv2_codec.encoder = eigrp_packet_encoder_safe;
 	runtime.eiflist = eigrp_list_create();
-	runtime.topology_table = eigrp_topology_table_create();
+	runtime.topology_table = eigrp_topo_table_create();
 	runtime.topology_changes = eigrp_list_create();
 	interface.eigrp = &runtime;
 	interface.name = "test0";
@@ -225,7 +225,7 @@ static void run(int family)
 	check_nbr_limit_state(&runtime, NULL, 0, 0, false);
 
 	eigrp_packetizer_delete(&runtime);
-	eigrp_topology_table_delete(&runtime, runtime.topology_table);
+	eigrp_topo_table_delete(&runtime, runtime.topology_table);
 	eigrp_list_delete(&runtime.topology_changes);
 	eigrp_list_delete(&interface.nbrs);
 	eigrp_list_delete(&runtime.eiflist);

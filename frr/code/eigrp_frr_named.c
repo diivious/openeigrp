@@ -2680,7 +2680,7 @@ DEFUN(no_eigrp_af_interface_summary_address_ipv6,
  * Syntax: `topology base`
  * Mode: Named address-family
  * XPath: /frr-eigrpd:eigrpd/named/address-family/topology
- * Target: eigrp_topology_create()
+ * Target: eigrp_topo_config_create()
  */
 DEFUN(eigrp_topology_base, eigrp_topology_base_cmd, "topology base",
       "Configure EIGRP topology\n"
@@ -2814,7 +2814,7 @@ static int eigrp_cli_default_information_update(struct vty *vty,
  * Mode: Named topology
  * XPath:
  * /frr-eigrpd:eigrpd/named/address-family/topology/default-information-{in|out}
- * Target: eigrp_topology_default_information_update(EIGRP_SET)
+ * Target: eigrp_topo_default_info_update(EIGRP_SET)
  */
 DEFUN(eigrp_default_information, eigrp_default_information_cmd,
       "default-information <in|out> [WORD]",
@@ -2836,7 +2836,7 @@ DEFUN(eigrp_default_information, eigrp_default_information_cmd,
  * Mode: Named topology
  * XPath:
  * /frr-eigrpd:eigrpd/named/address-family/topology/default-information-{in|out}
- * Target: eigrp_topology_default_information_update(EIGRP_SET)
+ * Target: eigrp_topo_default_info_update(EIGRP_SET)
  */
 DEFUN(no_eigrp_default_information, no_eigrp_default_information_cmd,
       "no default-information <in|out> [WORD]",
@@ -3053,7 +3053,7 @@ static int eigrp_cli_prefix_limit_update(struct vty *vty, int argc,
  * (1-65535)] [restart (1-65535)] [restart-count (1-65535)] [warning-only]`
  * Mode: Named topology
  * XPath: /frr-eigrpd:eigrpd/named/address-family/topology/maximum-prefix
- * Target: eigrp_topology_max_prefix_update(EIGRP_SET)
+ * Target: eigrp_topo_max_pfx_update(EIGRP_SET)
  */
 DEFUN(eigrp_maximum_prefix, eigrp_maximum_prefix_cmd,
       "maximum-prefix (1-4294967295) [(1-100)] [dampened] [reset-time (1-65535)] [restart (1-65535)] [restart-count (1-65535)] [warning-only]",
@@ -3080,7 +3080,7 @@ DEFUN(eigrp_maximum_prefix, eigrp_maximum_prefix_cmd,
  * Syntax: `no maximum-prefix`
  * Mode: Named topology
  * XPath: /frr-eigrpd:eigrpd/named/address-family/topology/maximum-prefix
- * Target: eigrp_topology_max_prefix_update(EIGRP_RESET, 0)
+ * Target: eigrp_topo_max_pfx_update(EIGRP_RESET, 0)
  */
 DEFUN(no_eigrp_maximum_prefix, no_eigrp_maximum_prefix_cmd, "no maximum-prefix",
       NO_STR "Limit prefixes accepted under an EIGRP address family\n")
@@ -3613,8 +3613,8 @@ int eigrp_cli_named_variance_update(struct vty *vty, const char *variance,
  * Syntax: `maximum-paths paths` / `no maximum-paths`
  * Mode: Named topology
  * XPath: /frr-eigrpd:eigrpd/named/address-family/topology/maximum-paths
- * Target: eigrp_topology_maximum_paths_update(EIGRP_SET) /
- * eigrp_topology_maximum_paths_update(EIGRP_RESET, 0) Note: the shared parser
+ * Target: eigrp_topo_max_paths_update(EIGRP_SET) /
+ * eigrp_topo_max_paths_update(EIGRP_RESET, 0) Note: the shared parser
  * is declared in eigrp_frr_classic.c and dispatches here when the VTY is in
  * named context.
  */
@@ -4539,7 +4539,7 @@ static eigrp_result_t eigrp_vty_topology_show(struct vty *vty,
 		vty_out(vty,
 			"Codes: P - Passive, A - Active, U - Update, Q - Query, R - Reply,\n"
 			"       r - reply Status, s - sia Status\n\n");
-	result = eigrp_topology_state_iterate(
+	result = eigrp_topo_pfx_routes_iterate(
 		af, runtime, options->destination,
 		options->all_links || options->destination != NULL,
 		eigrp_vty_topology_prefix_show, eigrp_vty_topology_route_show,
@@ -4730,7 +4730,7 @@ DEFPY(show_eigrp_neighbor, show_eigrp_neighbor_cmd,
 /*
  * Syntax: `show eigrp address-family <ipv4|ipv6>$afi [vrf NAME$vrf] topology
  * [(1-65535)$as] [all-links]$all` Mode: EXEC XPath: none; read-only Target:
- * eigrp_topology_state_iterate()
+ * eigrp_topo_pfx_routes_iterate()
  */
 DEFPY(show_eigrp_topology_all, show_eigrp_topology_all_cmd,
       "show eigrp address-family <ipv4|ipv6>$afi [vrf NAME$vrf] topology [(1-65535)$as] [all-links]$all",
@@ -4753,7 +4753,7 @@ DEFPY(show_eigrp_topology_all, show_eigrp_topology_all_cmd,
 /*
  * Syntax: `show eigrp address-family <ipv4|ipv6>$afi [vrf NAME$vrf] topology
  * [(1-65535)$as] WORD$target [all-links]$all` Mode: EXEC XPath: none; read-only
- * Target: eigrp_topology_state_iterate()
+ * Target: eigrp_topo_pfx_routes_iterate()
  */
 DEFPY(show_eigrp_topology, show_eigrp_topology_cmd,
       "show eigrp address-family <ipv4|ipv6>$afi [vrf NAME$vrf] topology [(1-65535)$as] WORD$target [all-links]$all",
@@ -5480,7 +5480,7 @@ static eigrp_result_t clear_eigrp_topology_context(struct vty *vty,
 
 	(void)vty;
 	(void)instance_name;
-	result = eigrp_topology_clear(&context, &request, &affected);
+	result = eigrp_topo_clear(&context, &request, &affected);
 	if (result == EIGRP_RESULT_NOT_FOUND && runtime && clear->destination)
 		return EIGRP_RESULT_SUCCESS;
 	if (result == EIGRP_RESULT_SUCCESS)
@@ -5513,7 +5513,7 @@ static int clear_eigrp_topology_execute(struct vty *vty, const char *afi_text,
 /*
  * Syntax: `clear eigrp [(1-65535)$as] [vrf <NAME$vrf|all$vrf_all>]
  * <ipv4|ipv6>$afi topology` Mode: Privileged EXEC XPath: none; operational
- * action Target: eigrp_topology_clear()
+ * action Target: eigrp_topo_clear()
  */
 DEFPY(clear_eigrp_topology, clear_eigrp_topology_cmd,
       "clear eigrp [(1-65535)$as] [vrf <NAME$vrf|all$vrf_all>] <ipv4|ipv6>$afi topology",
@@ -5534,7 +5534,7 @@ DEFPY(clear_eigrp_topology, clear_eigrp_topology_cmd,
  * <ipv4|ipv6>$afi topology <A.B.C.D/M$ipv4_prefix|X:X::X:X/M$ipv6_prefix>`
  * Mode: Privileged EXEC
  * XPath: none; operational action
- * Target: eigrp_topology_clear()
+ * Target: eigrp_topo_clear()
  */
 DEFPY(clear_eigrp_topology_prefix, clear_eigrp_topology_prefix_cmd,
       "clear eigrp [(1-65535)$as] [vrf <NAME$vrf|all$vrf_all>] <ipv4|ipv6>$afi topology <A.B.C.D/M$ipv4_prefix|X:X::X:X/M$ipv6_prefix>",
@@ -5570,7 +5570,7 @@ DEFPY(clear_eigrp_topology_prefix, clear_eigrp_topology_prefix_cmd,
  * Syntax: `clear eigrp [(1-65535)$as] [vrf <NAME$vrf|all$vrf_all>]
  * <ipv4|ipv6>$afi topology A.B.C.D$network A.B.C.D$mask` Mode: Privileged EXEC
  * XPath: none; operational action
- * Target: eigrp_topology_clear()
+ * Target: eigrp_topo_clear()
  */
 DEFPY(clear_eigrp_topology_mask, clear_eigrp_topology_mask_cmd,
       "clear eigrp [(1-65535)$as] [vrf <NAME$vrf|all$vrf_all>] <ipv4|ipv6>$afi topology A.B.C.D$network A.B.C.D$mask",

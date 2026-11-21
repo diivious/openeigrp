@@ -199,7 +199,7 @@ eigrp_result_t eigrp_nbr_static_create(eigrp_af_config_t *af,
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_topology_create(eigrp_instance_context_t *ctx)
+eigrp_result_t eigrp_topo_config_create(eigrp_instance_context_t *ctx)
 {
 	assert(ctx->topology_id == EIGRP_TOPOLOGY_ID_BASE);
 	record();
@@ -261,8 +261,9 @@ eigrp_result_t eigrp_metric_maximum_hops_update(eigrp_operation_t op,
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t eigrp_topology_maximum_paths_update(
-	eigrp_operation_t op, eigrp_instance_context_t *ctx, uint8_t paths)
+eigrp_result_t eigrp_topo_max_paths_update(eigrp_operation_t op,
+					   eigrp_instance_context_t *ctx,
+					   uint8_t paths)
 {
 	assert(op == EIGRP_SET && ctx->config != NULL && paths == 4);
 	record();

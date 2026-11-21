@@ -10,7 +10,7 @@ ROOT = next(p for p in Path(__file__).resolve().parents if (p / 'eigrp' / 'code'
 
 def test_query_retained_routes_not_promoted_by_metric_update(tmp_path):
     binary = tmp_path / 'query_metric_retention'
-    sources = ['eigrp_topology.c', 'eigrp_timer.c', 'eigrp_metric.c',
+    sources = ['eigrp_topology.c', "eigrp_nexthop.c", 'eigrp_timer.c', 'eigrp_metric.c',
                'eigrp_list.c', 'eigrp_table.c', 'eigrp_prefix.c']
     cmd = [os.environ.get('CC', 'cc'), '-std=gnu11', '-O0', '-Wall', '-Wextra',
            '-Werror', '-Wno-unused-function', '-Wno-unused-parameter',

@@ -41,7 +41,7 @@ eigrp_result_t eigrp_rib_routes_replay_instance(eigrp_instance_t *eigrp)
 	     rn = eigrp_table_next(rn)) {
 		prefix = rn->info;
 		if (eigrp_rib_prefix_installed(prefix))
-			eigrp_update_routing_table(eigrp, prefix);
+			eigrp_topo_rib_update(eigrp, prefix);
 	}
 	return EIGRP_RESULT_SUCCESS;
 }

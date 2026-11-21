@@ -17,10 +17,10 @@ OLD_LIFECYCLE_NAMES = {
     "eigrp_route_descriptor_free",
 }
 NEW_LIFECYCLE_NAMES = {
-    "eigrp_topology_prefix_create",
-    "eigrp_topology_prefix_free",
-    "eigrp_topology_route_create",
-    "eigrp_topology_route_free",
+    "eigrp_topo_pfx_create",
+    "eigrp_topo_pfx_free",
+    "eigrp_topo_route_create",
+    "eigrp_topo_route_free",
 }
 
 
@@ -63,16 +63,16 @@ def test_topology_module_owns_lifecycle_definitions():
     topology_header = topology_h.read_text()
 
     expected_definitions = {
-        "eigrp_prefix_descriptor_t *eigrp_topology_prefix_create(void)",
-        "void eigrp_topology_prefix_free(eigrp_prefix_descriptor_t *pe)",
-        "eigrp_route_descriptor_t *eigrp_topology_route_create(eigrp_intf_t *intf)",
-        "void eigrp_topology_route_free(eigrp_route_descriptor_t *route)",
+        "eigrp_prefix_descriptor_t *eigrp_topo_pfx_create(void)",
+        "void eigrp_topo_pfx_free(eigrp_prefix_descriptor_t *pe)",
+        "eigrp_route_descriptor_t *eigrp_topo_route_create(eigrp_intf_t *intf)",
+        "void eigrp_topo_route_free(eigrp_route_descriptor_t *route)",
     }
     expected_declarations = {
-        "eigrp_prefix_descriptor_t *eigrp_topology_prefix_create(void)",
-        "void eigrp_topology_prefix_free(eigrp_prefix_descriptor_t *)",
-        "eigrp_route_descriptor_t *eigrp_topology_route_create(eigrp_intf_t *)",
-        "void eigrp_topology_route_free(eigrp_route_descriptor_t *)",
+        "eigrp_prefix_descriptor_t *eigrp_topo_pfx_create(void)",
+        "void eigrp_topo_pfx_free(eigrp_prefix_descriptor_t *)",
+        "eigrp_route_descriptor_t *eigrp_topo_route_create(eigrp_intf_t *)",
+        "void eigrp_topo_route_free(eigrp_route_descriptor_t *)",
     }
 
     for definition in expected_definitions:

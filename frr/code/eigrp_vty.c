@@ -76,8 +76,8 @@ static void eigrp_vty_display_prefix_entry(struct vty *vty,
 	struct eigrp_route_descriptor *te;
 	eigrp_topology_route_iterator_t iterator;
 
-	for (te = eigrp_topology_route_iterator_first(pe, &iterator); te;
-	     te = eigrp_topology_route_iterator_next(&iterator)) {
+	for (te = eigrp_topo_route_iterator_first(pe, &iterator); te;
+	     te = eigrp_topo_route_iterator_next(&iterator)) {
 		if (all
 		    || (((te->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
 			 == EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)
@@ -202,8 +202,8 @@ eigrp_vty_topology_walk_vrf(struct eigrp_vty_topology_walk_context *ctx,
 			    eigrp_vrf_id_t vrf_id, uint16_t asn,
 			    eigrp_topology_instance_iterate_cb callback)
 {
-	return eigrp_topology_instance_iterate(EIGRP_AFI_IPV4, vrf_id, asn,
-					       callback, ctx);
+	return eigrp_topo_instance_iterate(EIGRP_AFI_IPV4, vrf_id, asn,
+					   callback, ctx);
 }
 
 DEFPY(show_ip_eigrp_topology_all, show_ip_eigrp_topology_all_cmd,

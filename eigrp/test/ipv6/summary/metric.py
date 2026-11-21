@@ -36,16 +36,16 @@ def test_ipv6_auto_summary_remains_explicitly_unsupported():
 
 
 def test_metric_weights_and_version_recompute_existing_topology():
-    assert "eigrp_topology_metric_update(context->runtime)" in METRIC
+    assert "eigrp_topo_metric_update(context->runtime)" in METRIC
     assert "EIGRP_WIDE_SCALE / EIGRP_CLASSIC_SCALE" in METRIC
     assert "eigrp->metric_version >= EIGRP_TLV_64B_VERSION" in METRIC
-    assert "eigrp_topology_route_queue_resort" in TOPOLOGY
+    assert "eigrp_topo_route_queue_sort" in TOPOLOGY
 
 
 def test_variance_and_maximum_paths_refresh_rib_selection():
-    assert "eigrp_topology_multipath_update(context->runtime)" in METRIC
-    assert "eigrp_topology_multipath_update(context->runtime)" in TOPOLOGY
-    assert "eigrp_update_routing_table(eigrp, prefix)" in TOPOLOGY
+    assert "eigrp_topo_multipath_update(context->runtime)" in METRIC
+    assert "eigrp_topo_multipath_update(context->runtime)" in TOPOLOGY
+    assert "eigrp_topo_rib_update(eigrp, prefix)" in TOPOLOGY
 
 
 def test_default_metric_is_live_redistribution_seed_not_capability_stub():

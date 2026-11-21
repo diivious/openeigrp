@@ -9,6 +9,7 @@
 #include "eigrp_log.h"
 #include "eigrp_structs.h"
 #include "eigrp_packetizer.h"
+#include "eigrp_nexthop.h"
 #include "eigrp_sys.h"
 #include "eigrp_rib.h"
 #include "eigrp_packet.h"
@@ -70,7 +71,7 @@ eigrp_packetizer_poison_route_create(eigrp_prefix_descriptor_t *prefix)
 	if (!prefix || !eigrp_prefix_valid(&prefix->destination))
 		return NULL;
 
-	route = eigrp_topology_route_create(NULL);
+	route = eigrp_topo_route_create(NULL);
 	if (!route)
 		return NULL;
 
@@ -111,7 +112,7 @@ eigrp_packetizer_route_select(eigrp_prefix_descriptor_t *prefix,
 		route = eigrp_packetizer_poison_route_create(prefix);
 		*owned = route != NULL;
 	} else if (prefix) {
-		route = eigrp_topology_route_read(prefix);
+		route = eigrp_topo_route_read(prefix);
 	}
 
 	if (!route) {
@@ -126,7 +127,7 @@ eigrp_packetizer_route_select(eigrp_prefix_descriptor_t *prefix,
 		 * distance, so never put the learned metric back on the wire
 		 * for normal UPDATE/QUERY/REPLY work.
 		 */
-		wire_route = eigrp_topology_route_create(route->ei);
+		wire_route = eigrp_topo_route_create(route->ei);
 		if (!wire_route)
 			return NULL;
 		*wire_route = *route;
@@ -222,8 +223,7 @@ eigrp_packetizer_builder_route_add(eigrp_packetizer_builder_t *builder,
 	wire_route = *route;
 	/* A zero next hop means use the advertising router.  This is the wire
 	 * representation of next-hop-self for both IPv4 and IPv6 route TLVs. */
-	if (builder->ei->next_hop_self)
-		memset(&wire_route.nexthop, 0, sizeof(wire_route.nexthop));
+	eigrp_nexthop_self_set(builder->ei, &wire_route);
 	prefix = route->prefix ? &route->prefix->destination : &route->dest;
 	eigrp_offset_metric_update(builder->eigrp, builder->ei,
 				   EIGRP_FILTER_OUT, prefix,
@@ -256,6 +256,7 @@ eigrp_packetizer_builder_route_add(eigrp_packetizer_builder_t *builder,
 		return 0;
 
 	wire_route = *route;
+	eigrp_nexthop_self_set(builder->ei, &wire_route);
 	eigrp_offset_metric_update(builder->eigrp, builder->ei,
 				   EIGRP_FILTER_OUT, prefix,
 				   &wire_route.metric);
@@ -439,7 +440,7 @@ static void eigrp_packetizer_intf_prefix_send(eigrp_instance_t *eigrp,
 	eigrp_packetizer_builder_flush(&builder);
 
 	if (owned)
-		eigrp_topology_route_free(route);
+		eigrp_topo_route_free(route);
 }
 
 static void eigrp_packetizer_neighbor_route_send(eigrp_instance_t *eigrp,
@@ -473,7 +474,7 @@ static void eigrp_packetizer_neighbor_route_send(eigrp_instance_t *eigrp,
 			eigrp_packetizer_poison_route_create(work->prefix);
 
 		if (owned)
-			eigrp_topology_route_free(route);
+			eigrp_topo_route_free(route);
 		route = poison;
 		owned = poison != NULL;
 		if (!route)
@@ -492,7 +493,7 @@ static void eigrp_packetizer_neighbor_route_send(eigrp_instance_t *eigrp,
 	eigrp_packetizer_builder_flush(&builder);
 
 	if (owned)
-		eigrp_topology_route_free(route);
+		eigrp_topo_route_free(route);
 }
 
 static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
@@ -597,7 +598,7 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 						capacity * sizeof(*grown));
 					if (!grown) {
 						if (owned)
-							eigrp_topology_route_free(
+							eigrp_topo_route_free(
 								route);
 						continue;
 					}
@@ -638,7 +639,7 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 			}
 
 			if (owned)
-				eigrp_topology_route_free(route);
+				eigrp_topo_route_free(route);
 		}
 		free(summary_seen);
 		eigrp_packetizer_builder_flush(&builder);
@@ -680,8 +681,8 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 	if (retire) {
 		for (EIGRP_LIST_ITERATE_RO(retire, rnode, prefix)) {
 			prefix->retirement_queued = false;
-			eigrp_update_topology_table_prefix(
-				eigrp, eigrp->topology_table, prefix);
+			eigrp_topo_pfx_update(eigrp, eigrp->topology_table,
+					      prefix);
 		}
 		eigrp_list_delete(&retire);
 	}
@@ -839,10 +840,10 @@ void eigrp_packetizer_work_free(eigrp_packetizer_work_t *work)
 		return;
 
 	if ((work->flags & EIGRP_PACKETIZER_WORK_F_OWN_ROUTE) && work->route)
-		eigrp_topology_route_free(work->route);
+		eigrp_topo_route_free(work->route);
 
 	if ((work->flags & EIGRP_PACKETIZER_WORK_F_OWN_PREFIX) && work->prefix)
-		eigrp_topology_prefix_free(work->prefix);
+		eigrp_topo_pfx_free(work->prefix);
 
 	free(work);
 }

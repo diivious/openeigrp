@@ -288,7 +288,7 @@ def test_named_operational_commands_use_owner_specific_targets():
     targets = {
         "eigrp_intf_state_iterate": ROOT / "eigrpd" / "code" / "eigrp_interface.c",
         "eigrp_nbr_state_iterate": ROOT / "eigrpd" / "code" / "eigrp_neighbor.c",
-        "eigrp_topology_state_iterate": ROOT / "eigrpd" / "code" / "eigrp_topology.c",
+        "eigrp_topo_pfx_routes_iterate": ROOT / "eigrpd" / "code" / "eigrp_topology.c",
         "eigrp_stat_accounting_iterate": ROOT / "eigrpd" / "code" / "eigrp_statistics.c",
         "eigrp_eventlog_msg_iterate": ROOT / "eigrpd" / "code" / "eigrp_eventlog.c",
         "eigrp_timer_state_iterate": ROOT / "eigrpd" / "code" / "eigrp_timer.c",
@@ -317,8 +317,8 @@ def test_named_topology_clear_uses_portable_topology_target():
     packetizer_c = read(PACKETIZER_C)
     query_c = read(QUERY_C)
 
-    assert "eigrp_result_t eigrp_topology_clear(" in topology_c
-    assert "eigrp_result_t eigrp_topology_clear(" in topology_h
+    assert "eigrp_result_t eigrp_topo_clear(" in topology_c
+    assert "eigrp_result_t eigrp_topo_clear(" in topology_h
     assert "eigrp_topology_clear_request_t" in topology_h
     assert "struct vty *" not in topology_h
 
@@ -326,8 +326,8 @@ def test_named_topology_clear_uses_portable_topology_target():
         named.index("static bool eigrp_vty_ipv4_mask_prefix_length("):
         named.index("static void clear_eigrp_neighbor_render(")
     ]
-    assert "eigrp_topology_clear(&context, &request, &affected)" in clear_region
-    assert "eigrp_prefix_descriptor_delete" not in clear_region
+    assert "eigrp_topo_clear(&context, &request, &affected)" in clear_region
+    assert "eigrp_topo_pfx_delete" not in clear_region
     assert "eigrp_query_send_route" not in clear_region
 
     assert '"clear eigrp [(1-65535)$as] [vrf <NAME$vrf|all$vrf_all>] <ipv4|ipv6>$afi topology"' in named
@@ -363,8 +363,8 @@ def test_named_topology_clear_clippy_adapters_exist():
 
 def test_named_topology_clear_uses_the_shared_ipv4_ipv6_runtime_target():
     topology = read(TOPOLOGY_C)
-    start = topology.index("eigrp_result_t eigrp_topology_clear(")
-    end = topology.index("static uint32_t eigrp_topology_successor_count", start)
+    start = topology.index("eigrp_result_t eigrp_topo_clear(")
+    end = topology.index("static uint32_t eigrp_topo_successor_count", start)
     clear = topology[start:end]
 
     assert "EIGRP_AFI_IPV4" in clear
@@ -420,14 +420,14 @@ def test_topology_show_uses_common_runtime_instance_walk():
     topology = read(TOPOLOGY_C)
     header = read(ROOT / "eigrpd" / "code" / "eigrp_topology.h")
 
-    assert "eigrp_topology_instance_iterate(" in header
+    assert "eigrp_topo_instance_iterate(" in header
     assert "EIGRP_LIST_ITERATE_RO(eigrp_process.virt_router, vr_node, virt_router)" in topology
     assert "EIGRP_LIST_ITERATE_RO(virt_router->af_instance, af_node, runtime)" in topology
     assert "runtime->af_vectors.afi != afi" in topology
     assert "runtime->vrf_id != vrf_id" in topology
     assert "if (asn && runtime->AS != asn)" in topology
-    assert "eigrp_topology_instance_iterate(" in named
-    assert "eigrp_topology_instance_iterate(" in classic
+    assert "eigrp_topo_instance_iterate(" in named
+    assert "eigrp_topo_instance_iterate(" in classic
 
 
 def test_named_show_clippy_forwards_address_family_filters():

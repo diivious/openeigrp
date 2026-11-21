@@ -12,8 +12,8 @@ def read(path):
 
 def test_redistribution_stops_at_topology_not_packet_or_tlv():
     source = read("eigrp/code/eigrp_redistribute.c")
-    assert "eigrp_topology_redistributed_route_update" in source
-    assert "eigrp_topology_redistributed_route_remove" in source
+    assert "eigrp_topo_redist_route_update" in source
+    assert "eigrp_topo_redist_route_remove" in source
     assert "eigrp_packetizer" not in source
     assert "eigrp_tlv1" not in source
     assert "eigrp_tlv2" not in source
@@ -22,8 +22,8 @@ def test_redistribution_stops_at_topology_not_packet_or_tlv():
 
 def test_topology_drains_dual_actions_through_normal_packetizer_entry_points():
     source = read("eigrp/code/eigrp_topology.c")
-    notify = source[source.index("eigrp_topology_changes_send(") :]
-    notify = notify[: notify.index("eigrp_topology_redistributed_route_update(")]
+    notify = source[source.index("eigrp_topo_changes_send(") :]
+    notify = notify[: notify.index("eigrp_topo_redist_route_update(")]
     assert "EIGRP_FSM_NEED_QUERY" in notify
     assert "EIGRP_FSM_NEED_UPDATE" in notify
     assert "eigrp_query_send_all(eigrp)" in notify
@@ -35,7 +35,7 @@ def test_withdrawal_keeps_real_external_route_until_packetizer_consumes_update()
     topology = read("eigrp/code/eigrp_topology.c")
     packetizer = read("eigrp/code/eigrp_packetizer.c")
     assert "if (prefix->req_action & EIGRP_FSM_NEED_UPDATE)\n\t\treturn;" in topology
-    assert "eigrp_update_topology_table_prefix(" in packetizer
+    assert "eigrp_topo_pfx_update(" in packetizer
     assert "action == EIGRP_FSM_NEED_UPDATE" in packetizer
 
 

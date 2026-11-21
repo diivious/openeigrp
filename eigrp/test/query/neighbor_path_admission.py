@@ -15,7 +15,7 @@ CODE = ROOT / 'eigrp' / 'code'
 def test_query_reply_neighbor_path_admission(tmp_path, packet):
     binary = tmp_path / 'neighbor_path_admission'
     sources = ['eigrp_query.c', 'eigrp_reply.c', 'eigrp_fsm.c',
-               'eigrp_topology.c', 'eigrp_neighbor.c', 'eigrp_metric.c',
+               'eigrp_topology.c', "eigrp_nexthop.c", 'eigrp_neighbor.c', 'eigrp_metric.c',
                'eigrp_list.c', 'eigrp_table.c', 'eigrp_prefix.c']
     cmd = [os.getenv('CC', 'cc'), '-std=gnu11', '-O0', '-Wall', '-Wextra',
            '-Werror', '-Wno-unused-function', '-Wno-unused-parameter',

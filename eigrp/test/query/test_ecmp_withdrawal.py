@@ -15,7 +15,7 @@ CODE = ROOT / "eigrp" / "code"
 
 def test_ecmp_withdrawal(tmp_path):
     sources = ['eigrp_query.c', 'eigrp_update.c', 'eigrp_reply.c',
-               'eigrp_fsm.c', 'eigrp_topology.c', 'eigrp_neighbor.c',
+               'eigrp_fsm.c', 'eigrp_topology.c', "eigrp_nexthop.c", 'eigrp_neighbor.c',
                'eigrp_metric.c', 'eigrp_list.c', 'eigrp_table.c',
                'eigrp_prefix.c']
     binary = tmp_path / 'ecmp_withdrawal'

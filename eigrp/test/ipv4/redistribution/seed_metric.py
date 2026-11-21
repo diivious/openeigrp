@@ -48,7 +48,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
             eigrp_result_t eigrp_rib_redistribute_remove(eigrp_instance_t *eigrp,
                 const eigrp_redist_source_t *source)
             { (void)eigrp; (void)source; return EIGRP_RESULT_SUCCESS; }
-            eigrp_result_t eigrp_topology_redistributed_source_remove(
+            eigrp_result_t eigrp_topo_redist_source_remove(
                 eigrp_instance_t *eigrp, const eigrp_redist_source_t *source)
             { (void)eigrp; (void)source; return EIGRP_RESULT_SUCCESS; }
 
@@ -79,7 +79,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
             }
 
             /* This fixture isolates metric selection, not topology ownership. */
-            bool eigrp_topology_redist_present(
+            bool eigrp_topo_redist_present(
                 const eigrp_instance_t *runtime,
                 const eigrp_prefix_descriptor_t *prefix)
             {
@@ -88,7 +88,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 return false;
             }
 
-            eigrp_result_t eigrp_topology_redistributed_route_update(
+            eigrp_result_t eigrp_topo_redist_route_update(
                 eigrp_instance_t *runtime,
                 const eigrp_rib_route_t *route,
                 const eigrp_metrics_t *metric)
@@ -99,7 +99,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 return EIGRP_RESULT_SUCCESS;
             }
 
-            eigrp_result_t eigrp_topology_redistributed_route_remove(
+            eigrp_result_t eigrp_topo_redist_route_remove(
                 eigrp_instance_t *runtime,
                 const eigrp_rib_route_t *route)
             {
@@ -108,7 +108,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 return EIGRP_RESULT_SUCCESS;
             }
 
-            eigrp_prefix_descriptor_t *eigrp_topology_table_lookup(
+            eigrp_prefix_descriptor_t *eigrp_topo_table_lookup(
                 eigrp_table_t *table, const eigrp_prefix_t *prefix)
             {
                 (void)table;
@@ -116,7 +116,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 return NULL;
             }
 
-            eigrp_route_descriptor_t *eigrp_prefix_descriptor_lookup(
+            eigrp_route_descriptor_t *eigrp_topo_route_lookup(
                 eigrp_prefix_descriptor_t *prefix, eigrp_nbr_t *neighbor)
             {
                 (void)prefix;
@@ -124,7 +124,7 @@ def test_redistribution_seed_metric_precedence_executes(tmp_path):
                 return NULL;
             }
 
-            bool eigrp_topology_prefix_admit(
+            bool eigrp_topo_pfx_admit(
                 eigrp_instance_t *runtime, const eigrp_prefix_t *prefix)
             {
                 (void)runtime;

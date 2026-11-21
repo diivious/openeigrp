@@ -2418,7 +2418,7 @@ static bool eigrpd_named_summary_prefix_get(const struct lyd_node *dnode,
  * This is the FRR northbound edge for the named-mode node above.
  * It reads YANG here only long enough to normalize the command into EIGRP-owned
  * values. It resolves the named address-family, topology, or interface context
- * before changing EIGRP state. This callback calls `eigrp_topology_create()`
+ * before changing EIGRP state. This callback calls `eigrp_topo_config_create()`
  * instead of carrying protocol behavior in the FRR layer. Retained
  * configuration and runtime side effects stay with the common target so named
  * mode does not grow a second protocol implementation. Structured EIGRP results
@@ -2437,7 +2437,7 @@ static int eigrpd_named_topology_create(struct nb_cb_create_args *args)
 	    || !eigrpd_named_instance_context_resolve(name, afi, vrf, asn,
 						      &context))
 		return NB_ERR_INCONSISTENCY;
-	return eigrpd_named_config_result(eigrp_topology_create(&context),
+	return eigrpd_named_config_result(eigrp_topo_config_create(&context),
 					  false);
 }
 
@@ -2447,7 +2447,7 @@ static int eigrpd_named_topology_create(struct nb_cb_create_args *args)
  * This is the FRR northbound edge for the named-mode node above.
  * It reads YANG here only long enough to normalize the command into EIGRP-owned
  * values. It resolves the named address-family, topology, or interface context
- * before changing EIGRP state. This callback calls `eigrp_topology_delete()`
+ * before changing EIGRP state. This callback calls `eigrp_topo_config_delete()`
  * instead of carrying protocol behavior in the FRR layer. Retained
  * configuration and runtime side effects stay with the common target so named
  * mode does not grow a second protocol implementation. Structured EIGRP results
@@ -2466,7 +2466,7 @@ static int eigrpd_named_topology_destroy(struct nb_cb_destroy_args *args)
 	    || !eigrpd_named_instance_context_resolve(name, afi, vrf, asn,
 						      &context))
 		return NB_ERR_INCONSISTENCY;
-	return eigrpd_named_config_result(eigrp_topology_delete(&context),
+	return eigrpd_named_config_result(eigrp_topo_config_delete(&context),
 					  true);
 }
 
@@ -2545,7 +2545,7 @@ static int eigrpd_named_default_information_apply(const struct lyd_node *dnode,
 						      &context))
 		return NB_ERR_INCONSISTENCY;
 	return eigrpd_named_config_result(
-		enabled ? eigrp_topology_default_information_update(
+		enabled ? eigrp_topo_default_info_update(
 				  EIGRP_SET, &context,
 				  inbound ? EIGRP_DEFAULT_INFORMATION_IN
 					  : EIGRP_DEFAULT_INFORMATION_OUT,
@@ -2553,7 +2553,7 @@ static int eigrpd_named_default_information_apply(const struct lyd_node *dnode,
 					  ? yang_dnode_get_string(dnode,
 								  "access-list")
 					  : NULL)
-			: eigrp_topology_default_information_update(
+			: eigrp_topo_default_info_update(
 				  EIGRP_RESET, &context,
 				  inbound ? EIGRP_DEFAULT_INFORMATION_IN
 					  : EIGRP_DEFAULT_INFORMATION_OUT,
@@ -2728,14 +2728,14 @@ static int eigrpd_named_default_information_access_list_destroy(
  * XPath:
  * /frr-eigrpd:eigrpd/named/address-family/topology/default-information-in
  * Target: eigrpd_named_default_information_apply() ->
- * eigrp_topology_default_information_update(EIGRP_SET) Description: This is the
+ * eigrp_topo_default_info_update(EIGRP_SET) Description: This is the
  * `apply_finish` northbound callback for the `default information in`
  * configuration node. FRR owns the YANG transaction here and resolves or
  * normalizes host values before common EIGRP state is touched. This callback
  * runs at APPLY_FINISH so multi-leaf configuration is presented to the target
  * as one settled command state. The runtime path terminates at
  * `eigrpd_named_default_information_apply() ->
- * eigrp_topology_default_information_update(EIGRP_SET)` rather than duplicating
+ * eigrp_topo_default_info_update(EIGRP_SET)` rather than duplicating
  * EIGRP behavior in the FRR northbound layer. This is named-mode configuration,
  * so host and YANG objects stop at this boundary and the protocol work stays in
  * EIGRP-owned code. Failures are returned through northbound status so
@@ -2752,7 +2752,7 @@ static void eigrpd_named_default_information_in_apply_finish(
  * XPath:
  * /frr-eigrpd:eigrpd/named/address-family/topology/default-information-out
  * Target: eigrpd_named_default_information_apply() ->
- * eigrp_topology_default_information_update(EIGRP_SET) Description: This is the
+ * eigrp_topo_default_info_update(EIGRP_SET) Description: This is the
  * `apply_finish` northbound callback for the `default information out`
  * configuration node.
  * FRR owns the YANG transaction here and resolves or normalizes host values
@@ -2760,7 +2760,7 @@ static void eigrpd_named_default_information_in_apply_finish(
  * multi-leaf configuration is presented to the target as one settled command
  * state. The runtime path terminates at
  * `eigrpd_named_default_information_apply() ->
- * eigrp_topology_default_information_update(EIGRP_SET)` rather than duplicating
+ * eigrp_topo_default_info_update(EIGRP_SET)` rather than duplicating
  * EIGRP behavior in the FRR northbound layer. This is named-mode configuration,
  * so host and YANG objects stop at this boundary and the protocol work stays in
  * EIGRP-owned code. Failures are returned through northbound status so
@@ -2971,8 +2971,7 @@ static int eigrpd_named_maximum_prefix_apply(const struct lyd_node *dnode)
 		return NB_ERR_INCONSISTENCY;
 	eigrpd_named_prefix_limit_get(dnode, &limit);
 	return eigrpd_named_config_result(
-		eigrp_topology_max_prefix_update(EIGRP_SET, &context, &limit),
-		false);
+		eigrp_topo_max_pfx_update(EIGRP_SET, &context, &limit), false);
 }
 
 /*
@@ -3079,14 +3078,14 @@ eigrpd_named_maximum_prefix_detail_destroy(struct nb_cb_destroy_args *args)
 /*
  * XPath: /frr-eigrpd:eigrpd/named/address-family/topology/maximum-prefix
  * Target: eigrpd_named_maximum_prefix_apply() ->
- * eigrp_topology_max_prefix_update(EIGRP_SET) Description: This is the
+ * eigrp_topo_max_pfx_update(EIGRP_SET) Description: This is the
  * `apply_finish` northbound callback for the `maximum prefix` configuration
  * node. FRR owns the YANG transaction here and resolves or normalizes host
  * values before common EIGRP state is touched. This callback runs at
  * APPLY_FINISH so multi-leaf configuration is presented to the target as one
  * settled command state. The runtime path terminates at
  * `eigrpd_named_maximum_prefix_apply() ->
- * eigrp_topology_max_prefix_update(EIGRP_SET)` rather than duplicating EIGRP
+ * eigrp_topo_max_pfx_update(EIGRP_SET)` rather than duplicating EIGRP
  * behavior in the FRR northbound layer. This is named-mode configuration, so
  * host and YANG objects stop at this boundary and the protocol work stays in
  * EIGRP-owned code. Failures are returned through northbound status so
@@ -3106,7 +3105,7 @@ eigrpd_named_maximum_prefix_apply_finish(struct nb_cb_apply_finish_args *args)
  * It reads YANG here only long enough to normalize the command into EIGRP-owned
  * values. It resolves the named address-family, topology, or interface context
  * before changing EIGRP state. This callback calls
- * `eigrp_topology_max_prefix_update(EIGRP_RESET, 0)` instead of carrying
+ * `eigrp_topo_max_pfx_update(EIGRP_RESET, 0)` instead of carrying
  * protocol behavior in the FRR layer. Retained configuration and runtime side
  * effects stay with the common target so named mode does not grow a second
  * protocol implementation. Structured EIGRP results are translated back to
@@ -3127,8 +3126,7 @@ static int eigrpd_named_maximum_prefix_destroy(struct nb_cb_destroy_args *args)
 						      &context))
 		return NB_ERR_INCONSISTENCY;
 	return eigrpd_named_config_result(
-		eigrp_topology_max_prefix_update(EIGRP_RESET, &context, 0),
-		true);
+		eigrp_topo_max_pfx_update(EIGRP_RESET, &context, 0), true);
 }
 
 /*
@@ -3138,7 +3136,7 @@ static int eigrpd_named_maximum_prefix_destroy(struct nb_cb_destroy_args *args)
  * It reads YANG here only long enough to normalize the command into EIGRP-owned
  * values. It resolves the named address-family, topology, or interface context
  * before changing EIGRP state. This callback calls
- * `eigrp_topology_maximum_paths_update(EIGRP_SET)` instead of carrying protocol
+ * `eigrp_topo_max_paths_update(EIGRP_SET)` instead of carrying protocol
  * behavior in the FRR layer. Retained configuration and runtime side effects
  * stay with the common target so named mode does not grow a second protocol
  * implementation. Structured EIGRP results are translated back to northbound
@@ -3158,7 +3156,7 @@ static int eigrpd_named_maximum_paths_modify(struct nb_cb_modify_args *args)
 						      &context))
 		return NB_ERR_INCONSISTENCY;
 	return eigrpd_named_config_result(
-		eigrp_topology_maximum_paths_update(
+		eigrp_topo_max_paths_update(
 			EIGRP_SET, &context,
 			yang_dnode_get_uint8(args->dnode, NULL)),
 		false);
@@ -3171,7 +3169,7 @@ static int eigrpd_named_maximum_paths_modify(struct nb_cb_modify_args *args)
  * It reads YANG here only long enough to normalize the command into EIGRP-owned
  * values. It resolves the named address-family, topology, or interface context
  * before changing EIGRP state. This callback calls
- * `eigrp_topology_maximum_paths_update(EIGRP_RESET, 0)` instead of carrying
+ * `eigrp_topo_max_paths_update(EIGRP_RESET, 0)` instead of carrying
  * protocol behavior in the FRR layer. Retained configuration and runtime side
  * effects stay with the common target so named mode does not grow a second
  * protocol implementation. Structured EIGRP results are translated back to
@@ -3191,8 +3189,7 @@ static int eigrpd_named_maximum_paths_destroy(struct nb_cb_destroy_args *args)
 						      &context))
 		return NB_ERR_INCONSISTENCY;
 	return eigrpd_named_config_result(
-		eigrp_topology_maximum_paths_update(EIGRP_RESET, &context, 0),
-		true);
+		eigrp_topo_max_paths_update(EIGRP_RESET, &context, 0), true);
 }
 
 /*

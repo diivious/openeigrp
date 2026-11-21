@@ -113,7 +113,7 @@ static void init_runtime(eigrp_instance_t *eigrp, eigrp_nbr_t *self)
 	eigrp->af_vectors.afi = EIGRP_AFI_IPV4;
 	eigrp->af_vectors.classic_internal_tlv_type = EIGRP_TLV_IPv4_INT;
 	eigrp->af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
-	eigrp->topology_table = eigrp_topology_table_create();
+	eigrp->topology_table = eigrp_topo_table_create();
 	eigrp->topology_changes = eigrp_list_create();
 	assert(eigrp->topology_table && eigrp->topology_changes);
 }
@@ -136,8 +136,8 @@ static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
 					  unsigned id, bool external,
 					  bool elected, bool self)
 {
-	eigrp_prefix_descriptor_t *pfx = eigrp_topology_prefix_create();
-	eigrp_route_descriptor_t *r = eigrp_topology_route_create(link);
+	eigrp_prefix_descriptor_t *pfx = eigrp_topo_pfx_create();
+	eigrp_route_descriptor_t *r = eigrp_topo_route_create(link);
 	eigrp_list_t *queue;
 	assert(pfx && r);
 	pfx->destination.address.afi = EIGRP_AFI_IPV4;
@@ -166,7 +166,7 @@ static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
 		pfx->reported_metric = r->total_metric;
 		r->flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 	}
-	eigrp_prefix_descriptor_add(eigrp->topology_table, pfx);
+	eigrp_topo_pfx_add(eigrp->topology_table, pfx);
 	queue = external ? pfx->external_routes : pfx->internal_routes;
 	assert(eigrp_list_insert(queue, r));
 	return r;
@@ -198,11 +198,16 @@ int main(void)
 	eigrp_route_descriptor_t *retained_int, *retained_ext, *elected;
 	eigrp_route_descriptor_t *local, *connected;
 	uint32_t orig_ri, orig_re;
+	link.ifindex = 7;
+	link.address.address.afi = EIGRP_AFI_IPV4;
 	link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
 	link.params.delay = EIGRP_INTF_ETH_DELAY;
 	link.params.reliability = EIGRP_INTF_REL_100;
 	link.params.load = EIGRP_LOAD_DEFAULT;
 	init_runtime(&eigrp, &self);
+	peer.ei = &link;
+	peer.src.afi = AF_INET;
+	peer.src.ip.v4.s_addr = htonl(0x0a000002);
 	retained_int = add_path(&eigrp, &peer, &link, 10, false, false, false);
 	retained_ext = add_path(&eigrp, &peer, &link, 11, true, false, false);
 	elected = add_path(&eigrp, &peer, &link, 12, false, true, false);
@@ -214,7 +219,7 @@ int main(void)
 	link.params.delay = 350;
 	eigrp.k_values[0] = 2;
 	for (unsigned pass = 0; pass < 3; pass++) {
-		eigrp_topology_metric_update(&eigrp);
+		eigrp_topo_metric_update(&eigrp);
 		assert_unelected(&eigrp, retained_int);
 		assert_unelected(&eigrp, retained_ext);
 		assert(elected->prefix->distance == elected->distance);
@@ -230,14 +235,14 @@ int main(void)
 	 * from infinity, even if all prefix metrics currently indicate poison.
 	 */
 	local = add_path(&eigrp, &self, NULL, 13, true, false, true);
-	eigrp_topology_metric_update(&eigrp);
+	eigrp_topo_metric_update(&eigrp);
 	assert(local->prefix->distance == local->distance);
 	assert(local->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
 	assert_unelected(&eigrp, retained_int);
 	assert_unelected(&eigrp, retained_ext);
 	assert(installs == 4);
 	connected = add_path(&eigrp, &self, &link, 14, false, false, true);
-	eigrp_topology_metric_update(&eigrp);
+	eigrp_topo_metric_update(&eigrp);
 	assert(connected->prefix->distance == connected->distance);
 	assert(connected->prefix->reported_metric.delay
 	       == eigrp_delay_to_scaled(link.params.delay));

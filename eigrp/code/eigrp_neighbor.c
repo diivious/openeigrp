@@ -573,8 +573,7 @@ static void eigrp_nbr_runtime_address(const eigrp_nbr_t *nbr,
 static bool eigrp_nbr_prefix_present(eigrp_prefix_descriptor_t *prefix,
 				     eigrp_nbr_t *neighbor)
 {
-	return prefix
-	       && eigrp_prefix_descriptor_lookup(prefix, neighbor) != NULL;
+	return prefix && eigrp_topo_route_lookup(prefix, neighbor) != NULL;
 }
 
 static uint32_t eigrp_nbr_prefix_count(eigrp_instance_t *runtime,
@@ -1024,7 +1023,7 @@ void eigrp_nbr_down(eigrp_nbr_t *nbr)
 		return;
 	eigrp_nbr_down_deferred(nbr);
 	if (nbr->ei)
-		eigrp_topology_neighbor_down(nbr->ei->eigrp, nbr);
+		eigrp_topo_nbr_down(nbr->ei->eigrp, nbr);
 }
 
 /* Keep the same published peer for prefix-limit penalty accounting. Ingress
@@ -2006,7 +2005,7 @@ bool eigrp_nbr_route_admit(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 	    || eigrp_metric_calculate(eigrp, *metric) == EIGRP_MAX_METRIC)
 		return false;
 	return eigrp_nbr_prefix_admit(eigrp, nbr, dest)
-	       && eigrp_topology_prefix_admit(eigrp, dest);
+	       && eigrp_topo_pfx_admit(eigrp, dest);
 }
 
 bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
@@ -2021,7 +2020,7 @@ bool eigrp_nbr_prefix_admit(eigrp_instance_t *runtime, eigrp_nbr_t *neighbor,
 	if (!runtime || !neighbor || !prefix
 	    || !eigrp_nbr_is_eligible(neighbor))
 		return false;
-	existing = eigrp_topology_table_lookup(runtime->topology_table, prefix);
+	existing = eigrp_topo_table_lookup(runtime->topology_table, prefix);
 	/* UPDATE and QUERY share one counted destination for the neighbor. */
 	if (eigrp_nbr_prefix_present(existing, neighbor))
 		return true;

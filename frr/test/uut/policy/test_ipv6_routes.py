@@ -31,7 +31,7 @@ def test_route_maps_filter_redistributed_ipv6_candidates():
     assert "route_map_lookup_by_name" in policy
     assert "route_map_apply" in policy
     assert "eigrp_sys_redistribute_route_map_evaluate" in redist
-    assert "eigrp_topology_redistributed_route_remove" in redist
+    assert "eigrp_topo_redist_route_remove" in redist
 
 
 def test_policy_edits_force_reevaluation():

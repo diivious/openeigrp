@@ -142,7 +142,7 @@ eigrp_unix_config_command_commit(const eigrp_unix_config_command_t *cmd)
 	case EIGRP_UNIX_CONFIG_NEIGHBOR:
 		return eigrp_nbr_static_create(af, &cmd->address, cmd->ifname);
 	case EIGRP_UNIX_CONFIG_TOPOLOGY:
-		return eigrp_topology_create(&context);
+		return eigrp_topo_config_create(&context);
 	case EIGRP_UNIX_CONFIG_DISTANCE:
 		return eigrp_af_config_distance_update(
 			EIGRP_SET, af, (uint8_t)cmd->numbers[0],
@@ -170,8 +170,8 @@ eigrp_unix_config_command_commit(const eigrp_unix_config_command_t *cmd)
 		return eigrp_metric_maximum_hops_update(
 			EIGRP_SET, &context, (uint8_t)cmd->numbers[0]);
 	case EIGRP_UNIX_CONFIG_MAXIMUM_PATHS:
-		return eigrp_topology_maximum_paths_update(
-			EIGRP_SET, &context, (uint8_t)cmd->numbers[0]);
+		return eigrp_topo_max_paths_update(EIGRP_SET, &context,
+						   (uint8_t)cmd->numbers[0]);
 	case EIGRP_UNIX_CONFIG_DISTRIBUTE:
 		return eigrp_distribute_add(
 			&context, cmd->filter_type, cmd->policy_name,

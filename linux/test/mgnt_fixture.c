@@ -307,11 +307,11 @@ eigrp_result_t eigrp_nbr_state_iterate(eigrp_af_config_t *config,
 }
 
 eigrp_result_t
-eigrp_topology_state_iterate(eigrp_af_config_t *config,
-			     eigrp_instance_t *runtime,
-			     const eigrp_prefix_t *destination, bool all_links,
-			     eigrp_topology_prefix_state_cb prefix_fn,
-			     eigrp_topology_route_state_cb route_fn, void *arg)
+eigrp_topo_pfx_routes_iterate(eigrp_af_config_t *config,
+			      eigrp_instance_t *runtime,
+			      const eigrp_prefix_t *destination, bool all_links,
+			      eigrp_topology_prefix_state_cb prefix_fn,
+			      eigrp_topology_route_state_cb route_fn, void *arg)
 {
 	unsigned int i;
 	(void)config;
@@ -499,10 +499,9 @@ eigrp_result_t eigrp_nbr_clear(eigrp_instance_t *runtime,
 	return EIGRP_RESULT_SUCCESS;
 }
 
-eigrp_result_t
-eigrp_topology_clear(eigrp_instance_context_t *context,
-		     const eigrp_topology_clear_request_t *request,
-		     size_t *affected_count)
+eigrp_result_t eigrp_topo_clear(eigrp_instance_context_t *context,
+				const eigrp_topology_clear_request_t *request,
+				size_t *affected_count)
 {
 	if (!context || !context->runtime || !request)
 		return EIGRP_RESULT_INVALID_ARGUMENT;

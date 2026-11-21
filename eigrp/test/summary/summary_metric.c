@@ -33,7 +33,7 @@ eigrp_intf_config_t *eigrp_intf_config_read(eigrp_af_config_t *af_config,
 }
 
 eigrp_route_descriptor_t *
-eigrp_topology_route_read(eigrp_prefix_descriptor_t *prefix)
+eigrp_topo_route_read(eigrp_prefix_descriptor_t *prefix)
 {
 	return (eigrp_route_descriptor_t *)prefix->internal_routes;
 }

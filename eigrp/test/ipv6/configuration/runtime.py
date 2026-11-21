@@ -52,15 +52,17 @@ def test_af_interface_runtime_mutation_is_af_neutral():
 def test_next_hop_self_changes_the_actual_route_wire_image():
     packetizer = read(PACKETIZER)
     block = body(packetizer, "eigrp_packetizer_builder_route_add")
-    assert "if (builder->ei->next_hop_self)" in block
-    assert "memset(&wire_route.nexthop, 0, sizeof(wire_route.nexthop));" in block
+    assert "eigrp_nexthop_self_set(builder->ei, &wire_route);" in block
+    policy = read(ROOT / "eigrp/code/eigrp_nexthop.c")
+    assert "if (ei->next_hop_self)" in policy
+    assert "memset(&route->nexthop, 0, sizeof(route->nexthop));" in policy
 
 
 def test_ipv6_topology_clear_uses_the_real_shared_runtime_path():
-    block = body(read(TOPOLOGY), "eigrp_topology_clear")
+    block = body(read(TOPOLOGY), "eigrp_topo_clear")
     assert "EIGRP_AFI_IPV6" in block
-    assert "eigrp_topology_clear_all(context->runtime" in block
-    assert "eigrp_topology_clear_prefix(context->runtime, prefix)" in block
+    assert "eigrp_topo_pfx_clear_all(context->runtime" in block
+    assert "eigrp_topo_pfx_clear(context->runtime, prefix)" in block
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in block
 
 
@@ -83,8 +85,8 @@ def test_runtime_feature_targets_do_not_hide_incomplete_work():
     auth = read(AUTH)
     assert "eigrp_nbr_prefix_admit" in neighbor
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(neighbor, "eigrp_nbr_max_prefix_update")
-    assert "eigrp_topology_prefix_admit" in topology
-    assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(topology, "eigrp_topology_max_prefix_update")
+    assert "eigrp_topo_pfx_admit" in topology
+    assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(topology, "eigrp_topo_max_pfx_update")
     auth_mode = body(auth, "eigrp_auth_mode_update")
     assert "hmac->encryption_type == 7" in auth_mode
     assert "return EIGRP_RESULT_UNSUPPORTED;" in auth_mode

@@ -107,4 +107,4 @@ def test_sia_reply_active_bit_and_ipv6_route_types_are_supported():
 def test_reply_for_passive_destination_is_discarded():
     reply = read("eigrp/code/eigrp_reply.c")
     assert "prefix->state == EIGRP_FSM_STATE_PASSIVE" in reply
-    assert "eigrp_topology_route_free(route);" in reply
+    assert "eigrp_topo_route_free(route);" in reply

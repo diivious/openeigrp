@@ -197,16 +197,16 @@ static eigrp_af_config_t *test_runtime_af;
             {
                 eigrp_route_descriptor_t *head;
 
-                msg->change = eigrp_topology_update_distance(msg);
+                msg->change = eigrp_topo_route_distance_update(msg);
                 if (msg->prefix->state != EIGRP_FSM_STATE_PASSIVE)
                     return 1;
 
-                head = eigrp_topology_route_read(msg->prefix);
+                head = eigrp_topo_route_read(msg->prefix);
                 msg->prefix->fdistance = head->distance;
                 msg->prefix->distance = head->distance;
                 msg->prefix->rdistance = head->distance;
                 msg->prefix->reported_metric = head->total_metric;
-                eigrp_topology_update_node_flags(msg->eigrp, msg->prefix);
+                eigrp_topo_pfx_flags_update(msg->eigrp, msg->prefix);
                 return 1;
             }
 
@@ -239,14 +239,14 @@ static eigrp_af_config_t *test_runtime_af;
                 runtime->af_vectors.afi = EIGRP_AFI_IPV4;
                 runtime->af_vectors.classic_internal_tlv_type = EIGRP_TLV_IPv4_INT;
                 runtime->af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
-                runtime->topology_table = eigrp_topology_table_create();
+                runtime->topology_table = eigrp_topo_table_create();
                 runtime->topology_changes = eigrp_list_create();
                 assert(runtime->topology_table && runtime->topology_changes);
             }
 
             static void runtime_destroy(eigrp_instance_t *runtime)
             {
-                eigrp_topology_table_delete(runtime, runtime->topology_table);
+                eigrp_topo_table_delete(runtime, runtime->topology_table);
                 eigrp_list_delete(&runtime->topology_changes);
             }
 
@@ -292,8 +292,8 @@ static eigrp_af_config_t *test_runtime_af;
                 eigrp_intf_t *link, eigrp_metrics_t metric,
                 bool external, unsigned id)
             {
-                eigrp_prefix_descriptor_t *prefix = eigrp_topology_prefix_create();
-                eigrp_route_descriptor_t *route = eigrp_topology_route_create(link);
+                eigrp_prefix_descriptor_t *prefix = eigrp_topo_pfx_create();
+                eigrp_route_descriptor_t *route = eigrp_topo_route_create(link);
                 bool self = advertiser == runtime->neighbor_self;
                 eigrp_metrics_t calculation;
 
@@ -327,8 +327,8 @@ static eigrp_af_config_t *test_runtime_af;
                 prefix->distance = prefix->fdistance = prefix->rdistance =
                     route->distance;
                 prefix->reported_metric = route->total_metric;
-                eigrp_prefix_descriptor_add(runtime->topology_table, prefix);
-                eigrp_route_descriptor_add(runtime, prefix, route);
+                eigrp_topo_pfx_add(runtime->topology_table, prefix);
+                eigrp_topo_route_add(runtime, prefix, route);
                 assert(route->prefix == prefix);
                 return route;
             }
@@ -355,11 +355,11 @@ static eigrp_af_config_t *test_runtime_af;
             static void empty_prefix(eigrp_instance_t *runtime, unsigned id)
             {
                 eigrp_prefix_descriptor_t *prefix =
-                    eigrp_topology_prefix_create();
+                    eigrp_topo_pfx_create();
                 assert(prefix);
                 prefix->state = EIGRP_FSM_STATE_PASSIVE;
                 prefix->destination = dest(id);
-                eigrp_prefix_descriptor_add(runtime->topology_table, prefix);
+                eigrp_topo_pfx_add(runtime->topology_table, prefix);
             }
 
             static void mark_poison(eigrp_route_descriptor_t *route)
@@ -380,7 +380,7 @@ static eigrp_af_config_t *test_runtime_af;
                 max_prefix(&af, 1, false);
                 empty_prefix(&runtime, 1);
                 eigrp_prefix_t target = dest(2);
-                assert(eigrp_topology_prefix_admit(&runtime, &target));
+                assert(eigrp_topo_pfx_admit(&runtime, &target));
                 runtime_destroy(&runtime);
             }
 
@@ -396,7 +396,7 @@ static eigrp_af_config_t *test_runtime_af;
                 mark_poison(r);
                 r->prefix->req_action = EIGRP_FSM_NEED_UPDATE;
                 eigrp_prefix_t target = dest(2);
-                assert(eigrp_topology_prefix_admit(&runtime, &target));
+                assert(eigrp_topo_pfx_admit(&runtime, &target));
                 runtime_destroy(&runtime);
             }
 
@@ -410,8 +410,8 @@ static eigrp_af_config_t *test_runtime_af;
                 add_route(&runtime, &self, NULL, seed_metric(), true, 1);
                 empty_prefix(&runtime, 2);
                 eigrp_prefix_t stale = dest(2), live = dest(1);
-                assert(eigrp_topology_prefix_admit(&runtime, &live));
-                assert(!eigrp_topology_prefix_admit(&runtime, &stale));
+                assert(eigrp_topo_pfx_admit(&runtime, &live));
+                assert(!eigrp_topo_pfx_admit(&runtime, &stale));
                 runtime_destroy(&runtime);
             }
 
@@ -427,7 +427,7 @@ static eigrp_af_config_t *test_runtime_af;
                     NULL, seed_metric(), true, 2);
                 mark_poison(stale);
                 eigrp_prefix_t target = dest(2);
-                assert(!eigrp_topology_prefix_admit(&runtime, &target));
+                assert(!eigrp_topo_pfx_admit(&runtime, &target));
                 runtime_destroy(&runtime);
             }
 
@@ -443,7 +443,7 @@ static eigrp_af_config_t *test_runtime_af;
                 max_prefix(&af, 1, false);
                 eigrp_route_descriptor_t *first = add_route(&runtime, &self,
                     &link, connected_metric(&link), false, 1);
-                eigrp_route_descriptor_t *second = eigrp_topology_route_create(NULL);
+                eigrp_route_descriptor_t *second = eigrp_topo_route_create(NULL);
                 assert(second);
                 second->type = EIGRP_TLV_IPv4_EXT;
                 second->adv_router = &neighbor;
@@ -451,14 +451,14 @@ static eigrp_af_config_t *test_runtime_af;
                 second->metric = second->reported_metric = second->total_metric = seed_metric();
                 second->distance = 10000;
                 second->reported_distance = 200;
-                eigrp_route_descriptor_add(&runtime, first->prefix, second);
+                eigrp_topo_route_add(&runtime, first->prefix, second);
                 mark_poison(first);
                 eigrp_prefix_t target = dest(2);
-                eigrp_topology_update_node_flags(&runtime, first->prefix);
-                assert(!eigrp_topology_prefix_admit(&runtime, &target));
+                eigrp_topo_pfx_flags_update(&runtime, first->prefix);
+                assert(!eigrp_topo_pfx_admit(&runtime, &target));
                 mark_poison(second);
-                eigrp_topology_update_node_flags(&runtime, first->prefix);
-                assert(eigrp_topology_prefix_admit(&runtime, &target));
+                eigrp_topo_pfx_flags_update(&runtime, first->prefix);
+                assert(eigrp_topo_pfx_admit(&runtime, &target));
                 runtime_destroy(&runtime);
             }
 
@@ -472,20 +472,20 @@ static eigrp_af_config_t *test_runtime_af;
                 eigrp_route_descriptor_t *r = add_route(&runtime, &self, NULL,
                     seed_metric(), true, 1);
                 eigrp_prefix_t target = dest(2);
-                assert(!eigrp_topology_prefix_admit(&runtime, &target));
+                assert(!eigrp_topo_pfx_admit(&runtime, &target));
                 af.topology_maximum_prefix.warning_only = true;
-                assert(eigrp_topology_prefix_admit(&runtime, &target));
+                assert(eigrp_topo_pfx_admit(&runtime, &target));
                 af.topology_maximum_prefix.warning_only = false;
                 mark_poison(r);
-                eigrp_topology_update_node_flags(&runtime, r->prefix);
-                assert(eigrp_topology_prefix_admit(&runtime, &target));
+                eigrp_topo_pfx_flags_update(&runtime, r->prefix);
+                assert(eigrp_topo_pfx_admit(&runtime, &target));
                 /* Even with a stale finite distance, a poisoned metric
                  * vector must not count as a reachable prefix. */
                 r->distance = 123456;
-                assert(eigrp_topology_prefix_admit(&runtime, &target));
+                assert(eigrp_topo_pfx_admit(&runtime, &target));
                 r->metric.delay = EIGRP_INTF_ETH_DELAY;
-                eigrp_topology_update_node_flags(&runtime, r->prefix);
-                assert(!eigrp_topology_prefix_admit(&runtime, &target));
+                eigrp_topo_pfx_flags_update(&runtime, r->prefix);
+                assert(!eigrp_topo_pfx_admit(&runtime, &target));
                 runtime_destroy(&runtime);
             }
 
@@ -526,7 +526,7 @@ static eigrp_af_config_t *test_runtime_af;
                 eigrp_nbr_t *nbr = &neighbor;
                 eigrp_intf_t *ei = NULL;
                 eigrp_route_descriptor_t *received_route =
-                    eigrp_topology_route_create(NULL);
+                    eigrp_topo_route_create(NULL);
                 bool accepted = false;
 
                 assert(received_route);
@@ -539,7 +539,7 @@ static eigrp_af_config_t *test_runtime_af;
                     accepted = true;
                 }
                 if (accepted)
-                    eigrp_topology_route_free(received_route);
+                    eigrp_topo_route_free(received_route);
                 return accepted;
             }
 
@@ -556,7 +556,7 @@ static eigrp_af_config_t *test_runtime_af;
                 neighbor_gate_allowed = true;
                 assert(!ingress_check(&runtime, 2, false, NULL));
                 mark_poison(live);
-                eigrp_topology_update_node_flags(&runtime, live->prefix);
+                eigrp_topo_pfx_flags_update(&runtime, live->prefix);
                 assert(ingress_check(&runtime, 2, false, NULL));
                 runtime_destroy(&runtime);
             }
@@ -672,7 +672,7 @@ static eigrp_af_config_t *test_runtime_af;
          str(source),
          str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
          *[str(ROOT / "eigrp" / "code" / f) for f in (
-             "eigrp_topology.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
+             "eigrp_topology.c", "eigrp_nexthop.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
              "eigrp_table.c", "eigrp_prefix.c")],
          *(["-Wl,-dead_strip"] if sys.platform == "darwin" else
            ["-Wl,--gc-sections"]), "-I", str(ROOT / "eigrp/code"), str(ROOT / "libunix/code/eigrp_unix_format.c"), "-o", str(binary)],

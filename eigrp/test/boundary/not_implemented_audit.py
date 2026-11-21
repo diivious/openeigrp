@@ -31,11 +31,11 @@ def test_completed_targets_do_not_regress_to_not_implemented():
     assert "return EIGRP_RESULT_NOT_IMPLEMENTED" not in body(
         instance, "eigrp_named_config_shutdown_update")
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(
-        topology, "eigrp_topology_create")
+        topology, "eigrp_topo_config_create")
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(
-        topology, "eigrp_topology_delete")
+        topology, "eigrp_topo_config_delete")
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(
-        topology, "eigrp_topology_default_information_update")
+        topology, "eigrp_topo_default_info_update")
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(
         summary, "eigrp_summary_create")
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in body(
@@ -53,9 +53,9 @@ def test_parent_retention_precedes_runtime_capability_result():
 
 def test_topology_api_does_not_reject_non_base_tid():
     source = ROOT / "eigrp/code/eigrp_topology.c"
-    create = body(source, "eigrp_topology_create")
-    delete = body(source, "eigrp_topology_delete")
-    validate = body(source, "eigrp_topology_context_validate")
+    create = body(source, "eigrp_topo_config_create")
+    delete = body(source, "eigrp_topo_config_delete")
+    validate = body(source, "eigrp_topo_context_validate")
     assert "topology_base_configured = true" in create
     assert "topology_base_configured = false" in delete
     assert "context->topology_id != EIGRP_TOPOLOGY_ID_BASE" not in validate

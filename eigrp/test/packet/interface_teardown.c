@@ -28,14 +28,13 @@ static unsigned queued_on_down;
 /* Model output queued by synchronous DUAL processing during neighbor loss.
  * This runs at the real connected-route teardown point, after the first
  * interface write-queue purge. */
-void __real_eigrp_topology_connected_interface_down(eigrp_instance_t *,
-						    eigrp_intf_t *);
-void __wrap_eigrp_topology_connected_interface_down(eigrp_instance_t *eigrp,
-						    eigrp_intf_t *ei)
+void __real_eigrp_topo_connected_intf_down(eigrp_instance_t *, eigrp_intf_t *);
+void __wrap_eigrp_topo_connected_intf_down(eigrp_instance_t *eigrp,
+					   eigrp_intf_t *ei)
 {
 	eigrp_packet_t *packet;
 
-	__real_eigrp_topology_connected_interface_down(eigrp, ei);
+	__real_eigrp_topo_connected_intf_down(eigrp, ei);
 	if (!ei->obuf)
 		return;
 	packet = eigrp_packet_create(64, NULL);

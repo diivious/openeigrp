@@ -175,7 +175,7 @@ def test_summary_metric_and_timer_targets_own_retained_state():
     assert "EIGRP_RESULT_SUCCESS" in default_metric
     assert "config->traffic_share_balanced = enabled;" in traffic_share
     assert "context->runtime->traffic_share_balanced = enabled;" in traffic_share
-    assert "eigrp_topology_traffic_share_update(context->runtime);" in traffic_share
+    assert "eigrp_topo_traffic_share_update(context->runtime);" in traffic_share
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in traffic_share
 
     assert "context->config->timer_config" in active_time

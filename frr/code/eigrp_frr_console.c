@@ -383,7 +383,7 @@ void show_ip_eigrp_prefix_descriptor(struct vty *vty,
 				     eigrp_prefix_descriptor_t *tn,
 				     bool include_serial)
 {
-	eigrp_list_t *successors = eigrp_topology_successors_read(tn);
+	eigrp_list_t *successors = eigrp_topo_successors_read(tn);
 	char buffer[EIGRP_PREFIX_STRLEN] = "invalid";
 
 	eigrp_prefix_snprintf(buffer, sizeof(buffer), &tn->destination);

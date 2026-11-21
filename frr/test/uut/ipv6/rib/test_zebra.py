@@ -13,7 +13,7 @@ def test_ipv6_link_local_nexthop_and_ecmp_cross_portable_rib_snapshot():
     assert "route->adv_router->src.afi == AF_INET6" in topology
     assert "EIGRP_AFI_IPV6" in topology
     assert "sizeof(route->adv_router->src.ip.v6)" in topology
-    assert "eigrp_topology_southbound_nexthops" in topology
+    assert "eigrp_topo_rib_nexthops_set" in topology
     assert "EIGRP_MAX_PATHS_MAX" in topology
 
 def test_zebra_encodes_ipv6_gateway_ifindex_distance_tag_and_ecmp():
@@ -56,12 +56,12 @@ def test_neighbor_loss_shutdown_and_zebra_reconnect_cleanup_are_wired():
     daemon = read("eigrp/code/eigrp.c")
     rib = read("eigrp/code/eigrp_rib.c")
     zebra = read("frr/code/eigrp_frr_rib.c")
-    assert "void eigrp_topology_neighbor_down" in topology
+    assert "void eigrp_topo_nbr_down" in topology
     assert "eigrp_fsm_event(&msg)" in topology
-    assert "eigrp_topology_table_delete(eigrp, eigrp->topology_table)" in daemon
+    assert "eigrp_topo_table_delete(eigrp, eigrp->topology_table)" in daemon
     assert "eigrp_rib_route_del(eigrp, &pe->destination)" in topology
     assert "eigrp_rib_prefix_installed" in rib
-    assert "eigrp_update_routing_table(eigrp, prefix)" in rib
+    assert "eigrp_topo_rib_update(eigrp, prefix)" in rib
     assert "eigrp_instance_vrf_iterate(eigrp_zebra_vrf_register, zclient)" in zebra
     assert "zclient_send_reg_requests(zclient, (vrf_id_t)vrf_id)" in zebra
     assert "eigrp_rib_routes_replay()" in zebra

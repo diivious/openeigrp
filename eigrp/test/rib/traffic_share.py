@@ -70,14 +70,14 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
             eigrp_prefix_descriptor_t *prefix, eigrp_intf_t *ei,
             uint32_t distance, uint32_t rd)
         {
-            eigrp_route_descriptor_t *route = eigrp_topology_route_create(NULL);
+            eigrp_route_descriptor_t *route = eigrp_topo_route_create(NULL);
             assert(route);
             route->distance = distance;
             route->reported_distance = rd;
             route->type = EIGRP_TLV_IPv4_INT;
             route->prefix = prefix;
             route->ei = ei;
-            eigrp_route_descriptor_add(eigrp, prefix, route);
+            eigrp_topo_route_add(eigrp, prefix, route);
             return route;
         }
 
@@ -85,11 +85,13 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
         {
             eigrp_instance_t eigrp = {0};
             eigrp_intf_t ei = {0};
-            eigrp_prefix_descriptor_t *prefix = eigrp_topology_prefix_create();
+            eigrp_prefix_descriptor_t *prefix = eigrp_topo_pfx_create();
             eigrp_route_descriptor_t *best, *unequal, *infeasible;
 
             assert(prefix);
             eigrp.af_vectors.afi = EIGRP_AFI_IPV4;
+            ei.ifindex = 7;
+            ei.address.address.afi = EIGRP_AFI_IPV4;
             eigrp.variance = 3;
             eigrp.max_paths = 3;
             eigrp.distance_internal = EIGRP_DISTANCE_INTERNAL_DEFAULT;
@@ -101,20 +103,20 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
             best = add_route(&eigrp, prefix, &ei, 20, 10);
             unequal = add_route(&eigrp, prefix, &ei, 40, 15);
             infeasible = add_route(&eigrp, prefix, &ei, 50, 20);
-            eigrp_topology_update_node_flags(&eigrp, prefix);
+            eigrp_topo_pfx_flags_update(&eigrp, prefix);
 
             assert(best->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
             assert(unequal->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
             assert(!(infeasible->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG));
 
             installs = 0;
-            eigrp_update_routing_table(&eigrp, prefix);
+            eigrp_topo_rib_update(&eigrp, prefix);
             assert(installs == 1 && last_count == 2);
             assert(weights[0] == 2 && weights[1] == 1);
 
             /* Disabling balanced sharing changes only the host forwarding hint. */
             eigrp.traffic_share_balanced = false;
-            eigrp_update_routing_table(&eigrp, prefix);
+            eigrp_topo_rib_update(&eigrp, prefix);
             assert(installs == 2 && last_count == 2);
             assert(weights[0] == 0 && weights[1] == 0);
             assert(best->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
@@ -123,12 +125,12 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
 
             /* Tightening variance removes the unequal successor before weighting. */
             eigrp.variance = 1;
-            eigrp_topology_update_node_flags(&eigrp, prefix);
+            eigrp_topo_pfx_flags_update(&eigrp, prefix);
             eigrp.traffic_share_balanced = true;
-            eigrp_update_routing_table(&eigrp, prefix);
+            eigrp_topo_rib_update(&eigrp, prefix);
             assert(last_count == 1 && weights[0] == 1);
 
-            eigrp_topology_prefix_free(prefix);
+            eigrp_topo_pfx_free(prefix);
             return 0;
         }
     '''))
@@ -140,6 +142,7 @@ def test_balanced_traffic_share_weights_selected_successors_only(tmp_path):
         "-ffunction-sections", "-fdata-sections",
         f"-I{ROOT}", f"-I{ROOT / 'test' / 'build' / 'include'}",
         str(source), str(ROOT / "eigrp" / "code" / "eigrp_topology.c"),
+        str(ROOT / "eigrp" / "code" / "eigrp_nexthop.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_timer.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_list.c"),
         str(ROOT / "eigrp" / "code" / "eigrp_table.c"),
@@ -160,15 +163,15 @@ def test_traffic_share_refresh_skips_active_destinations_and_target_is_live():
     metric = (ROOT / "eigrp" / "code" / "eigrp_metric.c").read_text()
     rib = (ROOT / "eigrp" / "code" / "eigrp_rib.h").read_text()
 
-    refresh = topology[topology.index("void eigrp_topology_traffic_share_update"):
-                       topology.index("static void eigrp_topology_route_queue_resort")]
+    refresh = topology[topology.index("void eigrp_topo_traffic_share_update"):
+                       topology.index("static void eigrp_topo_route_queue_sort")]
     assert "prefix->state != EIGRP_FSM_STATE_PASSIVE" in refresh
-    assert "eigrp_update_routing_table(eigrp, prefix);" in refresh
-    assert "eigrp_topology_update_node_flags" not in refresh
+    assert "eigrp_topo_rib_update(eigrp, prefix);" in refresh
+    assert "eigrp_topo_pfx_flags_update" not in refresh
 
     target = metric[metric.index("eigrp_traffic_share_balanced_update("):
                     metric.index("metric maximum-hops")]
     assert "context->runtime->traffic_share_balanced = enabled;" in target
-    assert "eigrp_topology_traffic_share_update(context->runtime);" in target
+    assert "eigrp_topo_traffic_share_update(context->runtime);" in target
     assert "EIGRP_RESULT_NOT_IMPLEMENTED" not in target
     assert "uint64_t weight;" in rib

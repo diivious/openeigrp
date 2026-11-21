@@ -670,7 +670,7 @@ static eigrp_result_t mgnt_query_scoped(void *arg)
 		break;
 	case EIGRP_LINUX_MGNT_TOPOLOGY:
 	case EIGRP_LINUX_MGNT_ROUTES:
-		result = eigrp_topology_state_iterate(
+		result = eigrp_topo_pfx_routes_iterate(
 			context->config, context->runtime, NULL,
 			req->op == EIGRP_LINUX_MGNT_TOPOLOGY,
 			mgnt_topology_prefix, mgnt_topology_route, r);
@@ -760,7 +760,7 @@ static eigrp_result_t mgnt_query_scoped(void *arg)
 			       req->selector.afi == 4 ? 4 : 16);
 			request.destination = &destination;
 		}
-		result = eigrp_topology_clear(context, &request, &affected);
+		result = eigrp_topo_clear(context, &request, &affected);
 		break;
 	}
 	default:

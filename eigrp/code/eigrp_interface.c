@@ -1662,7 +1662,7 @@ int eigrp_intf_up(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 	}
 
 	/*Add connected route to topology table*/
-	route = eigrp_topology_route_create(ei);
+	route = eigrp_topo_route_create(ei);
 	route->type = eigrp->af_vectors.classic_internal_tlv_type;
 
 	route->metric = metric;
@@ -1676,23 +1676,22 @@ int eigrp_intf_up(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 	eigrp_prefix_t destination;
 
 	if (!eigrp_intf_destination(ei, &destination)) {
-		eigrp_topology_route_free(route);
+		eigrp_topo_route_free(route);
 		return 0;
 	}
-	prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-					     &destination);
+	prefix = eigrp_topo_table_lookup(eigrp->topology_table, &destination);
 
 	if (prefix != NULL) {
 		eigrp_route_descriptor_t *old_local;
 
-		old_local = eigrp_prefix_descriptor_lookup(
-			prefix, eigrp->neighbor_self);
+		old_local =
+			eigrp_topo_route_lookup(prefix, eigrp->neighbor_self);
 		if (old_local && old_local->ei == ei)
-			eigrp_route_descriptor_delete(eigrp, prefix, old_local);
+			eigrp_topo_route_remove(eigrp, prefix, old_local);
 	}
 
 	if (prefix == NULL) {
-		prefix = eigrp_topology_prefix_create();
+		prefix = eigrp_topo_pfx_create();
 		prefix->serno = eigrp->serno;
 		prefix->destination = destination;
 		prefix->nt = EIGRP_TOPOLOGY_TYPE_CONNECTED;
@@ -1701,12 +1700,12 @@ int eigrp_intf_up(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 		prefix->fdistance = eigrp_metric_calculate(eigrp, metric);
 		prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 
-		eigrp_prefix_descriptor_add(eigrp->topology_table, prefix);
+		eigrp_topo_pfx_add(eigrp->topology_table, prefix);
 
 		eigrp_list_add(eigrp->topology_changes, prefix);
 
 		route->prefix = prefix;
-		eigrp_route_descriptor_add(eigrp, prefix, route);
+		eigrp_topo_route_add(eigrp, prefix, route);
 
 		eigrp_update_send_all(eigrp, NULL);
 
@@ -1714,7 +1713,7 @@ int eigrp_intf_up(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 		eigrp_fsm_action_message_t msg = {0};
 
 		route->prefix = prefix;
-		eigrp_route_descriptor_add(eigrp, prefix, route);
+		eigrp_topo_route_add(eigrp, prefix, route);
 
 		msg.packet_type = EIGRP_OPC_UPDATE;
 		msg.eigrp = eigrp;
@@ -1766,7 +1765,7 @@ int eigrp_intf_down(eigrp_intf_t *ei)
 					      EIGRP_EVENTLOG_NBR_INTF_DOWN);
 		eigrp_nbr_delete(nbr);
 	}
-	eigrp_topology_connected_interface_down(ei->eigrp, ei);
+	eigrp_topo_connected_intf_down(ei->eigrp, ei);
 	/* DUAL may enqueue output while retiring the last adjacency. */
 	eigrp_intf_stream_update(EIGRP_RESET, ei);
 	eigrp_packet_interface_output_clear(ei);
@@ -1823,11 +1822,10 @@ void eigrp_intf_free(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 	}
 
 	if (eigrp_intf_destination(ei, &destination))
-		pe = eigrp_topology_table_lookup(eigrp->topology_table,
-						 &destination);
+		pe = eigrp_topo_table_lookup(eigrp->topology_table,
+					     &destination);
 	if (pe)
-		eigrp_prefix_descriptor_delete(eigrp, eigrp->topology_table,
-					       pe);
+		eigrp_topo_pfx_delete(eigrp, eigrp->topology_table, pe);
 
 	eigrp_intf_down(ei);
 	eigrp_packetizer_intf_detach(eigrp, ei);

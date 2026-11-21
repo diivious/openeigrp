@@ -421,8 +421,8 @@ def test_named_topology_uses_generic_portable_lifecycle_api():
     topology_h = read(ROOT / "eigrpd" / "code" / "eigrp_topology.h")
     eigrpd_c = read(ROOT / "eigrpd" / "code" / "eigrp.c")
 
-    assert "eigrp_topology_create(&context)" in nb
-    assert "eigrp_topology_delete(&context)" in nb
+    assert "eigrp_topo_config_create(&context)" in nb
+    assert "eigrp_topo_config_delete(&context)" in nb
     assert "context->topology_id = EIGRP_TOPOLOGY_ID_BASE;" in nb
 
     portable = topology_c + topology_h
@@ -434,8 +434,8 @@ def test_named_topology_uses_generic_portable_lifecycle_api():
     # The legacy new/free helpers actually own route-table storage.  Keep
     # that implementation detail named as storage and reserve the generic
     # create/delete API for the EIGRP topology object/configuration target.
-    assert "eigrp_topology_table_create()" in eigrpd_c
-    assert "eigrp_topology_table_delete(eigrp, eigrp->topology_table)" in eigrpd_c
+    assert "eigrp_topo_table_create()" in eigrpd_c
+    assert "eigrp_topo_table_delete(eigrp, eigrp->topology_table)" in eigrpd_c
     assert "eigrp->networks = NULL;" in eigrpd_c
     assert "eigrp_network_runtime_delete_all(eigrp);" in eigrpd_c
 
@@ -596,7 +596,7 @@ def test_upstream_schema_and_cli_cover_classic_inherited_surface():
         "eigrp_nbr_log_update",
         "eigrp_nbr_log_update",
         "eigrp_metric_maximum_hops_update",
-        "eigrp_topology_maximum_paths_update",
+        "eigrp_topo_max_paths_update",
         "eigrp_distribute_add",
         "eigrp_redist_max_prefix_update",
     )

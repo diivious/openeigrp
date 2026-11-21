@@ -83,8 +83,8 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			continue;
 		}
 
-		prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						     &route->dest);
+		prefix = eigrp_topo_table_lookup(eigrp->topology_table,
+						 &route->dest);
 		(void)eigrp_eventlog_msg_add(
 			eigrp, EIGRP_EVENTLOG_OPCODE_REPLY_RX, &route->dest,
 			route->distance,
@@ -99,18 +99,18 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				EIGRP_LOG_DEBUG,
 				"EIGRP REPLY: Neighbor(%s) sent unknown prefix %s",
 				eigrp_print_addr(&nbr->src), prefix_buf);
-			eigrp_topology_route_free(route);
+			eigrp_topo_route_free(route);
 			continue;
 		}
 		/* RFC 7868: a REPLY for a destination not in ACTIVE state is
 		 * acknowledged and discarded. */
 		if (prefix->state == EIGRP_FSM_STATE_PASSIVE) {
-			eigrp_topology_route_free(route);
+			eigrp_topo_route_free(route);
 			continue;
 		}
 		eigrp_route_descriptor_t *received_route = route;
 		eigrp_route_descriptor_t *topology_route =
-			eigrp_prefix_descriptor_lookup(prefix, nbr);
+			eigrp_topo_route_lookup(prefix, nbr);
 		bool free_received_route = false;
 
 		if (topology_route) {
@@ -153,7 +153,7 @@ void eigrp_reply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		eigrp_fsm_event(&msg);
 
 		if (free_received_route || msg.transient_route)
-			eigrp_topology_route_free(received_route);
+			eigrp_topo_route_free(received_route);
 	}
 
 	/* REPLY processing can complete DUAL and queue further actions. */

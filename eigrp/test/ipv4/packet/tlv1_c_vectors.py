@@ -43,14 +43,14 @@ def test_ipv4_classic_tlv1_codec_round_trip_and_rejection(tmp_path):
             static eigrp_route_descriptor_t decoded_route;
             static unsigned int route_free_count;
 
-            eigrp_route_descriptor_t *eigrp_topology_route_create(eigrp_intf_t *ei)
+            eigrp_route_descriptor_t *eigrp_topo_route_create(eigrp_intf_t *ei)
             {
                 memset(&decoded_route, 0, sizeof(decoded_route));
                 decoded_route.ei = ei;
                 return &decoded_route;
             }
 
-            void eigrp_topology_route_free(eigrp_route_descriptor_t *route)
+            void eigrp_topo_route_free(eigrp_route_descriptor_t *route)
             {
                 assert(route == &decoded_route);
                 route_free_count++;

@@ -64,7 +64,7 @@ scoped requests. Linux runtime support for nondefault VRFs is unchanged.
 | 10 | clear events | Privileged event-ring reset |
 | 11 | identity | Daemon/client release handshake |
 | 12 | clear neighbors | Privileged neighbor reset through `eigrp_nbr_clear()` |
-| 13 | clear topology | Privileged topology reset through `eigrp_topology_clear()` |
+| 13 | clear topology | Privileged topology reset through `eigrp_topo_clear()` |
 | 14 | timers | Portable timer deadlines |
 | 15 | accounting | Portable prefix-limit accounting |
 | 16 | static neighbors | Configured static-neighbor state |

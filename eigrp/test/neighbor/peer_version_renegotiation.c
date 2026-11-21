@@ -169,7 +169,7 @@ static void runtime_init(eigrp_instance_t *runtime, eigrp_intf_t *ei)
 	runtime->af_vectors.packet_send = record_packet;
 	runtime->eiflist = eigrp_list_create();
 	runtime->oi_write_q = eigrp_list_create();
-	runtime->topology_table = eigrp_topology_table_create();
+	runtime->topology_table = eigrp_topo_table_create();
 	runtime->topology_changes = eigrp_list_create();
 	assert(runtime->eiflist && runtime->oi_write_q
 	       && runtime->topology_table && runtime->topology_changes);
@@ -197,7 +197,7 @@ static void runtime_finish(eigrp_instance_t *runtime, eigrp_intf_t *ei)
 {
 	while (ei->nbrs->head)
 		eigrp_nbr_delete(ei->nbrs->head->data);
-	eigrp_topology_table_delete(runtime, runtime->topology_table);
+	eigrp_topo_table_delete(runtime, runtime->topology_table);
 	eigrp_packet_interface_output_clear(ei);
 	eigrp_packet_queue_free(ei->obuf);
 	eigrp_list_delete(&runtime->topology_changes);

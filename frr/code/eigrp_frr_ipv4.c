@@ -475,7 +475,7 @@ int eigrpd_instance_variance_destroy(struct nb_cb_destroy_args *args)
 
 /*
  * XPath: /frr-eigrpd:eigrpd/instance/maximum-paths
- * Target: eigrp_topology_maximum_paths_update(EIGRP_SET)
+ * Target: eigrp_topo_max_paths_update(EIGRP_SET)
  * Description:
  * This is the `modify` northbound callback for the `maximum paths`
  * configuration node. FRR owns the YANG transaction here and resolves or
@@ -483,7 +483,7 @@ int eigrpd_instance_variance_destroy(struct nb_cb_destroy_args *args)
  * follows northbound event ordering so validation and prepare do not perform
  * protocol work that belongs in APPLY.
  * The runtime path terminates at
- * `eigrp_topology_maximum_paths_update(EIGRP_SET)` rather than duplicating
+ * `eigrp_topo_max_paths_update(EIGRP_SET)` rather than duplicating
  * EIGRP behavior in the FRR northbound layer. If named mode exposes the same
  * feature, it uses the real EIGRP-owned target below this boundary rather than
  * calling this classic FRR callback. Failures are returned through northbound
@@ -500,7 +500,7 @@ int eigrpd_instance_maximum_paths_modify(struct nb_cb_modify_args *args)
 	eigrp = nb_running_get_entry(args->dnode, NULL, true);
 	memset(&context, 0, sizeof(context));
 	context.runtime = eigrp;
-	return eigrp_topology_maximum_paths_update(
+	return eigrp_topo_max_paths_update(
 		       EIGRP_SET, &context,
 		       yang_dnode_get_uint8(args->dnode, NULL))
 			       == EIGRP_RESULT_SUCCESS
@@ -510,7 +510,7 @@ int eigrpd_instance_maximum_paths_modify(struct nb_cb_modify_args *args)
 
 /*
  * XPath: /frr-eigrpd:eigrpd/instance/maximum-paths
- * Target: eigrp_topology_maximum_paths_update(EIGRP_RESET, 0)
+ * Target: eigrp_topo_max_paths_update(EIGRP_RESET, 0)
  * Description:
  * This is the `destroy` northbound callback for the `maximum paths`
  * configuration node. FRR owns the YANG transaction here and resolves or
@@ -518,7 +518,7 @@ int eigrpd_instance_maximum_paths_modify(struct nb_cb_modify_args *args)
  * follows northbound event ordering so validation and prepare do not perform
  * protocol work that belongs in APPLY.
  * The runtime path terminates at
- * `eigrp_topology_maximum_paths_update(EIGRP_RESET, 0)` rather than duplicating
+ * `eigrp_topo_max_paths_update(EIGRP_RESET, 0)` rather than duplicating
  * EIGRP behavior in the FRR northbound layer. If named mode exposes the same
  * feature, it uses the real EIGRP-owned target below this boundary rather than
  * calling this classic FRR callback. Failures are returned through northbound
@@ -535,7 +535,7 @@ int eigrpd_instance_maximum_paths_destroy(struct nb_cb_destroy_args *args)
 	eigrp = nb_running_get_entry(args->dnode, NULL, true);
 	memset(&context, 0, sizeof(context));
 	context.runtime = eigrp;
-	return eigrp_topology_maximum_paths_update(EIGRP_RESET, &context, 0)
+	return eigrp_topo_max_paths_update(EIGRP_RESET, &context, 0)
 			       == EIGRP_RESULT_SUCCESS
 		       ? NB_OK
 		       : NB_ERR_INCONSISTENCY;

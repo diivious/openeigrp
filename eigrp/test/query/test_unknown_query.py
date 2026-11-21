@@ -18,7 +18,7 @@ def test_unknown_query_topology():
         gc_flag = "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections"
         subprocess.run(["cc", *flags, str(Path(__file__).with_suffix(".c")),
                         str(ROOT / "eigrp/test/metric/metric_link_stubs.c"),
-                        *(str(CODE / f) for f in ["eigrp_topology.c", "eigrp_neighbor.c", "eigrp_metric.c", "eigrp_table.c", "eigrp_list.c", "eigrp_prefix.c", "eigrp_eventlog.c", "eigrp_instance.c", "eigrp_log.c"]),
+                        *(str(CODE / f) for f in ["eigrp_topology.c", "eigrp_nexthop.c", "eigrp_neighbor.c", "eigrp_metric.c", "eigrp_table.c", "eigrp_list.c", "eigrp_prefix.c", "eigrp_eventlog.c", "eigrp_instance.c", "eigrp_log.c"]),
                         gc_flag,
                         "-I", str(ROOT / "eigrp/code"), str(ROOT / "libunix/code/eigrp_unix_format.c"),
                         "-o", str(binary)], check=True)

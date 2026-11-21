@@ -251,7 +251,7 @@ void eigrp_fsm_query_sent(eigrp_instance_t *eigrp,
 	/* Split horizon or neighbor churn can leave a diffusing computation
 	 * with no eligible peers after QUERY target selection.  That is already
 	 * the last-reply condition; do not strand the destination ACTIVE. */
-	route = eigrp_topology_route_read(prefix);
+	route = eigrp_topo_route_read(prefix);
 	/* No retained path still means the empty QUERY reply set has completed.
 	 * DUAL must transition to PASSIVE with an unreachable metric. */
 	msg.packet_type = EIGRP_OPC_REPLY;
@@ -439,7 +439,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 	enum metric_change change;
 
 	if (route == NULL) {
-		route = eigrp_topology_route_create(msg->adv_router->ei);
+		route = eigrp_topo_route_create(msg->adv_router->ei);
 		route->adv_router = msg->adv_router;
 		route->prefix = prefix;
 		msg->route = route;
@@ -449,7 +449,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 	 * Calculate resultant metrics and insert to correct position
 	 * in entries list
 	 */
-	change = eigrp_topology_update_distance(msg);
+	change = eigrp_topo_route_distance_update(msg);
 
 	/* Store for display later */
 	msg->change = change;
@@ -457,7 +457,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 	switch (actual_state) {
 	case EIGRP_FSM_STATE_PASSIVE: {
 		eigrp_route_descriptor_t *selected =
-			eigrp_topology_route_select(prefix);
+			eigrp_topo_route_select(prefix);
 
 		(void)eigrp_eventlog_msg_add(
 			msg->eigrp, EIGRP_EVENTLOG_OPCODE_DUAL_FIND_FS,
@@ -505,7 +505,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 	case EIGRP_FSM_STATE_ACTIVE_0: {
 		if (msg->packet_type == EIGRP_OPC_REPLY) {
 			eigrp_route_descriptor_t *selected =
-				eigrp_topology_route_select(prefix);
+				eigrp_topo_route_select(prefix);
 
 			eigrp_fsm_reply_status_remove(prefix,
 						      route->adv_router);
@@ -595,7 +595,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 
 		if (msg->packet_type == EIGRP_OPC_REPLY) {
 			eigrp_route_descriptor_t *selected =
-				eigrp_topology_route_select(prefix);
+				eigrp_topo_route_select(prefix);
 
 			eigrp_fsm_reply_status_remove(prefix,
 						      route->adv_router);
@@ -725,7 +725,7 @@ int eigrp_fsm_event_nq_fcn(eigrp_fsm_action_message_t *msg)
 	 * entering ACTIVE must not rewrite the destination successor, FD, RD,
 	 * current distance, or advertised metric. The triggering route metric
 	 * update was already recorded as route/CD state by
-	 * eigrp_topology_update_distance().
+	 * eigrp_topo_route_distance_update().
 	 */
 	uint8_t old_state = prefix->state;
 	prefix->state = EIGRP_FSM_STATE_ACTIVE_1;
@@ -795,13 +795,13 @@ eigrp_fsm_active_non_successor_reply_send(eigrp_instance_t *eigrp,
 	 * while the destination is ACTIVE; do not select a newly
 	 * learned/mutated route.
 	 */
-	for (route = eigrp_topology_route_iterator_first(prefix, &iterator);
-	     route; route = eigrp_topology_route_iterator_next(&iterator)) {
+	for (route = eigrp_topo_route_iterator_first(prefix, &iterator); route;
+	     route = eigrp_topo_route_iterator_next(&iterator)) {
 		if (!(route->flags & EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG)
 		    || route->distance == EIGRP_MAX_METRIC)
 			continue;
 
-		reply_route = eigrp_topology_route_create(route->ei);
+		reply_route = eigrp_topo_route_create(route->ei);
 		if (!reply_route)
 			break;
 		*reply_route = *route;
@@ -829,10 +829,10 @@ int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 {
 	eigrp_instance_t *eigrp = msg->eigrp;
 	eigrp_prefix_descriptor_t *prefix = msg->prefix;
-	eigrp_route_descriptor_t *route = eigrp_topology_route_select(prefix);
+	eigrp_route_descriptor_t *route = eigrp_topo_route_select(prefix);
 
 	if (!route)
-		route = eigrp_topology_route_read(prefix);
+		route = eigrp_topo_route_read(prefix);
 
 	if (prefix->state == EIGRP_FSM_STATE_PASSIVE) {
 		eigrp_metrics_t metric = {0};
@@ -864,8 +864,8 @@ int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 			prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 			eigrp_list_add(eigrp->topology_changes, prefix);
 		}
-		eigrp_topology_update_node_flags(eigrp, prefix);
-		eigrp_update_routing_table(eigrp, prefix);
+		eigrp_topo_pfx_flags_update(eigrp, prefix);
+		eigrp_topo_rib_update(eigrp, prefix);
 	}
 
 	if (msg->packet_type == EIGRP_OPC_QUERY) {
@@ -882,8 +882,7 @@ int eigrp_fsm_event_keep_state(eigrp_fsm_action_message_t *msg)
 	 * path here. Pending advertisement still prevents cleanup until the
 	 * packetizer has finished encoding the change set. */
 	if (prefix->state == EIGRP_FSM_STATE_PASSIVE)
-		eigrp_update_topology_table_prefix(eigrp, eigrp->topology_table,
-						   prefix);
+		eigrp_topo_pfx_update(eigrp, eigrp->topology_table, prefix);
 
 	return 1;
 }
@@ -892,7 +891,7 @@ int eigrp_fsm_event_lr(eigrp_fsm_action_message_t *msg)
 {
 	eigrp_instance_t *eigrp = msg->eigrp;
 	eigrp_prefix_descriptor_t *prefix = msg->prefix;
-	eigrp_route_descriptor_t *route = eigrp_topology_route_read(prefix);
+	eigrp_route_descriptor_t *route = eigrp_topo_route_read(prefix);
 
 	if (route) {
 		prefix->fdistance = prefix->distance = prefix->rdistance =
@@ -928,10 +927,9 @@ int eigrp_fsm_event_lr(eigrp_fsm_action_message_t *msg)
 	}
 	prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 	eigrp_list_add(eigrp->topology_changes, prefix);
-	eigrp_topology_update_node_flags(eigrp, prefix);
-	eigrp_update_routing_table(eigrp, prefix);
-	eigrp_update_topology_table_prefix(eigrp, eigrp->topology_table,
-					   prefix);
+	eigrp_topo_pfx_flags_update(eigrp, prefix);
+	eigrp_topo_rib_update(eigrp, prefix);
+	eigrp_topo_pfx_update(eigrp, eigrp->topology_table, prefix);
 	eigrp_update_send_all(eigrp, NULL);
 
 	return 1;
@@ -962,7 +960,7 @@ void eigrp_fsm_neighbor_down(eigrp_instance_t *eigrp,
 	if (prefix->rij && prefix->rij->count)
 		return;
 
-	route = eigrp_topology_route_read(prefix);
+	route = eigrp_topo_route_read(prefix);
 	msg.eigrp = eigrp;
 	msg.prefix = prefix;
 	msg.adv_router = nbr;
@@ -977,7 +975,7 @@ void eigrp_fsm_neighbor_down(eigrp_instance_t *eigrp,
 
 	if (prefix->state == EIGRP_FSM_STATE_ACTIVE_0
 	    || prefix->state == EIGRP_FSM_STATE_ACTIVE_2) {
-		if (eigrp_topology_route_select(prefix))
+		if (eigrp_topo_route_select(prefix))
 			eigrp_fsm_event_lr_fcs(&msg);
 		else
 			eigrp_fsm_event_lr_fcn(&msg);
@@ -1014,7 +1012,7 @@ int eigrp_fsm_event_lr_fcs(eigrp_fsm_action_message_t *msg)
 {
 	eigrp_instance_t *eigrp = msg->eigrp;
 	eigrp_prefix_descriptor_t *prefix = msg->prefix;
-	eigrp_route_descriptor_t *route = eigrp_topology_route_select(prefix);
+	eigrp_route_descriptor_t *route = eigrp_topo_route_select(prefix);
 
 	uint8_t old_state = prefix->state;
 
@@ -1039,10 +1037,9 @@ int eigrp_fsm_event_lr_fcs(eigrp_fsm_action_message_t *msg)
 	prefix->query_origin = NULL;
 	prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 	eigrp_list_add(eigrp->topology_changes, prefix);
-	eigrp_topology_update_node_flags(eigrp, prefix);
-	eigrp_update_routing_table(eigrp, prefix);
-	eigrp_update_topology_table_prefix(eigrp, eigrp->topology_table,
-					   prefix);
+	eigrp_topo_pfx_flags_update(eigrp, prefix);
+	eigrp_topo_rib_update(eigrp, prefix);
+	eigrp_topo_pfx_update(eigrp, eigrp->topology_table, prefix);
 	eigrp_update_send_all(eigrp, NULL);
 
 	return 1;

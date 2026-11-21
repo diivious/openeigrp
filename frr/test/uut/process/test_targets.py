@@ -89,11 +89,11 @@ def test_metric_weights_variance_and_maximum_paths_callbacks_reach_runtime_targe
     maximum_paths = function_body(northbound, "eigrpd_named_maximum_paths_modify")
     weight_target = function_body(metric, "eigrp_metric_weights_update")
     variance_target = function_body(metric, "eigrp_metric_variance_update")
-    paths_target = function_body(topology, "eigrp_topology_maximum_paths_update")
+    paths_target = function_body(topology, "eigrp_topo_max_paths_update")
 
     assert "eigrp_metric_weights_update(EIGRP_SET, &context, &weights)" in weights
     assert "eigrp_metric_variance_update(EIGRP_SET, &context" in variance
-    assert "eigrp_topology_maximum_paths_update(EIGRP_SET, " in maximum_paths
+    assert "eigrp_topo_max_paths_update(EIGRP_SET, " in maximum_paths
 
     for index in range(6):
         assert f"context->runtime->k_values[{index}]" in weight_target

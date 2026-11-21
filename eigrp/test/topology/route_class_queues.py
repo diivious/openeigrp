@@ -17,7 +17,7 @@ def test_both_route_queues_use_cd_comparator():
 
 
 def test_selector_searches_internal_then_external_and_fc_before_accept():
-    start = TOPOLOGY.index("eigrp_topology_route_select(")
+    start = TOPOLOGY.index("eigrp_topo_route_select(")
     end = TOPOLOGY.index("/*\n * Returns new topology route", start)
     selector = TOPOLOGY[start:end]
     assert "for (q = 0; q < 2; q++)" in selector
@@ -26,8 +26,8 @@ def test_selector_searches_internal_then_external_and_fc_before_accept():
 
 
 def test_rib_type_is_selected_path_type_not_prefix_nt():
-    start = TOPOLOGY.index("void eigrp_update_routing_table(")
-    end = TOPOLOGY.index("void eigrp_topology_neighbor_down", start)
+    start = TOPOLOGY.index("void eigrp_topo_rib_update(")
+    end = TOPOLOGY.index("void eigrp_topo_nbr_down", start)
     rib = TOPOLOGY[start:end]
-    assert "eigrp_topology_route_external(route)" in rib
+    assert "eigrp_topo_route_external(route)" in rib
     assert "prefix->nt == EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL" not in rib

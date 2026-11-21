@@ -51,12 +51,12 @@ static void init(void)
 static eigrp_prefix_descriptor_t *get(unsigned id)
 {
 	eigrp_prefix_t p = dest(id);
-	return eigrp_topology_table_lookup(runtime.topology_table, &p);
+	return eigrp_topo_table_lookup(runtime.topology_table, &p);
 }
 
 static void retained(eigrp_prefix_descriptor_t *p, eigrp_nbr_t *n)
 {
-	eigrp_route_descriptor_t *r = eigrp_prefix_descriptor_lookup(p, n);
+	eigrp_route_descriptor_t *r = eigrp_topo_route_lookup(p, n);
 	assert(r);
 	assert(r->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG);
 	assert(!(r->flags
@@ -77,17 +77,17 @@ int main(void)
 	       && p->fdistance == EIGRP_MAX_METRIC);
 	retained(p, &peer);
 	retained(p, &peer2);
-	assert(!eigrp_topology_route_select(p));
-	assert(!eigrp_topology_route_read(p));
+	assert(!eigrp_topo_route_select(p));
+	assert(!eigrp_topo_route_read(p));
 	assert(rib_installs == 0);
 	assert(peer.limit_prefix_count == 1 && peer2.limit_prefix_count == 1);
 
 	/* Poisoned UPDATE removes only the sender's un-elected observation. */
 	receive_peer(EIGRP_OPC_UPDATE, &peer2, 10, UINT32_MAX);
 	p = get(10);
-	assert(p && !eigrp_prefix_descriptor_lookup(p, &peer2));
+	assert(p && !eigrp_topo_route_lookup(p, &peer2));
 	retained(p, &peer);
-	assert(!eigrp_topology_route_select(p));
+	assert(!eigrp_topo_route_select(p));
 	assert(!rib_installs);
 	assert(peer2.limit_prefix_count == 0 && peer2.topo_refs == 0);
 
@@ -96,10 +96,10 @@ int main(void)
 	receive_peer(EIGRP_OPC_UPDATE, &peer2, 10, 50);
 	p = get(10);
 	retained(p, &peer);
-	selected = eigrp_prefix_descriptor_lookup(p, &peer2);
+	selected = eigrp_topo_route_lookup(p, &peer2);
 	assert(selected
 	       && !(selected->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG));
-	assert(eigrp_topology_route_select(p) == selected);
+	assert(eigrp_topo_route_select(p) == selected);
 	assert(selected->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
 	assert(p->distance == selected->distance);
 	assert(rib_installs > 0);
@@ -110,8 +110,8 @@ int main(void)
 	p = get(10);
 	if (p) {
 		retained(p, &peer);
-		assert(!eigrp_topology_route_select(p));
-		assert(!(eigrp_prefix_descriptor_lookup(p, &peer)->flags
+		assert(!eigrp_topo_route_select(p));
+		assert(!(eigrp_topo_route_lookup(p, &peer)->flags
 			 & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG));
 	}
 
@@ -139,7 +139,7 @@ int main(void)
 	receive_peer(EIGRP_OPC_REPLY, &peer, 13, 25);
 	p = get(13);
 	assert(p && p->state == EIGRP_FSM_STATE_PASSIVE);
-	selected = eigrp_prefix_descriptor_lookup(p, &peer);
+	selected = eigrp_topo_route_lookup(p, &peer);
 	assert(selected
 	       && !(selected->flags & EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG));
 	assert(selected->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
@@ -153,10 +153,10 @@ int main(void)
 	receive_peer(EIGRP_OPC_REPLY, &peer2, 14, UINT32_MAX);
 	p = get(14);
 	if (p) {
-		selected = eigrp_prefix_descriptor_lookup(p, &peer2);
+		selected = eigrp_topo_route_lookup(p, &peer2);
 		if (selected)
 			retained(p, &peer2);
-		assert(!eigrp_topology_route_select(p));
+		assert(!eigrp_topo_route_select(p));
 	}
 	finish();
 	init();
@@ -169,14 +169,14 @@ int main(void)
 	p = get(21);
 	assert(p);
 	retained(p, &peer2);
-	eigrp_topology_neighbor_down(&runtime, &peer);
+	eigrp_topo_nbr_down(&runtime, &peer);
 	assert(!get(20));
 	p = get(21);
-	assert(p && !eigrp_prefix_descriptor_lookup(p, &peer));
+	assert(p && !eigrp_topo_route_lookup(p, &peer));
 	retained(p, &peer2);
 	assert(peer.limit_prefix_count == 0 && peer.topo_refs == 0);
 	assert(rib_installs == 0);
-	eigrp_topology_neighbor_down(&runtime, &peer2);
+	eigrp_topo_nbr_down(&runtime, &peer2);
 	assert(!get(21));
 	assert(peer2.limit_prefix_count == 0 && peer2.topo_refs == 0);
 	finish();

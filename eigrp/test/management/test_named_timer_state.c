@@ -108,14 +108,14 @@ static void check(eigrp_afi_t afi)
 	nbr.t_limit_reset = &reset;
 	nbr.limit_restart_due_msec = restart.due_msec;
 	nbr.limit_reset_due_msec = reset.due_msec;
-	prefix = eigrp_topology_prefix_create();
+	prefix = eigrp_topo_pfx_create();
 	assert(prefix);
 	prefix->destination.address.afi = afi;
 	prefix->destination.prefix_length = afi == EIGRP_AFI_IPV4 ? 24 : 64;
 	assert(inet_pton(family, dest, prefix->destination.address.bytes) == 1);
 	prefix->state = EIGRP_FSM_STATE_ACTIVE_1;
 	prefix->t_active = &active;
-	eigrp_prefix_descriptor_add(runtime.topology_table, prefix);
+	eigrp_topo_pfx_add(runtime.topology_table, prefix);
 
 	assert(eigrp_timer_state_iterate(&context, timer_check, &seen)
 	       == EIGRP_RESULT_SUCCESS);

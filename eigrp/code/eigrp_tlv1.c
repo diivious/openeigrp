@@ -251,7 +251,7 @@ static eigrp_route_descriptor_t *eigrp_tlv1_decoder(eigrp_instance_t *eigrp,
 	packet_end = eigrp_stream_get_endp(pkt);
 	eigrp_stream_set_endp(pkt, tlv_end);
 
-	route = eigrp_topology_route_create(nbr->ei);
+	route = eigrp_topo_route_create(nbr->ei);
 	if (!route) {
 		eigrp_stream_set_endp(pkt, packet_end);
 		eigrp_tlv1_decode_skip(pkt, tlv_end);
@@ -302,7 +302,7 @@ malformed:
 			"EIGRP TLV: Neighbor(%s) malformed TLV type=%u length=%u decoded=%u",
 			eigrp_print_addr(&nbr->src), type, length, bytes);
 	}
-	eigrp_topology_route_free(route);
+	eigrp_topo_route_free(route);
 	eigrp_stream_set_endp(pkt, packet_end);
 	eigrp_tlv1_decode_abort(pkt);
 	return NULL;

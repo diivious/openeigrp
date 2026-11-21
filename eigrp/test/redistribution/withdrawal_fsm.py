@@ -23,7 +23,7 @@ def withdrawal_binary(tmp_path_factory):
     compiler = os.environ.get("CC", "cc")
     sources = [
         "eigrp_redistribute.c",
-        "eigrp_topology.c",
+        "eigrp_topology.c", "eigrp_nexthop.c",
         "eigrp_fsm.c",
         "eigrp_timer.c",
         "eigrp_metric.c",

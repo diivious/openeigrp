@@ -71,7 +71,7 @@ static uint32_t eigrp_stat_nbr_prefix_count(eigrp_instance_t *runtime,
 		prefix = route_node->info;
 		if (!prefix)
 			continue;
-		if (eigrp_prefix_descriptor_lookup(prefix, neighbor))
+		if (eigrp_topo_route_lookup(prefix, neighbor))
 			count++;
 	}
 	return count;

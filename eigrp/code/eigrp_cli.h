@@ -221,24 +221,22 @@ eigrp_metric_maximum_hops_update(eigrp_operation_t operation,
 				 uint8_t maximum_hops);
 eigrp_result_t eigrp_metric_version_update(eigrp_operation_t operation,
 					   eigrp_instance_context_t *context);
-eigrp_result_t eigrp_topology_create(eigrp_instance_context_t *context);
-eigrp_result_t eigrp_topology_delete(eigrp_instance_context_t *context);
-eigrp_result_t eigrp_topology_default_information_update(
-	eigrp_operation_t operation, eigrp_instance_context_t *context,
-	eigrp_default_information_direction_t direction,
-	const char *access_list);
+eigrp_result_t eigrp_topo_config_create(eigrp_instance_context_t *context);
+eigrp_result_t eigrp_topo_config_delete(eigrp_instance_context_t *context);
 eigrp_result_t
-eigrp_topology_max_prefix_update(eigrp_operation_t operation,
-				 eigrp_instance_context_t *context,
-				 const eigrp_prefix_limit_t *limit);
-eigrp_result_t
-eigrp_topology_maximum_paths_update(eigrp_operation_t operation,
-				    eigrp_instance_context_t *context,
-				    uint8_t maximum_paths);
-eigrp_result_t
-eigrp_topology_clear(eigrp_instance_context_t *context,
-		     const eigrp_topology_clear_request_t *request,
-		     size_t *affected_count);
+eigrp_topo_default_info_update(eigrp_operation_t operation,
+			       eigrp_instance_context_t *context,
+			       eigrp_default_information_direction_t direction,
+			       const char *access_list);
+eigrp_result_t eigrp_topo_max_pfx_update(eigrp_operation_t operation,
+					 eigrp_instance_context_t *context,
+					 const eigrp_prefix_limit_t *limit);
+eigrp_result_t eigrp_topo_max_paths_update(eigrp_operation_t operation,
+					   eigrp_instance_context_t *context,
+					   uint8_t maximum_paths);
+eigrp_result_t eigrp_topo_clear(eigrp_instance_context_t *context,
+				const eigrp_topology_clear_request_t *request,
+				size_t *affected_count);
 
 /* Filtering and redistribution. */
 eigrp_result_t eigrp_offset_add(eigrp_instance_context_t *context,

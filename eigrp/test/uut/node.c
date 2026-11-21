@@ -232,8 +232,8 @@ static void state_emit(void)
 		(void)eigrp_stat_accounting_iterate(&c, &total, accounting_cb,
 						    NULL);
 	}
-	(void)eigrp_topology_state_iterate(af, runtime, NULL, true, topo_pfx_cb,
-					   topo_route_cb, NULL);
+	(void)eigrp_topo_pfx_routes_iterate(af, runtime, NULL, true,
+					    topo_pfx_cb, topo_route_cb, NULL);
 	eigrp_unix_rib_route_walk(rib_cb, NULL);
 	eigrp_unix_rib_source_walk(source_cb, NULL);
 	{
@@ -382,13 +382,26 @@ static void events(void)
 
 /* Exercise the real host-RIB and redistribution targets, not an FSM shim. */
 static eigrp_result_t uut_source_route_change(const char *prefix_name,
-					      uint64_t metric, bool add)
+					      uint64_t metric, bool add,
+					      const char *gateway)
 {
 	eigrp_rib_route_t source = {0};
+	eigrp_rib_nexthop_t hop = {0};
+	int family;
 
 	source.prefix = prefix_parse(prefix_name);
 	source.redist.source.protocol = EIGRP_REDIST_PROTOCOL_STATIC;
 	source.metric = metric;
+	if (add && gateway && *gateway) {
+		family = source.prefix.address.afi == EIGRP_AFI_IPV4 ? AF_INET
+								     : AF_INET6;
+		if (inet_pton(family, gateway, hop.gateway.bytes) != 1)
+			return EIGRP_RESULT_INVALID_ARGUMENT;
+		hop.gateway_present = true;
+		hop.gateway.afi = source.prefix.address.afi;
+		source.nexthops = &hop;
+		source.nexthop_count = 1;
+	}
 	return add ? eigrp_unix_rib_source_route_update(&source)
 		   : eigrp_unix_rib_source_route_remove(&source);
 }
@@ -644,10 +657,8 @@ static eigrp_result_t uut_process_limit_config(eigrp_instance_t *e, void *arg)
 	if (result != EIGRP_RESULT_SUCCESS)
 		return result;
 	return request->maximum
-		       ? eigrp_topology_max_prefix_update(EIGRP_SET, &context,
-							  &limit)
-		       : eigrp_topology_max_prefix_update(EIGRP_RESET, &context,
-							  NULL);
+		       ? eigrp_topo_max_pfx_update(EIGRP_SET, &context, &limit)
+		       : eigrp_topo_max_pfx_update(EIGRP_RESET, &context, NULL);
 }
 
 static eigrp_result_t uut_process_limit_clear(eigrp_instance_t *e, void *arg)
@@ -789,7 +800,7 @@ static eigrp_result_t uut_clear_topology(eigrp_instance_t *e, void *arg)
 		prefix = prefix_parse(input->target);
 		request.destination = &prefix;
 	}
-	return eigrp_topology_clear(&context, &request, &affected);
+	return eigrp_topo_clear(&context, &request, &affected);
 }
 
 static eigrp_result_t uut_clear_eventlog(eigrp_instance_t *e, void *arg)
@@ -1288,9 +1299,12 @@ int main(int argc, char **argv)
 		} else if (!strcmp(verb, "SOURCE-ADD")
 			   || !strcmp(verb, "SOURCE-DEL")) {
 			unsigned long long metric = 1;
+			char gateway[INET6_ADDRSTRLEN] = {0};
 			if (!strcmp(verb, "SOURCE-ADD")) {
-				if (sscanf(line, "%*s %*s %llu", &metric)
-				    != 1) {
+				int fields = sscanf(line, "%*s %*s %llu %45s",
+						    &metric, gateway);
+
+				if (fields < 1) {
 					puts("RESULT|invalid-metric");
 					fflush(stdout);
 					continue;
@@ -1299,7 +1313,7 @@ int main(int argc, char **argv)
 			printf("RESULT|%d\n",
 			       (int)uut_source_route_change(
 				       ifname, (uint64_t)metric,
-				       !strcmp(verb, "SOURCE-ADD")));
+				       !strcmp(verb, "SOURCE-ADD"), gateway));
 			fflush(stdout);
 		} else if (!strcmp(verb, "REDIST-DEFAULT")
 			   || !strcmp(verb, "REDIST-METRIC")) {

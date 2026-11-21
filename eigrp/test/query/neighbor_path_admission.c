@@ -166,7 +166,7 @@ void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *e,
 	(void)e;
 	/* The standalone unit fixture delivers packetizer work synchronously.
 	 * Retired prefixes have no outstanding references at this boundary. */
-	eigrp_topology_prefix_free(p);
+	eigrp_topo_pfx_free(p);
 }
 void eigrp_sys_event_cancel(eigrp_event_t **owner)
 {
@@ -194,9 +194,9 @@ void eigrp_packetizer_enqueue(eigrp_instance_t *e,
 	if (work->opcode == EIGRP_OPC_REPLY)
 		replies++;
 	if (work->flags & EIGRP_PACKETIZER_WORK_F_OWN_ROUTE)
-		eigrp_topology_route_free(work->route);
+		eigrp_topo_route_free(work->route);
 	if (work->flags & EIGRP_PACKETIZER_WORK_F_OWN_PREFIX)
-		eigrp_topology_prefix_free(work->prefix);
+		eigrp_topo_pfx_free(work->prefix);
 	free(work);
 }
 
@@ -234,7 +234,7 @@ static eigrp_metrics_t metric(void)
 }
 static eigrp_route_descriptor_t *wire(unsigned id, bool poison)
 {
-	eigrp_route_descriptor_t *r = eigrp_topology_route_create(&link);
+	eigrp_route_descriptor_t *r = eigrp_topo_route_create(&link);
 	assert(r);
 	r->type = EIGRP_TLV_IPv4_INT;
 	r->dest = dest(id);
@@ -245,8 +245,8 @@ static eigrp_route_descriptor_t *wire(unsigned id, bool poison)
 }
 static eigrp_prefix_descriptor_t *local(unsigned id)
 {
-	eigrp_prefix_descriptor_t *p = eigrp_topology_prefix_create();
-	eigrp_route_descriptor_t *r = eigrp_topology_route_create(&link);
+	eigrp_prefix_descriptor_t *p = eigrp_topo_pfx_create();
+	eigrp_route_descriptor_t *r = eigrp_topo_route_create(&link);
 	assert(p && r);
 	p->destination = dest(id);
 	p->nt = EIGRP_TOPOLOGY_TYPE_CONNECTED;
@@ -260,8 +260,8 @@ static eigrp_prefix_descriptor_t *local(unsigned id)
 	r->flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 	p->fdistance = p->distance = p->rdistance = r->distance;
 	p->reported_metric = r->metric;
-	eigrp_prefix_descriptor_add(runtime.topology_table, p);
-	eigrp_route_descriptor_add(&runtime, p, r);
+	eigrp_topo_pfx_add(runtime.topology_table, p);
+	eigrp_topo_route_add(&runtime, p, r);
 	return p;
 }
 static void receive_one(unsigned opcode, unsigned id, bool poison)
@@ -293,9 +293,11 @@ static void start(bool warning_only)
 	runtime.af_vectors.afi = EIGRP_AFI_IPV4;
 	runtime.af_vectors.classic_internal_tlv_type = EIGRP_TLV_IPv4_INT;
 	runtime.af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
-	runtime.topology_table = eigrp_topology_table_create();
+	runtime.topology_table = eigrp_topo_table_create();
 	runtime.topology_changes = eigrp_list_create();
 	assert(runtime.topology_table && runtime.topology_changes);
+	link.ifindex = 7;
+	link.address.address.afi = EIGRP_AFI_IPV4;
 	link.params.bandwidth = EIGRP_INTF_FASTETH_BW;
 	link.params.delay = EIGRP_INTF_ETH_DELAY;
 	link.params.reliability = EIGRP_INTF_REL_100;
@@ -317,7 +319,7 @@ static void start(bool warning_only)
 }
 static void finish(void)
 {
-	eigrp_topology_table_delete(&runtime, runtime.topology_table);
+	eigrp_topo_table_delete(&runtime, runtime.topology_table);
 	eigrp_list_delete(&runtime.topology_changes);
 	eigrp_nbr_policy_delete_all(&policy);
 }
@@ -333,29 +335,27 @@ static void query_cases(bool warning_only)
 	eigrp_prefix_descriptor_t *p1 = local(1), *p2 = local(2),
 				  *p3 = local(3);
 	receive_one(EIGRP_OPC_QUERY, 1, false);
-	assert(eigrp_prefix_descriptor_lookup(p1, &peer));
+	assert(eigrp_topo_route_lookup(p1, &peer));
 	assert(peer.limit_prefix_count == 1);
 	receive_one(EIGRP_OPC_QUERY, 1, false);
 	assert(peer.limit_prefix_count == 1);
 	/* A poisoned QUERY introduces no path, even when at capacity. */
 	receive_one(EIGRP_OPC_QUERY, 3, true);
-	assert(!eigrp_prefix_descriptor_lookup(p3, &peer));
+	assert(!eigrp_topo_route_lookup(p3, &peer));
 	assert(peer.limit_prefix_count == 1);
 	assert(peer.limit_state == EIGRP_NBR_LIMIT_NONE);
 	receive_one(EIGRP_OPC_QUERY, 2, false);
-	assert((eigrp_prefix_descriptor_lookup(p2, &peer) != NULL)
-	       == warning_only);
+	assert((eigrp_topo_route_lookup(p2, &peer) != NULL) == warning_only);
 	assert(peer.limit_prefix_count == (warning_only ? 2U : 1U));
 	assert(replies == 4 && acks == 4);
 	assert(p2->state == EIGRP_FSM_STATE_PASSIVE);
 	if (warning_only) {
-		eigrp_route_descriptor_delete(
-			&runtime, p2,
-			eigrp_prefix_descriptor_lookup(p2, &peer));
+		eigrp_topo_route_remove(&runtime, p2,
+					eigrp_topo_route_lookup(p2, &peer));
 		assert(peer.limit_prefix_count == 1);
 	}
-	eigrp_route_descriptor_delete(
-		&runtime, p1, eigrp_prefix_descriptor_lookup(p1, &peer));
+	eigrp_topo_route_remove(&runtime, p1,
+				eigrp_topo_route_lookup(p1, &peer));
 	assert(peer.limit_prefix_count == 0);
 	/* Once the rejected peer's suspension has cleared, a new path may
 	 * enter. */
@@ -363,7 +363,7 @@ static void query_cases(bool warning_only)
 	peer.limit_cleanup_pending = false;
 	receive_one(EIGRP_OPC_QUERY, 2, false);
 	assert(peer.limit_prefix_count == 1);
-	assert(eigrp_prefix_descriptor_lookup(p2, &peer));
+	assert(eigrp_topo_route_lookup(p2, &peer));
 	finish();
 }
 static void reply_cases(bool warning_only)
@@ -376,7 +376,7 @@ static void reply_cases(bool warning_only)
 	assert(p1->state == EIGRP_FSM_STATE_PASSIVE);
 	assert(!eigrp_fsm_reply_status_pending(p1, &peer));
 	assert(peer.limit_prefix_count == 1);
-	assert(eigrp_prefix_descriptor_lookup(p1, &peer));
+	assert(eigrp_topo_route_lookup(p1, &peer));
 	/* PASSIVE REPLY must not duplicate or revive any descriptor. */
 	receive_one(EIGRP_OPC_REPLY, 1, false);
 	assert(peer.limit_prefix_count == 1);
@@ -385,24 +385,22 @@ static void reply_cases(bool warning_only)
 	receive_one(EIGRP_OPC_REPLY, 3, true);
 	assert(!eigrp_fsm_reply_status_pending(p3, &peer));
 	assert(p3->state == EIGRP_FSM_STATE_PASSIVE);
-	assert(!eigrp_prefix_descriptor_lookup(p3, &peer));
+	assert(!eigrp_topo_route_lookup(p3, &peer));
 	assert(peer.limit_prefix_count == 1);
 	assert(peer.limit_state == EIGRP_NBR_LIMIT_NONE);
 	active(p2);
 	receive_one(EIGRP_OPC_REPLY, 2, false);
 	assert(!eigrp_fsm_reply_status_pending(p2, &peer));
 	assert(p2->state == EIGRP_FSM_STATE_PASSIVE);
-	assert((eigrp_prefix_descriptor_lookup(p2, &peer) != NULL)
-	       == warning_only);
+	assert((eigrp_topo_route_lookup(p2, &peer) != NULL) == warning_only);
 	assert(peer.limit_prefix_count == (warning_only ? 2U : 1U));
 	if (warning_only) {
-		eigrp_route_descriptor_delete(
-			&runtime, p2,
-			eigrp_prefix_descriptor_lookup(p2, &peer));
+		eigrp_topo_route_remove(&runtime, p2,
+					eigrp_topo_route_lookup(p2, &peer));
 		assert(peer.limit_prefix_count == 1);
 	}
-	eigrp_route_descriptor_delete(
-		&runtime, p1, eigrp_prefix_descriptor_lookup(p1, &peer));
+	eigrp_topo_route_remove(&runtime, p1,
+				eigrp_topo_route_lookup(p1, &peer));
 	assert(peer.limit_prefix_count == 0);
 	peer.limit_state = EIGRP_NBR_LIMIT_NONE;
 	peer.limit_cleanup_pending = false;
@@ -410,7 +408,7 @@ static void reply_cases(bool warning_only)
 	receive_one(EIGRP_OPC_REPLY, 2, false);
 	assert(p2->state == EIGRP_FSM_STATE_PASSIVE);
 	assert(peer.limit_prefix_count == 1);
-	assert(eigrp_prefix_descriptor_lookup(p2, &peer));
+	assert(eigrp_topo_route_lookup(p2, &peer));
 	finish();
 }
 /* Filter precedes admission for finite QUERY, but an unanswered
@@ -421,13 +419,13 @@ static void filtered_query_case(void)
 	eigrp_prefix_t target = dest(7);
 	deny_inbound = true;
 	receive_one(EIGRP_OPC_QUERY, 7, false);
-	assert(!eigrp_topology_table_lookup(runtime.topology_table, &target));
+	assert(!eigrp_topo_table_lookup(runtime.topology_table, &target));
 	assert(peer.limit_prefix_count == 0
 	       && peer.limit_state == EIGRP_NBR_LIMIT_NONE);
 	assert(replies == 1 && acks == 1);
 	deny_inbound = false;
 	receive_one(EIGRP_OPC_QUERY, 7, false);
-	assert(eigrp_topology_table_lookup(runtime.topology_table, &target));
+	assert(eigrp_topo_table_lookup(runtime.topology_table, &target));
 	assert(peer.limit_prefix_count == 1);
 	finish();
 }
@@ -440,14 +438,14 @@ static void filtered_reply_case(void)
 	receive_one(EIGRP_OPC_REPLY, 7, false);
 	assert(!eigrp_fsm_reply_status_pending(p, &peer));
 	assert(p->state == EIGRP_FSM_STATE_PASSIVE);
-	assert(!eigrp_prefix_descriptor_lookup(p, &peer));
+	assert(!eigrp_topo_route_lookup(p, &peer));
 	assert(peer.limit_prefix_count == 0
 	       && peer.limit_state == EIGRP_NBR_LIMIT_NONE);
 	deny_inbound = false;
 	active(p);
 	receive_one(EIGRP_OPC_REPLY, 7, false);
 	assert(peer.limit_prefix_count == 1);
-	assert(eigrp_prefix_descriptor_lookup(p, &peer));
+	assert(eigrp_topo_route_lookup(p, &peer));
 	finish();
 }
 /* A finite QUERY for an unknown destination is not an eligible UPDATE.
@@ -463,15 +461,15 @@ static void query_process_limit_case(void)
 	policy.topology_maximum_prefix_configured = true;
 	policy.topology_maximum_prefix.maximum = 1;
 	receive_one(EIGRP_OPC_QUERY, 2, false);
-	held = eigrp_topology_table_lookup(runtime.topology_table, &target);
+	held = eigrp_topo_table_lookup(runtime.topology_table, &target);
 	assert(held && held->fdistance == EIGRP_MAX_METRIC);
-	assert(eigrp_prefix_descriptor_lookup(held, &peer));
+	assert(eigrp_topo_route_lookup(held, &peer));
 	assert(held->internal_routes->count == 1);
 	assert(af_limit_incidents == 0);
 	assert(runtime.eigrp_pfxlimits_af_state == 0);
 	receive_one(EIGRP_OPC_QUERY, 2, false);
 	assert(af_limit_incidents == 0);
-	assert(!eigrp_topology_prefix_admit(&runtime, &target));
+	assert(!eigrp_topo_pfx_admit(&runtime, &target));
 	assert(af_limit_incidents == 1);
 	finish();
 }

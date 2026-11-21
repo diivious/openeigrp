@@ -78,14 +78,14 @@ static void check(eigrp_afi_t afi, uint16_t internal_type,
 			 family == AF_INET ? (void *)&neighbor.src.ip.v4
 					   : (void *)&neighbor.src.ip.v6)
 	       == 1);
-	prefix = eigrp_topology_prefix_create();
+	prefix = eigrp_topo_pfx_create();
 	assert(prefix);
 	prefix->destination.address.afi = afi;
 	prefix->destination.prefix_length = afi == EIGRP_AFI_IPV4 ? 24 : 64;
 	assert(inet_pton(family, dest, prefix->destination.address.bytes) == 1);
 	prefix->fdistance = 25600;
 	for (unsigned i = 0; i < 3; i++) {
-		route[i] = eigrp_topology_route_create(NULL);
+		route[i] = eigrp_topo_route_create(NULL);
 		assert(route[i]);
 		route[i]->type = i == 0 ? internal_type : external_type;
 		route[i]->adv_router = i == 2 ? &neighbor : &self;
@@ -98,9 +98,9 @@ static void check(eigrp_afi_t afi, uint16_t internal_type,
 					     : prefix->external_routes,
 				      route[i]));
 	}
-	eigrp_prefix_descriptor_add(runtime.topology_table, prefix);
-	assert(eigrp_topology_state_iterate(NULL, &runtime, NULL, true,
-					    prefix_read, route_read, &seen)
+	eigrp_topo_pfx_add(runtime.topology_table, prefix);
+	assert(eigrp_topo_pfx_routes_iterate(NULL, &runtime, NULL, true,
+					     prefix_read, route_read, &seen)
 	       == EIGRP_RESULT_SUCCESS);
 	assert(seen.count == 3 && seen.connected == 1 && seen.redistributed == 1
 	       && seen.learned_external == 1);

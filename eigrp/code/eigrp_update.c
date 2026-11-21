@@ -31,6 +31,7 @@
 #include "eigrp_fsm.h"
 #include "eigrp_filter.h"
 #include "eigrp_packetizer.h"
+#include "eigrp_nexthop.h"
 #include "eigrp_prefix.h"
 
 #include "eigrp_debug.h"
@@ -139,7 +140,7 @@ static void eigrp_update_receive_GR_ask(eigrp_instance_t *eigrp,
 		fsm_msg.metrics.delay = EIGRP_MAX_METRIC;
 
 		eigrp_route_descriptor_t *route =
-			eigrp_prefix_descriptor_lookup(prefix, nbr);
+			eigrp_topo_route_lookup(prefix, nbr);
 
 		fsm_msg.packet_type = EIGRP_OPC_UPDATE;
 		fsm_msg.eigrp = eigrp;
@@ -209,7 +210,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		if (nbr->state == EIGRP_NEIGHBOR_UP
 		    && !nbr->peer_init_resync_pending) {
 			nbr->peer_init_resync_prefixes =
-				eigrp_nbr_prefixes_lookup(eigrp, nbr);
+				eigrp_topo_nbr_pfx_lookup(eigrp, nbr);
 			/* Prefix reconciliation must remain O(n) at scale, not
 			 * O(n^2) for 100K-route peers. */
 			if (nbr->peer_init_resync_prefixes)
@@ -284,7 +285,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				eigrp_print_addr(&nbr->src), nbr->ei->name);
 
 		/* get all prefixes from neighbor from topology table */
-		nbr_prefixes = eigrp_nbr_prefixes_lookup(eigrp, nbr);
+		nbr_prefixes = eigrp_topo_nbr_pfx_lookup(eigrp, nbr);
 		graceful_restart = 1;
 		graceful_restart_final = 1;
 
@@ -302,7 +303,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				eigrp_print_addr(&nbr->src), nbr->ei->name);
 
 		/* get all prefixes from neighbor from topology table */
-		nbr_prefixes = eigrp_nbr_prefixes_lookup(eigrp, nbr);
+		nbr_prefixes = eigrp_topo_nbr_pfx_lookup(eigrp, nbr);
 
 		/* save prefixes to neighbor for later use */
 		nbr->nbr_gr_prefixes = nbr_prefixes;
@@ -368,7 +369,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			eigrp_nbr_state_update_reason(
 				EIGRP_SET, nbr, EIGRP_NEIGHBOR_DOWN,
 				EIGRP_EVENTLOG_NBR_PEER_RESTART);
-			eigrp_topology_neighbor_down(nbr->ei->eigrp, nbr);
+			eigrp_topo_nbr_down(nbr->ei->eigrp, nbr);
 			nbr->peer_init_sequence_number =
 				ntohl(eigrph->sequence);
 			nbr->peer_init_retransmit_eligible =
@@ -420,8 +421,8 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 
 		// should have got route off the packet, but one never knows
 		if (route) {
-			prefix = eigrp_topology_table_lookup(
-				eigrp->topology_table, &route->dest);
+			prefix = eigrp_topo_table_lookup(eigrp->topology_table,
+							 &route->dest);
 			/*if exists it comes to DUAL*/
 			if (prefix != NULL) {
 				/* remove received prefix from neighbor prefix
@@ -439,8 +440,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				eigrp_route_descriptor_t *received_route =
 					route;
 				eigrp_route_descriptor_t *topology_route =
-					eigrp_prefix_descriptor_lookup(prefix,
-								       nbr);
+					eigrp_topo_route_lookup(prefix, nbr);
 				bool free_received_route = false;
 				eigrp_metrics_t ingress_metric =
 					received_route->metric;
@@ -465,8 +465,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				 * without a route to withdraw. Do not admit a
 				 * poisoned descriptor. */
 				if (!topology_route && unreachable) {
-					eigrp_topology_route_free(
-						received_route);
+					eigrp_topo_route_free(received_route);
 					continue;
 				}
 				/* A finite refresh of an accepted, reachable
@@ -483,12 +482,11 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 							  eigrp, nbr,
 							  &received_route->dest,
 							  &ingress_metric)
-						: !eigrp_topology_prefix_admit(
+						: !eigrp_topo_pfx_admit(
 							  eigrp,
 							  &received_route
 								   ->dest))) {
-					eigrp_topology_route_free(
-						received_route);
+					eigrp_topo_route_free(received_route);
 					continue;
 				}
 
@@ -499,14 +497,14 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 					if (unreachable
 					    && (topology_route->flags
 						& EIGRP_ROUTE_DESCRIPTOR_QUERY_ONLY_FLAG)) {
-						eigrp_route_descriptor_delete(
+						eigrp_topo_route_remove(
 							eigrp, prefix,
 							topology_route);
-						eigrp_update_topology_table_prefix(
+						eigrp_topo_pfx_update(
 							eigrp,
 							eigrp->topology_table,
 							prefix);
-						eigrp_topology_route_free(
+						eigrp_topo_route_free(
 							received_route);
 						continue;
 					}
@@ -553,8 +551,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				eigrp_fsm_event(&msg);
 
 				if (free_received_route || msg.transient_route)
-					eigrp_topology_route_free(
-						received_route);
+					eigrp_topo_route_free(received_route);
 
 			} else {
 				/* An unreachable UPDATE withdraws a previously
@@ -566,7 +563,7 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				 * after convergence. */
 				if (eigrp_metric_calculate(eigrp, route->metric)
 				    == EIGRP_MAX_METRIC) {
-					eigrp_topology_route_free(route);
+					eigrp_topo_route_free(route);
 					continue;
 				}
 				/* Only an inbound-permitted reachable UPDATE
@@ -584,10 +581,10 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				if (!eigrp_nbr_route_admit(eigrp, nbr,
 							   &route->dest,
 							   &ingress_metric)) {
-					eigrp_topology_route_free(route);
+					eigrp_topo_route_free(route);
 					continue;
 				}
-				prefix = eigrp_topology_prefix_create();
+				prefix = eigrp_topo_pfx_create();
 				prefix->serno = eigrp->serno;
 				prefix->destination = route->dest;
 				eigrp_prefix_normalize(&prefix->destination);
@@ -621,17 +618,16 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				route->flags =
 					EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 
-				eigrp_prefix_descriptor_add(
-					eigrp->topology_table, prefix);
-				eigrp_route_descriptor_add(eigrp, prefix,
-							   route);
+				eigrp_topo_pfx_add(eigrp->topology_table,
+						   prefix);
+				eigrp_topo_route_add(eigrp, prefix, route);
 
 				prefix->distance = route->distance;
 				prefix->fdistance = route->distance;
 				prefix->rdistance = route->distance;
 
 				prefix->reported_metric = route->total_metric;
-				eigrp_topology_update_node_flags(eigrp, prefix);
+				eigrp_topo_pfx_flags_update(eigrp, prefix);
 
 				prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
 				eigrp_list_add(eigrp->topology_changes, prefix);
@@ -873,7 +869,7 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 			prefix = rn->info;
 			for (unsigned int q = 0; q < 2; q++) {
 				eigrp_list_t *routes =
-					eigrp_topology_route_queue(prefix, q);
+					eigrp_topo_route_queue_read(prefix, q);
 				for (EIGRP_LIST_ITERATE(routes, node, nnode,
 							route)) {
 					int encoded;
@@ -887,8 +883,7 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 					 * receiver and makes adjacency recovery
 					 * order-dependent. */
 					if (route
-					    != eigrp_topology_route_read(
-						    prefix))
+					    != eigrp_topo_route_read(prefix))
 						continue;
 					eigrp_prefix_descriptor_t
 						summary_prefix;
@@ -975,6 +970,7 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 
 					eigrp_route_descriptor_t wire_route =
 						*selected_route;
+					eigrp_nexthop_self_set(ei, &wire_route);
 					if (!summarized)
 						wire_route.metric =
 							selected_route
@@ -1006,6 +1002,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 						packet = next_packet;
 						route_count = 0;
 						wire_route = *selected_route;
+						eigrp_nexthop_self_set(
+							ei, &wire_route);
 						if (!summarized)
 							wire_route.metric =
 								selected_route
@@ -1056,6 +1054,8 @@ void eigrp_update_sync_continue(eigrp_nbr_t *nbr)
 						    &prefix->destination)) {
 						eigrp_route_descriptor_t
 							leak_route = *route;
+						eigrp_nexthop_self_set(
+							ei, &leak_route);
 						leak_route.metric =
 							route->total_metric;
 						if (eigrp_nbr_split_horizon(
@@ -1240,7 +1240,7 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 			continue;
 		}
 
-		successors = eigrp_topology_successors_read(prefix);
+		successors = eigrp_topo_successors_read(prefix);
 		route = successors ? eigrp_list_item_data(
 					     eigrp_list_first(successors))
 				   : NULL;
@@ -1252,6 +1252,7 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 		}
 
 		eigrp_route_descriptor_t wire_route = *route;
+		eigrp_nexthop_self_set(ei, &wire_route);
 		if (eigrp_nbr_split_horizon(route, ei)) {
 			wire_route.metric.delay = EIGRP_MAX_METRIC;
 			wire_route.metric.flags = 0;
@@ -1289,7 +1290,7 @@ static void eigrp_update_send_GR_part(eigrp_nbr_t *nbr)
 					       &prefix->destination)) {
 			eigrp_fsm_action_message_t fsm_msg = {0};
 			eigrp_route_descriptor_t *fsm_route =
-				eigrp_prefix_descriptor_lookup(prefix, nbr);
+				eigrp_topo_route_lookup(prefix, nbr);
 
 			memset(&fsm_msg, 0, sizeof(fsm_msg));
 			fsm_msg.packet_type = EIGRP_OPC_UPDATE;

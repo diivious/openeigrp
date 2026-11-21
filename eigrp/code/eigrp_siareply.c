@@ -44,8 +44,8 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		if (!route)
 			break;
 
-		prefix = eigrp_topology_table_lookup(eigrp->topology_table,
-						     &route->dest);
+		prefix = eigrp_topo_table_lookup(eigrp->topology_table,
+						 &route->dest);
 		(void)eigrp_eventlog_msg_add(
 			eigrp, EIGRP_EVENTLOG_OPCODE_SIA_REPLY_RX, &route->dest,
 			ei ? ei->ifindex : 0,
@@ -60,7 +60,7 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				EIGRP_LOG_DEBUG,
 				"EIGRP SIA-REPLY: Neighbor(%s) sent unknown prefix %s",
 				eigrp_print_addr(&nbr->src), prefix_buf);
-			eigrp_topology_route_free(route);
+			eigrp_topo_route_free(route);
 			continue;
 		}
 		bool route_retained = false;
@@ -82,8 +82,8 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 						? EIGRP_EXT
 						: EIGRP_INT;
 				msg.adv_router = nbr;
-				msg.route = eigrp_prefix_descriptor_lookup(
-					prefix, nbr);
+				msg.route =
+					eigrp_topo_route_lookup(prefix, nbr);
 				if (!msg.route) {
 					route->adv_router = nbr;
 					route->prefix = prefix;
@@ -104,7 +104,7 @@ void eigrp_siareply_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 			}
 		}
 		if (!route_retained)
-			eigrp_topology_route_free(route);
+			eigrp_topo_route_free(route);
 	}
 }
 

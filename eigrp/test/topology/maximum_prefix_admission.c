@@ -164,7 +164,7 @@ static void init_runtime(eigrp_instance_t *eigrp, eigrp_nbr_t *self)
 	eigrp->af_vectors.afi = EIGRP_AFI_IPV4;
 	eigrp->af_vectors.classic_internal_tlv_type = EIGRP_TLV_IPv4_INT;
 	eigrp->af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
-	eigrp->topology_table = eigrp_topology_table_create();
+	eigrp->topology_table = eigrp_topo_table_create();
 	eigrp->topology_changes = eigrp_list_create();
 	assert(eigrp->topology_table && eigrp->topology_changes);
 }
@@ -187,8 +187,8 @@ static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
 					  unsigned id, bool external,
 					  bool elected, bool self)
 {
-	eigrp_prefix_descriptor_t *pfx = eigrp_topology_prefix_create();
-	eigrp_route_descriptor_t *r = eigrp_topology_route_create(link);
+	eigrp_prefix_descriptor_t *pfx = eigrp_topo_pfx_create();
+	eigrp_route_descriptor_t *r = eigrp_topo_route_create(link);
 	assert(pfx && r);
 	pfx->destination.address.afi = EIGRP_AFI_IPV4;
 	pfx->destination.address.bytes[0] = 198;
@@ -216,8 +216,8 @@ static eigrp_route_descriptor_t *add_path(eigrp_instance_t *eigrp,
 		pfx->reported_metric = r->total_metric;
 		r->flags = EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 	}
-	eigrp_prefix_descriptor_add(eigrp->topology_table, pfx);
-	assert(eigrp_topology_route_insert(eigrp, pfx, r, true));
+	eigrp_topo_pfx_add(eigrp->topology_table, pfx);
+	assert(eigrp_topo_route_insert(eigrp, pfx, r, true));
 	return r;
 }
 
@@ -259,7 +259,7 @@ static void assert_usable_alternate_counts(void)
 	policy.topology_maximum_prefix_configured = true;
 	policy.topology_maximum_prefix.maximum = 1;
 	selected = add_path(&eigrp, &self, &link, 20, false, true, true);
-	alternate = eigrp_topology_route_create(&link);
+	alternate = eigrp_topo_route_create(&link);
 	assert(alternate);
 	alternate->type = EIGRP_TLV_IPv4_EXT;
 	alternate->adv_router = &peer;
@@ -279,21 +279,20 @@ static void assert_usable_alternate_counts(void)
 	selected->metric.delay = EIGRP_MAX_METRIC;
 	selected->flags = 0;
 	/* An eligible external alternate is elected and preserves the slot. */
-	eigrp_topology_update_node_flags(&eigrp, selected->prefix);
-	assert(!eigrp_topology_prefix_admit(&eigrp, &target));
+	eigrp_topo_pfx_flags_update(&eigrp, selected->prefix);
+	assert(!eigrp_topo_pfx_admit(&eigrp, &target));
 	alternate->metric.delay = EIGRP_MAX_METRIC;
 	alternate->distance = EIGRP_MAX_METRIC;
-	eigrp_topology_update_node_flags(&eigrp, selected->prefix);
-	assert(eigrp_topology_prefix_admit(&eigrp, &target));
+	eigrp_topo_pfx_flags_update(&eigrp, selected->prefix);
+	assert(eigrp_topo_pfx_admit(&eigrp, &target));
 	alternate->metric.delay = eigrp_delay_to_scaled(200);
 	alternate->distance = 10000;
-	eigrp_topology_update_node_flags(&eigrp, selected->prefix);
-	assert(!eigrp_topology_prefix_admit(&eigrp, &target));
+	eigrp_topo_pfx_flags_update(&eigrp, selected->prefix);
+	assert(!eigrp_topo_pfx_admit(&eigrp, &target));
 	/* Actual descriptor retirement also releases capacity. */
-	eigrp_prefix_descriptor_delete(&eigrp, eigrp.topology_table,
-				       selected->prefix);
-	assert(eigrp_topology_prefix_admit(&eigrp, &target));
-	eigrp_topology_table_delete(&eigrp, eigrp.topology_table);
+	eigrp_topo_pfx_delete(&eigrp, eigrp.topology_table, selected->prefix);
+	assert(eigrp_topo_pfx_admit(&eigrp, &target));
+	eigrp_topo_table_delete(&eigrp, eigrp.topology_table);
 	eigrp_list_delete(&eigrp.topology_changes);
 }
 
@@ -320,7 +319,7 @@ static void assert_active_frozen_distance_releases_capacity(void)
 	policy.topology_maximum_prefix.maximum = 1;
 	selected = add_path(&eigrp, &peer, &link, 40, false, true, false);
 	prefix = selected->prefix;
-	alternate = eigrp_topology_route_create(&link);
+	alternate = eigrp_topo_route_create(&link);
 	assert(alternate);
 	alternate->type = EIGRP_TLV_IPv4_EXT;
 	alternate->adv_router = &other;
@@ -330,10 +329,10 @@ static void assert_active_frozen_distance_releases_capacity(void)
 		alternate->total_metric = metric();
 	alternate->reported_distance = 200;
 	alternate->distance = eigrp_metric_total_calculate(&eigrp, alternate);
-	assert(eigrp_topology_route_insert(&eigrp, prefix, alternate, true));
+	assert(eigrp_topo_route_insert(&eigrp, prefix, alternate, true));
 	target = selected->dest;
 	target.address.bytes[3] = 41;
-	assert(!eigrp_topology_prefix_admit(&eigrp, &target));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &target));
 	assert(eigrp.topology_reachable_count == 1);
 
 	prefix->state = EIGRP_FSM_STATE_ACTIVE_3;
@@ -345,7 +344,7 @@ static void assert_active_frozen_distance_releases_capacity(void)
 	msg.packet_type = EIGRP_OPC_UPDATE;
 	msg.metrics = metric();
 	msg.metrics.delay = EIGRP_MAX_METRIC;
-	(void)eigrp_topology_update_distance(&msg);
+	(void)eigrp_topo_route_distance_update(&msg);
 	assert(prefix->fdistance != EIGRP_MAX_METRIC);
 	assert(selected->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG);
 	assert(selected->distance == EIGRP_MAX_METRIC);
@@ -354,8 +353,8 @@ static void assert_active_frozen_distance_releases_capacity(void)
 		 & (EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
 		    | EIGRP_ROUTE_DESCRIPTOR_FSUCCESSOR_FLAG)));
 	assert(eigrp.topology_reachable_count == 0);
-	assert(eigrp_topology_prefix_admit(&eigrp, &target));
-	eigrp_topology_table_delete(&eigrp, eigrp.topology_table);
+	assert(eigrp_topo_pfx_admit(&eigrp, &target));
+	eigrp_topo_table_delete(&eigrp, eigrp.topology_table);
 	eigrp_list_delete(&eigrp.topology_changes);
 }
 
@@ -381,7 +380,7 @@ static void assert_reachability_accounting_scale(void)
 	target.address.bytes[3] = 1;
 	target.prefix_length = 32;
 
-	assert(eigrp_topology_prefix_admit(&eigrp, &target));
+	assert(eigrp_topo_pfx_admit(&eigrp, &target));
 	assert(eigrp.topology_reachable_count_valid);
 	for (i = 0; i < 4096; ++i) {
 		eigrp_route_descriptor_t *route =
@@ -391,24 +390,24 @@ static void assert_reachability_accounting_scale(void)
 	}
 	assert(eigrp.topology_reachable_count == 4096);
 	for (i = 0; i < 8; ++i)
-		assert(!eigrp_topology_prefix_admit(&eigrp, &target));
+		assert(!eigrp_topo_pfx_admit(&eigrp, &target));
 
 	for (i = 0; i < 256; ++i) {
 		first[i]->distance = EIGRP_MAX_METRIC;
 		first[i]->metric.delay = EIGRP_MAX_METRIC;
-		eigrp_topology_update_node_flags(&eigrp, first[i]->prefix);
+		eigrp_topo_pfx_flags_update(&eigrp, first[i]->prefix);
 	}
 	assert(eigrp.topology_reachable_count == 3840);
-	assert(eigrp_topology_prefix_admit(&eigrp, &target));
+	assert(eigrp_topo_pfx_admit(&eigrp, &target));
 	for (i = 0; i < 256; ++i) {
 		first[i]->metric.delay = eigrp_delay_to_scaled(200);
 		first[i]->distance =
 			eigrp_metric_calculate(&eigrp, first[i]->metric);
-		eigrp_topology_update_node_flags(&eigrp, first[i]->prefix);
+		eigrp_topo_pfx_flags_update(&eigrp, first[i]->prefix);
 	}
 	assert(eigrp.topology_reachable_count == 4096);
-	assert(!eigrp_topology_prefix_admit(&eigrp, &target));
-	eigrp_topology_table_delete(&eigrp, eigrp.topology_table);
+	assert(!eigrp_topo_pfx_admit(&eigrp, &target));
+	eigrp_topo_table_delete(&eigrp, eigrp.topology_table);
 	assert(eigrp.topology_reachable_count == 0);
 	eigrp_list_delete(&eigrp.topology_changes);
 }
@@ -455,11 +454,10 @@ int main(void)
 	/* Only the elected destination consumes topology capacity. QUERY
 	 * placeholders are retained but a finite UPDATE must still be admitted.
 	 */
-	assert(eigrp_topology_prefix_admit(&eigrp,
-					   &installed->prefix->destination));
-	assert(!eigrp_topology_prefix_admit(&eigrp, &absent));
-	assert(!eigrp_topology_prefix_admit(&eigrp, &query_int->dest));
-	assert(!eigrp_topology_prefix_admit(&eigrp, &query_ext->dest));
+	assert(eigrp_topo_pfx_admit(&eigrp, &installed->prefix->destination));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &absent));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &query_int->dest));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &query_ext->dest));
 #ifdef TEST_NEIGHBOR_LIMIT
 	assert(eigrp_nbr_prefix_admit(&eigrp, &peer, &installed->dest));
 	assert(!eigrp_nbr_prefix_admit(&eigrp, &peer, &absent));
@@ -473,10 +471,10 @@ int main(void)
 	installed->distance = EIGRP_MAX_METRIC;
 	installed->prefix->distance = EIGRP_MAX_METRIC;
 	installed->prefix->reported_metric.delay = EIGRP_MAX_METRIC;
-	eigrp_topology_update_node_flags(&eigrp, installed->prefix);
-	assert(eigrp_topology_prefix_admit(&eigrp, &absent));
-	assert(eigrp_topology_prefix_admit(&eigrp, &query_int->dest));
-	assert(eigrp_topology_prefix_admit(&eigrp, &query_ext->dest));
+	eigrp_topo_pfx_flags_update(&eigrp, installed->prefix);
+	assert(eigrp_topo_pfx_admit(&eigrp, &absent));
+	assert(eigrp_topo_pfx_admit(&eigrp, &query_int->dest));
+	assert(eigrp_topo_pfx_admit(&eigrp, &query_ext->dest));
 #ifdef TEST_NEIGHBOR_LIMIT
 	assert(!eigrp_nbr_prefix_admit(&eigrp, &peer, &absent));
 	assert(eigrp_nbr_prefix_admit(&eigrp, &peer, &query_int->dest));
@@ -488,16 +486,16 @@ int main(void)
 	 * Its DUAL feasible distance remains infinite. */
 	query_int->prefix->distance = query_int->distance;
 	query_int->prefix->reported_metric = query_int->total_metric;
-	assert(eigrp_topology_prefix_admit(&eigrp, &absent));
+	assert(eigrp_topo_pfx_admit(&eigrp, &absent));
 	query_int->prefix->distance = EIGRP_MAX_METRIC;
 	query_int->prefix->reported_metric.delay = EIGRP_MAX_METRIC;
 
 	/* A fixture-inserted reachable replacement consumes the freed slot. */
 	replacement = add_path(&eigrp, &peer, &link, 13, false, true, false);
-	assert(eigrp_topology_prefix_admit(&eigrp, &replacement->dest));
-	assert(!eigrp_topology_prefix_admit(&eigrp, &absent));
-	assert(!eigrp_topology_prefix_admit(&eigrp, &query_int->dest));
-	assert(!eigrp_topology_prefix_admit(&eigrp, &query_ext->dest));
+	assert(eigrp_topo_pfx_admit(&eigrp, &replacement->dest));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &absent));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &query_int->dest));
+	assert(!eigrp_topo_pfx_admit(&eigrp, &query_ext->dest));
 #ifdef TEST_NEIGHBOR_LIMIT
 	assert(eigrp_nbr_prefix_admit(&eigrp, &peer, &replacement->dest));
 	assert(eigrp_nbr_prefix_admit(&eigrp, &peer, &query_int->dest));
@@ -509,8 +507,8 @@ int main(void)
 	replacement->metric.delay = EIGRP_MAX_METRIC;
 	replacement->prefix->distance = EIGRP_MAX_METRIC;
 	replacement->prefix->reported_metric.delay = EIGRP_MAX_METRIC;
-	eigrp_topology_update_node_flags(&eigrp, replacement->prefix);
-	assert(eigrp_topology_prefix_admit(&eigrp, &absent));
+	eigrp_topo_pfx_flags_update(&eigrp, replacement->prefix);
+	assert(eigrp_topo_pfx_admit(&eigrp, &absent));
 	assert_unelected(&eigrp, query_ext);
 	assert_usable_alternate_counts();
 	assert_active_frozen_distance_releases_capacity();

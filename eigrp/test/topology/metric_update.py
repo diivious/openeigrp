@@ -189,16 +189,16 @@ def metric_update_executable(tmp_path_factory):
             {
                 eigrp_route_descriptor_t *head;
 
-                msg->change = eigrp_topology_update_distance(msg);
+                msg->change = eigrp_topo_route_distance_update(msg);
                 if (msg->prefix->state != EIGRP_FSM_STATE_PASSIVE)
                     return 1;
 
-                head = eigrp_topology_route_read(msg->prefix);
+                head = eigrp_topo_route_read(msg->prefix);
                 msg->prefix->fdistance = head->distance;
                 msg->prefix->distance = head->distance;
                 msg->prefix->rdistance = head->distance;
                 msg->prefix->reported_metric = head->total_metric;
-                eigrp_topology_update_node_flags(msg->eigrp, msg->prefix);
+                eigrp_topo_pfx_flags_update(msg->eigrp, msg->prefix);
                 return 1;
             }
 
@@ -231,14 +231,14 @@ def metric_update_executable(tmp_path_factory):
                 runtime->af_vectors.afi = EIGRP_AFI_IPV4;
                 runtime->af_vectors.classic_internal_tlv_type = EIGRP_TLV_IPv4_INT;
                 runtime->af_vectors.classic_external_tlv_type = EIGRP_TLV_IPv4_EXT;
-                runtime->topology_table = eigrp_topology_table_create();
+                runtime->topology_table = eigrp_topo_table_create();
                 runtime->topology_changes = eigrp_list_create();
                 assert(runtime->topology_table && runtime->topology_changes);
             }
 
             static void runtime_destroy(eigrp_instance_t *runtime)
             {
-                eigrp_topology_table_delete(runtime, runtime->topology_table);
+                eigrp_topo_table_delete(runtime, runtime->topology_table);
                 eigrp_list_delete(&runtime->topology_changes);
             }
 
@@ -284,8 +284,8 @@ def metric_update_executable(tmp_path_factory):
                 eigrp_intf_t *link, eigrp_metrics_t metric,
                 bool external, unsigned id)
             {
-                eigrp_prefix_descriptor_t *prefix = eigrp_topology_prefix_create();
-                eigrp_route_descriptor_t *route = eigrp_topology_route_create(link);
+                eigrp_prefix_descriptor_t *prefix = eigrp_topo_pfx_create();
+                eigrp_route_descriptor_t *route = eigrp_topo_route_create(link);
                 bool self = advertiser == runtime->neighbor_self;
                 assert(prefix && route);
                 set_ipv4(&prefix->destination.address, id);
@@ -315,8 +315,8 @@ def metric_update_executable(tmp_path_factory):
                 prefix->distance = prefix->fdistance = prefix->rdistance =
                     route->distance;
                 prefix->reported_metric = route->total_metric;
-                eigrp_prefix_descriptor_add(runtime->topology_table, prefix);
-                eigrp_route_descriptor_add(runtime, prefix, route);
+                eigrp_topo_pfx_add(runtime->topology_table, prefix);
+                eigrp_topo_route_add(runtime, prefix, route);
                 assert(route->prefix == prefix);
                 return route;
             }
@@ -340,7 +340,7 @@ def metric_update_executable(tmp_path_factory):
                     runtime.k_values[2] = pass + 1;
                     runtime.metric_version = pass == 0 ? EIGRP_TLV_32B_VERSION
                                                        : EIGRP_TLV_64B_VERSION;
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     for (unsigned n = 0; n < 2; n++) {
                         eigrp_route_descriptor_t *route = n ? redist : connected;
                         assert(route->reported_distance == 0);
@@ -375,7 +375,7 @@ def metric_update_executable(tmp_path_factory):
                 runtime.k_values[2] = 2;
                 expected = connected_metric(&link);
                 for (unsigned pass = 0; pass < 3; pass++) {
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     assert(route->total_metric.hop_count == 0);
                     assert(route->total_metric.delay == eigrp_delay_to_scaled(200));
                     assert(eigrp_metrics_match(route->metric, expected));
@@ -388,7 +388,7 @@ def metric_update_executable(tmp_path_factory):
                 }
                 link.params.delay = EIGRP_INTF_ETH_DELAY;
                 expected = connected_metric(&link);
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert(eigrp_metrics_match(route->total_metric, expected));
                 assert(route->total_metric.hop_count == 0);
                 runtime_destroy(&runtime);
@@ -409,7 +409,7 @@ def metric_update_executable(tmp_path_factory):
                     runtime.k_values[0] = pass + 1;
                     runtime.metric_version = pass ? EIGRP_TLV_64B_VERSION
                                                   : EIGRP_TLV_32B_VERSION;
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     assert(route->distance == eigrp_metric_calculate(&runtime,
                                                                      calculation));
                     assert(route->reported_distance == 0);
@@ -422,7 +422,7 @@ def metric_update_executable(tmp_path_factory):
                  * a K-value or version change. */
                 seed.delay = EIGRP_MAX_METRIC;
                 route->metric = route->reported_metric = route->total_metric = seed;
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert(route->reported_distance == 0);
                 assert(route->distance == EIGRP_MAX_METRIC);
                 assert(!(route->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG));
@@ -448,7 +448,7 @@ def metric_update_executable(tmp_path_factory):
                                                   : EIGRP_TLV_32B_VERSION;
                     runtime.k_values[2] = pass + 1;
                     link.params.delay = 100 + (pass * 100);
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     expected_total = incoming;
                     expected_total.delay += eigrp_delay_to_scaled(link.params.delay);
                     expected_total.hop_count++;
@@ -489,7 +489,7 @@ def metric_update_executable(tmp_path_factory):
                 route->prefix->state = EIGRP_FSM_STATE_ACTIVE_1;
                 link.params.delay = 900;
                 runtime.k_values[0] = 3;
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert(route->distance == before);
                 assert(route->prefix->distance == before);
                 assert(route->prefix->fdistance == before);
@@ -574,7 +574,7 @@ def metric_update_executable(tmp_path_factory):
                         runtime.k_values[2] = 3;
                     }
                     expected = connected_metric(&link);
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     assert(expected.hop_count == 0);
                     assert(expected.delay == eigrp_delay_to_scaled(link.params.delay));
                     assert_local_six_invariants(&runtime, route, expected,
@@ -583,7 +583,7 @@ def metric_update_executable(tmp_path_factory):
                 /* A failed/withdrawn connected candidate must not retain
                  * the old reachable vector in the destination advertisement. */
                 route->metric.delay = EIGRP_MAX_METRIC;
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert(route->reported_distance == 0);
                 assert(route->distance == EIGRP_MAX_METRIC);
                 assert(route->reported_metric.delay == EIGRP_MAX_METRIC);
@@ -625,7 +625,7 @@ def metric_update_executable(tmp_path_factory):
                         runtime.metric_version = EIGRP_TLV_64B_VERSION;
                     calculation = seed;
 
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     assert(route->total_metric.delay == seed.delay);
                     assert(route->total_metric.hop_count == seed.hop_count);
                     assert_local_six_invariants(&runtime, route, seed,
@@ -635,7 +635,7 @@ def metric_update_executable(tmp_path_factory):
                  * usable destination advertisement after recalculation. */
                 seed.delay = EIGRP_MAX_METRIC;
                 route->metric = seed;
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert(route->reported_distance == 0);
                 assert(route->distance == EIGRP_MAX_METRIC);
                 assert(route->reported_metric.delay == EIGRP_MAX_METRIC);
@@ -648,7 +648,7 @@ def metric_update_executable(tmp_path_factory):
                 route->metric = seed;
                 calculation = seed;
 
-                eigrp_topology_metric_update(&runtime);
+                eigrp_topo_metric_update(&runtime);
                 assert_local_six_invariants(&runtime, route, seed,
                     eigrp_metric_calculate(&runtime, calculation));
                 runtime_destroy(&runtime);
@@ -677,7 +677,7 @@ def metric_update_executable(tmp_path_factory):
                     } else if (pass == 2) {
                         runtime.metric_version = EIGRP_TLV_64B_VERSION;
                     }
-                    eigrp_topology_metric_update(&runtime);
+                    eigrp_topo_metric_update(&runtime);
                     expected = incoming;
                     expected.delay += eigrp_delay_to_scaled(link.params.delay);
                     expected.hop_count++;
@@ -734,7 +734,7 @@ def metric_update_executable(tmp_path_factory):
          f"-I{ROOT}", f"-I{ROOT / 'test' / 'build' / 'include'}",
          str(source),
          *[str(ROOT / "eigrp" / "code" / f) for f in (
-             "eigrp_topology.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
+             "eigrp_topology.c", "eigrp_nexthop.c", "eigrp_timer.c", "eigrp_metric.c", "eigrp_list.c",
              "eigrp_table.c", "eigrp_prefix.c")],
          *(["-Wl,-dead_strip"] if sys.platform == "darwin" else
            ["-Wl,--gc-sections"]), "-I", str(ROOT / "eigrp/code"), str(ROOT / "libunix/code/eigrp_unix_format.c"), "-o", str(binary)],

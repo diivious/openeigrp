@@ -27,8 +27,8 @@ def test_ipv6_external_candidate_uses_default_metric_and_policy_boundary():
     assert "eigrp_metric_default(af, &values)" in redistribute
     assert "eigrp_sys_redistribute_route_map_evaluate" in redistribute
     assert "EIGRP_FILTER_DECISION_DENY" in redistribute
-    assert "eigrp_topology_redistributed_route_update" in redistribute
-    assert "eigrp_topology_redistributed_route_remove" in redistribute
+    assert "eigrp_topo_redist_route_update" in redistribute
+    assert "eigrp_topo_redist_route_remove" in redistribute
     assert "default_metric_configured" in metric
 
 
@@ -58,14 +58,14 @@ def test_changed_candidate_denied_by_policy_withdraws_stale_external_path():
     assert "Zebra uses ADD for both first appearance and changed route snapshots" in core
     assert "configured route-map that is absent" not in core  # wording belongs in spec
     assert "decision == EIGRP_FILTER_DECISION_DENY" in core
-    assert "eigrp_topology_redistributed_route_remove(runtime, route)" in core
+    assert "eigrp_topo_redist_route_remove(runtime, route)" in core
 
 
 def test_removing_redistribution_source_withdraws_existing_external_paths():
     redistribute = read("eigrp/code/eigrp_redistribute.c")
     topology = read("eigrp/code/eigrp_topology.c")
-    assert "eigrp_topology_redistributed_source_remove" in redistribute
-    assert "eigrp_topology_redistributed_source_remove" in topology
+    assert "eigrp_topo_redist_source_remove" in redistribute
+    assert "eigrp_topo_redist_source_remove" in topology
     assert "route->extdata.protocol != protocol" in topology
     assert "route->extdata.as != external_as" in topology
-    assert "eigrp_topology_redistributed_route_remove" in topology
+    assert "eigrp_topo_redist_route_remove" in topology

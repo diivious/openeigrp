@@ -240,7 +240,7 @@ STEP_FIELDS = {
     "inbound-filter-config": {"uut", "prefix", "enabled"},
     "process-limit-clear": {"uut"}, "process-limit-expire": {"uut"}, "process-limit-reset-expire": {"uut"}, "process-limit-stale": {"uut"}, "process-limit-age": {"uut"}, "validate-process-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "penalty_min", "penalty_max", "penalty_after_age", "timeout"},
     "redist-limit-clear": {"uut"}, "redist-limit-expire": {"uut"}, "validate-redist-limit": {"uut", "state", "restarts", "count", "restart_active", "reset_active", "penalty", "timeout"},
-    "source-route-add": {"uut", "prefix", "metric"}, "source-route-remove": {"uut", "prefix"},
+    "source-route-add": {"uut", "prefix", "metric", "gateway"}, "source-route-remove": {"uut", "prefix"},
     "redistribute-add": {"uut", "source", "seed"}, "redistribute-remove": {"uut", "source"},
     "redistribute-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
     "default-metric": {"uut", "bandwidth", "delay", "reliability", "load", "mtu", "reset"},
@@ -369,6 +369,16 @@ def validate_scenario(s):
                 raise SpecError(f"{where}: invalid timeout")
         elif op=="validate-accounting": validate_accounting_assertion(arg,where)
         elif op=="validate-route": validate_route_assertion(arg,where)
+        elif op=="source-route-add":
+            check_keys(arg, STEP_FIELDS[op], where)
+            if "gateway" in arg:
+                try:
+                    gateway = ipaddress.ip_address(arg["gateway"])
+                    prefix = ipaddress.ip_network(arg["prefix"], strict=False)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise SpecError(f"{where}: invalid gateway or prefix") from exc
+                if gateway.version != prefix.version:
+                    raise SpecError(f"{where}: gateway family must match prefix")
         elif op=="validate-packet": validate_packet_assertion(arg,where,marks)
         elif op=="validate-convergence":
             if not isinstance(arg,dict): raise SpecError(f"{where}: must be a mapping")
@@ -697,8 +707,9 @@ class Node:
         if result != "RESULT|0":
             raise RuntimeError(f"{self.name}: redistribution penalty clear failed: {result}")
 
-    def source_route_change(self, prefix, add, metric=1):
-        command = (f"SOURCE-ADD {prefix} {metric}" if add
+    def source_route_change(self, prefix, add, metric=1, gateway=None):
+        command = (f"SOURCE-ADD {prefix} {metric}" +
+                   (f" {gateway}" if gateway else "") if add
                    else f"SOURCE-DEL {prefix}")
         result = self.cmd(command, timeout=10)
         if result != "RESULT|0":
@@ -1058,7 +1069,8 @@ class Runner:
         elif op in ("source-route-add", "source-route-remove"):
             prefix = str(ipaddress.ip_network(arg["prefix"], strict=False))
             self.nodes[arg["uut"]].source_route_change(
-                prefix, op=="source-route-add", int(arg.get("metric", 1)))
+                prefix, op=="source-route-add", int(arg.get("metric", 1)),
+                arg.get("gateway"))
         elif op in ("redistribute-add", "redistribute-remove"):
             self.nodes[arg["uut"]].redistribute_change(
                 arg["source"], op=="redistribute-add", arg.get("seed", True))

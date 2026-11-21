@@ -28,7 +28,7 @@ def test_selected_routes_cross_only_the_public_rib_snapshot_boundary():
     topology = (CODE / "eigrp_topology.c").read_text()
     header = (CODE / "eigrp_rib.h").read_text()
 
-    update = function_body(topology, "eigrp_update_routing_table")
+    update = function_body(topology, "eigrp_topo_rib_update")
     assert "eigrp_rib_route_t rib_route" in update
     assert "eigrp_rib_route_add(eigrp, &rib_route)" in update
     assert "eigrp_rib_route_del(eigrp,&prefix->destination)" in "".join(update.split())

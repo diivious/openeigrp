@@ -148,7 +148,7 @@ def _function_body(source: str, name: str) -> str:
 def test_ipv6_operational_state_uses_the_same_common_targets_as_ipv4():
     targets = (
         (NEIGHBOR, "eigrp_nbr_state_iterate"),
-        (TOPOLOGY, "eigrp_topology_state_iterate"),
+        (TOPOLOGY, "eigrp_topo_pfx_routes_iterate"),
     )
     for path, name in targets:
         body = _function_body(read(path), name)
