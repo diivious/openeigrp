@@ -1,0 +1,60 @@
+schema: eigrp-uut-test/v1
+name: ipv6 next-hop-self packet-boundary forwarding
+topology: ../packet-mtu/topology-ipv6.yaml
+# Small MTU forces multiple UPDATE packets. Explicit source gateways
+# must be replaced by the advertising peer on *every* packet.
+steps:
+  - start: r1
+  - redistribute-add: {uut: r1, source: static}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::1/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::2/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::3/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::4/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::5/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::6/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::7/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::8/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::9/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::a/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::b/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::c/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::d/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::e/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::f/128', metric: 20, gateway: 'fe80::77'}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::10/128', metric: 20, gateway: 'fe80::77'}
+  - packet-mark: sync
+  - start: r2
+  - validate-neighbor: {uut: r1, neighbor: 'fe80::2', interface: eth12, state: up, timeout: 15}
+  - validate-interface: {uut: r1, interface: eth12, next_hop_self: true}
+  - validate-packet: {since: sync, source_uut: r1, destination_uut: r2, opcode: update, event: delivered, group_by: sequence, min_groups: 4, timeout: 15}
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.2
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:feed::1/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::2/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::3/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::4/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::5/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::6/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::7/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::8/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::9/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::a/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::b/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::c/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::d/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::e/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::f/128', table: path, next_hop: 'fe80::1', successor: true}
+        - route: {uut: r2, prefix: '2001:db8:feed::10/128', table: path, next_hop: 'fe80::1', successor: true}
+  - source-route-remove: {uut: r1, prefix: '2001:db8:feed::10/128'}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:feed::10/128', table: rib, present: false}
+  - source-route-add: {uut: r1, prefix: '2001:db8:feed::10/128', metric: 30, gateway: 'fe80::77'}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '2001:db8:feed::10/128', table: rib, next_hop: 'fe80::1'}
+  - stop: all

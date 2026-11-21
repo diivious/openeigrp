@@ -1,0 +1,60 @@
+schema: eigrp-uut-test/v1
+name: ipv4 next-hop-self packet-boundary forwarding
+topology: boundary-topology-ipv4.yaml
+# Small MTU forces multiple UPDATE packets. Explicit source gateways
+# must be replaced by the advertising peer on *every* packet.
+steps:
+  - start: r1
+  - redistribute-add: {uut: r1, source: static}
+  - source-route-add: {uut: r1, prefix: '198.51.100.1/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.2/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.3/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.4/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.5/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.6/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.7/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.8/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.9/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.10/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.11/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.12/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.13/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.14/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.15/32', metric: 20, gateway: '10.0.0.77'}
+  - source-route-add: {uut: r1, prefix: '198.51.100.16/32', metric: 20, gateway: '10.0.0.77'}
+  - packet-mark: sync
+  - start: r2
+  - validate-neighbor: {uut: r1, neighbor: '10.0.0.2', interface: eth0, state: up, timeout: 15}
+  - validate-interface: {uut: r1, interface: eth0, next_hop_self: true}
+  - validate-packet: {since: sync, source_uut: r1, destination_uut: r2, opcode: update, event: delivered, group_by: sequence, min_groups: 4, timeout: 15}
+  - validate-convergence:
+      timeout: 20
+      stable_for: 0.2
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.1/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.2/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.3/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.4/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.5/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.6/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.7/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.8/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.9/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.10/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.11/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.12/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.13/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.14/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.15/32', table: path, next_hop: '10.0.0.1', successor: true}
+        - route: {uut: r2, prefix: '198.51.100.16/32', table: path, next_hop: '10.0.0.1', successor: true}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.16/32'}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.16/32', table: rib, present: false}
+  - source-route-add: {uut: r1, prefix: '198.51.100.16/32', metric: 30, gateway: '10.0.0.77'}
+  - validate-convergence:
+      timeout: 15
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.16/32', table: rib, next_hop: '10.0.0.1'}
+  - stop: all
