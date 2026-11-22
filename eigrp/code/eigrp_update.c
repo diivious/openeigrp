@@ -591,6 +591,10 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 					continue;
 				}
 				prefix = eigrp_topo_pfx_create();
+				if (!prefix) {
+					eigrp_topo_route_free(route);
+					continue;
+				}
 				prefix->serno = eigrp->serno;
 				prefix->destination = route->dest;
 				eigrp_prefix_normalize(&prefix->destination);
@@ -624,9 +628,20 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				route->flags =
 					EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
 
-				eigrp_topo_pfx_add(eigrp->topology_table,
-						   prefix);
-				eigrp_topo_route_add(eigrp, prefix, route);
+				if (!eigrp_topo_pfx_add(eigrp->topology_table,
+							prefix)) {
+					eigrp_topo_pfx_free(prefix);
+					eigrp_topo_route_free(route);
+					continue;
+				}
+				if (!eigrp_topo_route_add(eigrp, prefix,
+							  route)) {
+					eigrp_topo_route_free(route);
+					eigrp_topo_pfx_delete(
+						eigrp, eigrp->topology_table,
+						prefix);
+					continue;
+				}
 
 				prefix->distance = route->distance;
 				prefix->fdistance = route->distance;
@@ -636,7 +651,13 @@ void eigrp_update_receive(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 				eigrp_topo_pfx_flags_update(eigrp, prefix);
 
 				prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
-				eigrp_list_add(eigrp->topology_changes, prefix);
+				if (!eigrp_list_add(eigrp->topology_changes,
+						    prefix)) {
+					prefix->req_action = 0;
+					eigrp_topo_pfx_delete(
+						eigrp, eigrp->topology_table,
+						prefix);
+				}
 			}
 		}
 	}
@@ -1186,6 +1207,8 @@ void eigrp_update_send_all(eigrp_instance_t *eigrp, eigrp_intf_t *exception)
 	eigrp_packetizer_work_t *work;
 
 	work = eigrp_packetizer_work_create(EIGRP_OPC_UPDATE);
+	if (!work)
+		return;
 	work->exception = exception;
 	eigrp_packetizer_enqueue(eigrp, work);
 }

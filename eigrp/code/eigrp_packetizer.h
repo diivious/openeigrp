@@ -38,5 +38,6 @@ void eigrp_packetizer_enqueue(eigrp_instance_t *eigrp,
 			      eigrp_packetizer_work_t *work);
 void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *eigrp,
 					eigrp_prefix_descriptor_t *prefix);
+void eigrp_packetizer_deferred_collect(eigrp_instance_t *eigrp);
 
 #endif /* _ZEBRA_EIGRP_PACKETIZER_H_ */

@@ -326,6 +326,8 @@ eigrp_route_descriptor_t *eigrp_topo_route_create(eigrp_intf_t *intf)
 	eigrp_route_descriptor_t *new;
 
 	new = calloc(1, sizeof(eigrp_route_descriptor_t));
+	if (!new)
+		return NULL;
 	new->reported_distance = EIGRP_MAX_METRIC;
 	new->distance = EIGRP_MAX_METRIC;
 	new->ei = intf;
@@ -453,7 +455,7 @@ bool eigrp_topo_route_insert(eigrp_instance_t *eigrp,
 /*
  * Adding topology entry to topology node
  */
-void eigrp_topo_route_add(eigrp_instance_t *eigrp,
+bool eigrp_topo_route_add(eigrp_instance_t *eigrp,
 			  eigrp_prefix_descriptor_t *node,
 			  eigrp_route_descriptor_t *route)
 {
@@ -471,7 +473,7 @@ void eigrp_topo_route_add(eigrp_instance_t *eigrp,
 			&& !eigrp_topo_redist_present(eigrp, node);
 		if (!eigrp_topo_route_insert(eigrp, node, route,
 					     first_peer_path))
-			return;
+			return false;
 		route->prefix = node;
 		if (first_redist && eigrp->redist_prefix_count < UINT32_MAX)
 			eigrp->redist_prefix_count++;
@@ -510,6 +512,7 @@ void eigrp_topo_route_add(eigrp_instance_t *eigrp,
 		}
 		eigrp_topo_pfx_count_sync(eigrp, node);
 	}
+	return true;
 }
 
 
@@ -580,9 +583,15 @@ eigrp_prefix_descriptor_t *eigrp_topo_pfx_create(void)
 {
 	eigrp_prefix_descriptor_t *new;
 	new = calloc(1, sizeof(eigrp_prefix_descriptor_t));
+	if (!new)
+		return NULL;
 	new->internal_routes = eigrp_list_create();
 	new->external_routes = eigrp_list_create();
 	new->rij = eigrp_list_create();
+	if (!new->internal_routes || !new->external_routes || !new->rij) {
+		eigrp_topo_pfx_free(new);
+		return NULL;
+	}
 	new->rij->del = free;
 	new->internal_routes->cmp =
 		(int (*)(void *, void *))eigrp_topo_route_cmp;
@@ -596,7 +605,7 @@ eigrp_prefix_descriptor_t *eigrp_topo_pfx_create(void)
 /*
  * Adding topology node to topology table
  */
-void eigrp_topo_pfx_add(eigrp_table_t *topology, eigrp_prefix_descriptor_t *pe)
+bool eigrp_topo_pfx_add(eigrp_table_t *topology, eigrp_prefix_descriptor_t *pe)
 {
 	char prefix_buf[EIGRP_PREFIX_STRLEN] = "invalid";
 	eigrp_prefix_t key;
@@ -604,9 +613,11 @@ void eigrp_topo_pfx_add(eigrp_table_t *topology, eigrp_prefix_descriptor_t *pe)
 
 	if (!topology || !pe
 	    || !eigrp_topo_table_key_set(&pe->destination, &key))
-		return;
+		return false;
 
 	rn = eigrp_table_node_lookup_or_create(topology, &key);
+	if (!rn)
+		return false;
 	if (rn->info) {
 		if (IS_DEBUG_EIGRP_EVENT) {
 			eigrp_prefix_snprintf(prefix_buf, sizeof(prefix_buf),
@@ -616,7 +627,7 @@ void eigrp_topo_pfx_add(eigrp_table_t *topology, eigrp_prefix_descriptor_t *pe)
 				"%s: %s Should we have found this prefix in the topo table?",
 				__func__, prefix_buf);
 		}
-		eigrp_table_node_release(rn);
+		return false;
 	}
 
 	rn->info = pe;
@@ -634,6 +645,7 @@ void eigrp_topo_pfx_add(eigrp_table_t *topology, eigrp_prefix_descriptor_t *pe)
 				(unsigned long long)pe->fdistance,
 				(unsigned long long)pe->rdistance);
 	}
+	return true;
 }
 
 /*
@@ -824,15 +836,17 @@ eigrp_topo_table_lookup(eigrp_table_t *table, const eigrp_prefix_t *address)
 	return pe;
 }
 
-static void eigrp_topo_redist_update_mark(eigrp_instance_t *eigrp,
+static bool eigrp_topo_redist_update_mark(eigrp_instance_t *eigrp,
 					  eigrp_prefix_descriptor_t *prefix)
 {
 	if (!eigrp || !prefix || prefix->state != EIGRP_FSM_STATE_PASSIVE)
-		return;
+		return true;
 
+	if (!eigrp_list_lookup(eigrp->topology_changes, prefix)
+	    && !eigrp_list_add(eigrp->topology_changes, prefix))
+		return false;
 	prefix->req_action |= EIGRP_FSM_NEED_UPDATE;
-	if (!eigrp_list_lookup(eigrp->topology_changes, prefix))
-		eigrp_list_add(eigrp->topology_changes, prefix);
+	return true;
 }
 
 /* Host redistribution ingress has no packet-receive tail to drain DUAL's
@@ -904,9 +918,22 @@ eigrp_topo_redist_route_update(eigrp_instance_t *eigrp,
 					      &route->extdata);
 		eigrp_nexthop_redist_set(route, source_route);
 
-		eigrp_topo_pfx_add(eigrp->topology_table, prefix);
-		eigrp_topo_route_add(eigrp, prefix, route);
-		eigrp_topo_redist_update_mark(eigrp, prefix);
+		if (!eigrp_topo_pfx_add(eigrp->topology_table, prefix)) {
+			eigrp_topo_route_free(route);
+			eigrp_topo_pfx_free(prefix);
+			return EIGRP_RESULT_INTERNAL_FAILURE;
+		}
+		if (!eigrp_topo_route_add(eigrp, prefix, route)) {
+			eigrp_topo_route_free(route);
+			eigrp_topo_pfx_delete(eigrp, eigrp->topology_table,
+					      prefix);
+			return EIGRP_RESULT_INTERNAL_FAILURE;
+		}
+		if (!eigrp_topo_redist_update_mark(eigrp, prefix)) {
+			eigrp_topo_pfx_delete(eigrp, eigrp->topology_table,
+					      prefix);
+			return EIGRP_RESULT_INTERNAL_FAILURE;
+		}
 		eigrp_topo_changes_send(eigrp, prefix);
 		return EIGRP_RESULT_SUCCESS;
 	}
@@ -921,7 +948,10 @@ eigrp_topo_redist_route_update(eigrp_instance_t *eigrp,
 		route->dest = destination;
 		route->adv_router = eigrp->neighbor_self;
 		route->prefix = prefix;
-		eigrp_topo_route_add(eigrp, prefix, route);
+		if (!eigrp_topo_route_add(eigrp, prefix, route)) {
+			eigrp_topo_route_free(route);
+			return EIGRP_RESULT_INTERNAL_FAILURE;
+		}
 	}
 
 	old_extdata = route->extdata;
@@ -959,8 +989,8 @@ eigrp_topo_redist_route_update(eigrp_instance_t *eigrp,
 	 * and advertisement decision are left to the DUAL transition back to
 	 * Passive.
 	 */
-	if (metadata_changed)
-		eigrp_topo_redist_update_mark(eigrp, prefix);
+	if (metadata_changed && !eigrp_topo_redist_update_mark(eigrp, prefix))
+		return EIGRP_RESULT_INTERNAL_FAILURE;
 
 	eigrp_topo_changes_send(eigrp, prefix);
 	return EIGRP_RESULT_SUCCESS;
@@ -1068,10 +1098,14 @@ eigrp_list_t *eigrp_topo_successors_read(eigrp_prefix_descriptor_t *table_node)
 	eigrp_route_descriptor_t *data;
 	eigrp_topology_route_iterator_t iterator;
 
+	if (!successors)
+		return NULL;
 	for (data = eigrp_topo_route_iterator_first(table_node, &iterator);
 	     data; data = eigrp_topo_route_iterator_next(&iterator)) {
-		if (data->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG) {
-			eigrp_list_add(successors, data);
+		if (data->flags & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG
+		    && !eigrp_list_add(successors, data)) {
+			eigrp_list_delete(&successors);
+			return NULL;
 		}
 	}
 
@@ -1114,14 +1148,19 @@ eigrp_list_t *eigrp_topo_nbr_pfx_lookup(eigrp_instance_t *eigrp,
 	/* create new empty list for prefixes storage */
 	eigrp_list_t *prefixes = eigrp_list_create();
 
+	if (!prefixes)
+		return NULL;
 	/* iterate over all prefixes in topology table */
 	for (rn = eigrp_table_first(eigrp->topology_table); rn;
 	     rn = eigrp_table_next(rn)) {
 		if (!rn->info)
 			continue;
 		pe = rn->info;
-		if (eigrp_topo_route_lookup(pe, nbr))
-			eigrp_list_add(prefixes, pe);
+		if (eigrp_topo_route_lookup(pe, nbr)
+		    && !eigrp_list_add(prefixes, pe)) {
+			eigrp_list_delete(&prefixes);
+			return NULL;
+		}
 	}
 
 	/* return list of prefixes from specified neighbor */
@@ -1139,6 +1178,7 @@ eigrp_topo_route_distance_update(eigrp_fsm_action_message_t *msg)
 	bool class_changed;
 	bool stored;
 	bool first_peer_path;
+	eigrp_list_t *old_routes;
 
 	assert(route);
 	if (msg->transient_route)
@@ -1160,6 +1200,9 @@ eigrp_topo_route_distance_update(eigrp_fsm_action_message_t *msg)
 	class_changed =
 		(eigrp_list_lookup(prefix->external_routes, route) != NULL)
 		!= eigrp_topo_route_external(route);
+	old_routes = eigrp_list_lookup(prefix->external_routes, route)
+			     ? prefix->external_routes
+			     : prefix->internal_routes;
 
 	switch (msg->data_type) {
 	case EIGRP_CONNECTED:
@@ -1242,12 +1285,20 @@ eigrp_topo_route_distance_update(eigrp_fsm_action_message_t *msg)
 	/*
 	 * Move to correct position in list according to new distance
 	 */
-	if (eigrp_list_lookup(prefix->internal_routes, route))
-		eigrp_list_delete_data(prefix->internal_routes, route);
-	if (eigrp_list_lookup(prefix->external_routes, route))
-		eigrp_list_delete_data(prefix->external_routes, route);
-	if (!eigrp_topo_route_insert(eigrp, prefix, route, first_peer_path)) {
-		msg->transient_route = !stored;
+	if (stored) {
+		/* Existing paths never need another allocation. They retain the
+		 * same node, neighbor reference, and admission accounting. */
+		if (class_changed)
+			(void)eigrp_list_move(
+				old_routes,
+				eigrp_topo_route_queue_select(prefix, route),
+				route);
+		else
+			(void)eigrp_list_reorder(old_routes, route);
+	} else if (!eigrp_topo_route_insert(eigrp, prefix, route,
+					    first_peer_path)) {
+		msg->transient_route = true;
+		msg->allocation_failed = true;
 		return METRIC_SAME;
 	}
 
@@ -1572,6 +1623,12 @@ void eigrp_topo_rib_update(eigrp_instance_t *eigrp,
 				successor_changed = true;
 		}
 	}
+	/* Build a complete replacement set before changing INTABLE or the
+	 * host RIB. Under memory pressure a NULL snapshot with elected
+	 * successors is an allocation failure, not a route withdrawal. */
+	successors = eigrp_topo_successors_max_read(prefix, eigrp->max_paths);
+	if (new_successor_count && !successors)
+		return;
 	if (successor_changed)
 		(void)eigrp_eventlog_msg_add(
 			eigrp, EIGRP_EVENTLOG_OPCODE_SUCCESSOR_CHANGE,
@@ -1590,8 +1647,6 @@ void eigrp_topo_rib_update(eigrp_instance_t *eigrp,
 		     route; route = eigrp_topo_route_iterator_next(&iterator))
 			route->flags &= ~EIGRP_ROUTE_DESCRIPTOR_INTABLE_FLAG;
 	}
-
-	successors = eigrp_topo_successors_max_read(prefix, eigrp->max_paths);
 
 	if (successors) {
 		nexthop_count = eigrp_topo_rib_nexthops_set(
@@ -1899,6 +1954,8 @@ void eigrp_topo_pfx_update(eigrp_instance_t *eigrp, eigrp_table_t *table,
 		eigrp_packetizer_prefix_defer_free(eigrp, prefix);
 }
 
+static void eigrp_topo_route_snapshot_free(eigrp_list_t *routes);
+
 static eigrp_list_t *
 eigrp_topo_connected_routes_dup(eigrp_instance_t *eigrp,
 				const eigrp_prefix_descriptor_t *prefix)
@@ -1909,18 +1966,27 @@ eigrp_topo_connected_routes_dup(eigrp_instance_t *eigrp,
 	eigrp_list_item_t *node;
 
 	routes = eigrp_list_create();
+	if (!routes)
+		return NULL;
 	for (EIGRP_LIST_ITERATE_RO(prefix->internal_routes, node, route)) {
 		if (route->adv_router != eigrp->neighbor_self)
 			continue;
 		copy = eigrp_topo_route_create(route->ei);
 		if (!copy)
-			continue;
+			goto failed;
 		*copy = *route;
 		copy->owner_ref = false;
 		copy->prefix = NULL;
-		eigrp_list_add(routes, copy);
+		if (!eigrp_list_add(routes, copy)) {
+			eigrp_topo_route_free(copy);
+			goto failed;
+		}
 	}
 	return routes;
+
+failed:
+	eigrp_topo_route_snapshot_free(routes);
+	return NULL;
 }
 
 static void eigrp_topo_route_snapshot_free(eigrp_list_t *routes)
@@ -1939,7 +2005,8 @@ static void eigrp_topo_route_snapshot_free(eigrp_list_t *routes)
 
 
 static eigrp_route_descriptor_t *
-eigrp_topo_query_route_dup(const eigrp_prefix_descriptor_t *prefix)
+eigrp_topo_query_route_dup(const eigrp_prefix_descriptor_t *prefix,
+			   bool *failed)
 {
 	eigrp_route_descriptor_t *route;
 	eigrp_route_descriptor_t *copy;
@@ -1951,8 +2018,10 @@ eigrp_topo_query_route_dup(const eigrp_prefix_descriptor_t *prefix)
 		if (route->adv_router == NULL)
 			continue;
 		copy = eigrp_topo_route_create(NULL);
-		if (!copy)
+		if (!copy) {
+			*failed = true;
 			return NULL;
+		}
 		*copy = *route;
 		copy->owner_ref = false;
 		copy->prefix = NULL;
@@ -1997,164 +2066,135 @@ static bool eigrp_topo_pfx_detach(eigrp_instance_t *eigrp,
 	return true;
 }
 
-static eigrp_prefix_descriptor_t *
-eigrp_topo_pfx_recreate(eigrp_instance_t *eigrp,
-			const eigrp_prefix_t *destination, uint8_t type,
-			const eigrp_metrics_t *reported_metric, uint8_t state)
-{
-	eigrp_prefix_descriptor_t *prefix;
-
-	prefix = eigrp_topo_pfx_create();
-	if (!prefix)
-		return NULL;
-	prefix->destination = *destination;
-	eigrp_prefix_normalize(&prefix->destination);
-	prefix->nt = type;
-	prefix->state = state;
-	prefix->serno = eigrp->serno;
-	if (reported_metric)
-		prefix->reported_metric = *reported_metric;
-	eigrp_topo_pfx_add(eigrp->topology_table, prefix);
-	return prefix;
-}
-
-static eigrp_result_t eigrp_topo_connected_pfx_recreate(
-	eigrp_instance_t *eigrp, const eigrp_prefix_t *destination,
-	uint8_t type, const eigrp_metrics_t *reported_metric,
-	eigrp_metric_t distance, eigrp_metric_t feasible_distance,
-	eigrp_metric_t reported_distance, eigrp_list_t *routes)
-{
-	eigrp_prefix_descriptor_t *prefix;
-	eigrp_route_descriptor_t *route;
-	eigrp_list_item_t *node, *nnode;
-
-	if (!routes || routes->count == 0)
-		return EIGRP_RESULT_SUCCESS;
-
-	prefix = eigrp_topo_pfx_recreate(eigrp, destination, type,
-					 reported_metric,
-					 EIGRP_FSM_STATE_PASSIVE);
-	if (!prefix)
-		return EIGRP_RESULT_INTERNAL_FAILURE;
-	prefix->distance = distance;
-	prefix->fdistance = feasible_distance;
-	prefix->rdistance = reported_distance;
-
-	for (EIGRP_LIST_ITERATE(routes, node, nnode, route)) {
-		eigrp_list_delete_data(routes, route);
-		route->prefix = prefix;
-		eigrp_topo_route_add(eigrp, prefix, route);
-	}
-	return EIGRP_RESULT_SUCCESS;
-}
-
-static eigrp_result_t
-eigrp_topo_remote_requery(eigrp_instance_t *eigrp,
-			  const eigrp_prefix_t *destination, uint8_t type,
-			  const eigrp_metrics_t *reported_metric,
-			  eigrp_route_descriptor_t *query_route)
-{
-	eigrp_prefix_descriptor_t *prefix;
-
-	if (eigrp_nbr_count(eigrp) == 0) {
-		if (query_route)
-			eigrp_topo_route_free(query_route);
-		return EIGRP_RESULT_SUCCESS;
-	}
-
-	prefix = eigrp_topo_pfx_recreate(eigrp, destination, type,
-					 reported_metric,
-					 EIGRP_FSM_STATE_ACTIVE_1);
-	if (!prefix) {
-		if (query_route)
-			eigrp_topo_route_free(query_route);
-		return EIGRP_RESULT_INTERNAL_FAILURE;
-	}
-	prefix->distance = EIGRP_MAX_METRIC;
-	prefix->fdistance = EIGRP_MAX_METRIC;
-	prefix->rdistance = EIGRP_MAX_METRIC;
-
-	/*
-	 * The old NDB/RDB objects are detached from the topology table.  This
-	 * route is not installed beneath the new NDB; it exists only to encode
-	 * the locally-originated QUERY.  Replies repopulate fresh RDBs beneath
-	 * the ACTIVE NDB.
-	 */
-	if (!query_route) {
-		query_route = eigrp_topo_route_create(NULL);
-		if (!query_route) {
-			eigrp_topo_pfx_delete(eigrp, eigrp->topology_table,
-					      prefix);
-			return EIGRP_RESULT_INTERNAL_FAILURE;
-		}
-		query_route->type = type == EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
-					    ? EIGRP_TLV_IPv4_EXT
-					    : EIGRP_TLV_IPv4_INT;
-		query_route->metric = *reported_metric;
-	}
-	query_route->prefix = prefix;
-	query_route->dest = *destination;
-	query_route->adv_router = NULL;
-	query_route->ei = NULL;
-	query_route->metric.delay = EIGRP_MAX_METRIC;
-	query_route->metric.flags = 0;
-	eigrp_query_send_route(eigrp, prefix, query_route,
-			       EIGRP_PACKETIZER_WORK_F_OWN_ROUTE);
-	return EIGRP_RESULT_SUCCESS;
-}
-
+/* Prepare the replacement and outbound QUERY before removing the old
+ * destination. A clear cannot discard a valid NDB because allocation failed.
+ * Reuse the existing table node so replacement never needs an allocation. */
 static eigrp_result_t eigrp_topo_pfx_clear(eigrp_instance_t *eigrp,
 					   eigrp_prefix_descriptor_t *prefix)
 {
-	eigrp_prefix_t destination;
-	eigrp_list_t *connected_routes = NULL;
+	eigrp_prefix_descriptor_t *replacement = NULL;
 	eigrp_route_descriptor_t *query_route = NULL;
-	eigrp_metrics_t reported_metric;
-	eigrp_metric_t distance;
-	eigrp_metric_t feasible_distance;
-	eigrp_metric_t reported_distance;
-	uint8_t type;
-	eigrp_result_t result;
+	eigrp_packetizer_work_t *query_work = NULL;
+	eigrp_list_t *connected_routes = NULL;
+	eigrp_table_node_t *rn;
+	eigrp_route_descriptor_t *route;
+	eigrp_list_item_t *node;
+	bool connected, requery, recreate, query_copy_failed = false;
 
 	if (!eigrp || !prefix || !eigrp_prefix_valid(&prefix->destination))
 		return EIGRP_RESULT_INVALID_ARGUMENT;
+	rn = prefix->table_node;
+	if (!rn || rn->info != prefix)
+		return EIGRP_RESULT_NOT_FOUND;
 
-	destination = prefix->destination;
-	type = prefix->nt;
-	reported_metric = prefix->reported_metric;
-	distance = prefix->distance;
-	feasible_distance = prefix->fdistance;
-	reported_distance = prefix->rdistance;
-	if (type == EIGRP_TOPOLOGY_TYPE_CONNECTED)
+	connected = prefix->nt == EIGRP_TOPOLOGY_TYPE_CONNECTED;
+	requery = !connected && eigrp_nbr_count(eigrp) != 0;
+	if (connected) {
 		connected_routes =
 			eigrp_topo_connected_routes_dup(eigrp, prefix);
-	else
-		query_route = eigrp_topo_query_route_dup(prefix);
-
-	/*
-	 * Remove the old NDB from the live topology and remove its RIB route.
-	 * Packetizer work queued before the EXEC command may still reference
-	 * the old NDB/RDBs, so their storage is released only by a tail work
-	 * item.
-	 */
-	if (!eigrp_topo_pfx_detach(eigrp, prefix)) {
-		eigrp_topo_route_snapshot_free(connected_routes);
-		if (query_route)
-			eigrp_topo_route_free(query_route);
-		return EIGRP_RESULT_NOT_FOUND;
+		if (!connected_routes)
+			return EIGRP_RESULT_INTERNAL_FAILURE;
 	}
+	recreate = requery || (connected && connected_routes->count != 0);
+	if (recreate) {
+		replacement = eigrp_topo_pfx_create();
+		if (!replacement)
+			goto failed;
+		replacement->destination = prefix->destination;
+		replacement->nt = prefix->nt;
+		replacement->serno = eigrp->serno;
+		replacement->reported_metric = prefix->reported_metric;
+		replacement->state = requery ? EIGRP_FSM_STATE_ACTIVE_1
+					     : EIGRP_FSM_STATE_PASSIVE;
+		if (connected) {
+			replacement->distance = prefix->distance;
+			replacement->fdistance = prefix->fdistance;
+			replacement->rdistance = prefix->rdistance;
+		} else {
+			query_route = eigrp_topo_query_route_dup(
+				prefix, &query_copy_failed);
+			if (query_copy_failed)
+				goto failed;
+			if (!query_route) {
+				query_route = eigrp_topo_route_create(NULL);
+				if (!query_route)
+					goto failed;
+				query_route->type =
+					prefix->destination.address.afi
+							== EIGRP_AFI_IPV6
+						? (prefix->nt == EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
+							   ? EIGRP_TLV_IPv6_EXT
+							   : EIGRP_TLV_IPv6_INT)
+						: (prefix->nt == EIGRP_TOPOLOGY_TYPE_REMOTE_EXTERNAL
+							   ? EIGRP_TLV_IPv4_EXT
+							   : EIGRP_TLV_IPv4_INT);
+				query_route->metric = prefix->reported_metric;
+			}
+			query_work =
+				eigrp_packetizer_work_create(EIGRP_OPC_QUERY);
+			if (!query_work)
+				goto failed;
+		}
+	}
+
+	/* Remove change-list references and withdraw the old RIB snapshot.
+	 * Earlier packetizer work still owns the old descriptors until its tail
+	 * retirement bead has been processed. */
+	while (eigrp_list_lookup(eigrp->topology_changes, prefix))
+		eigrp_list_delete_data(eigrp->topology_changes, prefix);
+	{
+		eigrp_result_t result =
+			eigrp_rib_route_del(eigrp, &prefix->destination);
+
+		(void)eigrp_eventlog_msg_add(
+			eigrp, EIGRP_EVENTLOG_OPCODE_RIB_WITHDRAW,
+			&prefix->destination, result, 0, 0, 0);
+	}
+	eigrp_topo_pfx_count_remove(eigrp, prefix);
+	prefix->table_node = NULL;
+	rn->info = replacement;
+	if (replacement)
+		replacement->table_node = rn;
+	else
+		eigrp_table_node_remove(eigrp->topology_table, rn);
 	eigrp_packetizer_prefix_defer_free(eigrp, prefix);
 
-	if (type == EIGRP_TOPOLOGY_TYPE_CONNECTED) {
-		result = eigrp_topo_connected_pfx_recreate(
-			eigrp, &destination, type, &reported_metric, distance,
-			feasible_distance, reported_distance, connected_routes);
-		eigrp_topo_route_snapshot_free(connected_routes);
-		return result;
+	if (connected && replacement) {
+		/* Transfer the already allocated snapshot nodes directly into
+		 * the replacement DNDB. No allocation or partial reinsertion is
+		 * needed.
+		 */
+		eigrp_list_delete(&replacement->internal_routes);
+		replacement->internal_routes = connected_routes;
+		replacement->internal_routes->cmp =
+			(int (*)(void *, void *))eigrp_topo_route_cmp;
+		connected_routes = NULL;
+		for (EIGRP_LIST_ITERATE_RO(replacement->internal_routes, node,
+					   route))
+			route->prefix = replacement;
+		eigrp_topo_rib_update(eigrp, replacement);
+	} else if (requery) {
+		query_route->prefix = replacement;
+		query_route->dest = replacement->destination;
+		query_route->adv_router = NULL;
+		query_route->ei = NULL;
+		query_route->metric.delay = EIGRP_MAX_METRIC;
+		query_route->metric.flags = 0;
+		query_work->prefix = replacement;
+		query_work->route = query_route;
+		query_work->owner = replacement;
+		query_work->flags = EIGRP_PACKETIZER_WORK_F_OWN_ROUTE;
+		eigrp_packetizer_enqueue(eigrp, query_work);
 	}
+	eigrp_topo_route_snapshot_free(connected_routes);
+	return EIGRP_RESULT_SUCCESS;
 
-	return eigrp_topo_remote_requery(eigrp, &destination, type,
-					 &reported_metric, query_route);
+failed:
+	eigrp_topo_route_snapshot_free(connected_routes);
+	eigrp_topo_route_free(query_route);
+	eigrp_topo_pfx_free(replacement);
+	eigrp_packetizer_work_free(query_work);
+	return EIGRP_RESULT_INTERNAL_FAILURE;
 }
 
 static eigrp_result_t eigrp_topo_pfx_clear_all(eigrp_instance_t *eigrp,
@@ -2169,14 +2209,21 @@ static eigrp_result_t eigrp_topo_pfx_clear_all(eigrp_instance_t *eigrp,
 	size_t affected = 0;
 
 	destinations = eigrp_list_create();
+	if (!destinations)
+		return EIGRP_RESULT_INTERNAL_FAILURE;
 	for (rn = eigrp_table_first(eigrp->topology_table); rn;
 	     rn = eigrp_table_next(rn)) {
 		prefix = rn->info;
 		if (!prefix)
 			continue;
 		destination = calloc(1, sizeof(*destination));
+		if (!destination)
+			goto failed;
 		*destination = prefix->destination;
-		eigrp_list_add(destinations, destination);
+		if (!eigrp_list_add(destinations, destination)) {
+			free(destination);
+			goto failed;
+		}
 	}
 
 	for (EIGRP_LIST_ITERATE(destinations, node, nnode, destination)) {
@@ -2196,6 +2243,14 @@ static eigrp_result_t eigrp_topo_pfx_clear_all(eigrp_instance_t *eigrp,
 	if (affected_count)
 		*affected_count = affected;
 	return result;
+
+failed:
+	for (EIGRP_LIST_ITERATE(destinations, node, nnode, destination)) {
+		eigrp_list_delete_data(destinations, destination);
+		free(destination);
+	}
+	eigrp_list_delete(&destinations);
+	return EIGRP_RESULT_INTERNAL_FAILURE;
 }
 
 /*

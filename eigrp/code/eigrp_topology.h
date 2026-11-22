@@ -39,7 +39,7 @@ extern eigrp_route_descriptor_t *eigrp_topo_route_create(eigrp_intf_t *);
 /* Neighbor path insertions share one count-update point. */
 bool eigrp_topo_route_insert(eigrp_instance_t *, eigrp_prefix_descriptor_t *,
 			     eigrp_route_descriptor_t *, bool);
-extern void eigrp_topo_route_add(eigrp_instance_t *,
+extern bool eigrp_topo_route_add(eigrp_instance_t *,
 				 eigrp_prefix_descriptor_t *,
 				 eigrp_route_descriptor_t *);
 extern void eigrp_topo_route_remove(eigrp_instance_t *,
@@ -56,7 +56,7 @@ extern void eigrp_topo_pfx_free(eigrp_prefix_descriptor_t *);
 
 extern void eigrp_topo_table_delete(eigrp_instance_t *eigrp,
 				    eigrp_table_t *table);
-extern void eigrp_topo_pfx_add(eigrp_table_t *table,
+extern bool eigrp_topo_pfx_add(eigrp_table_t *table,
 			       eigrp_prefix_descriptor_t *pe);
 extern void eigrp_topo_pfx_delete(eigrp_instance_t *eigrp, eigrp_table_t *table,
 				  eigrp_prefix_descriptor_t *pe);

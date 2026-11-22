@@ -176,6 +176,94 @@ eigrp_list_item_t *eigrp_list_insert(eigrp_list_t *list, void *data)
 	return new_node;
 }
 
+/* Reposition an owned item after its comparison key changes. The item and
+ * optional pointer index remain intact, so this operation cannot fail due
+ * to memory pressure. */
+bool eigrp_list_reorder(eigrp_list_t *list, const void *data)
+{
+	eigrp_list_item_t *node, *next;
+
+	if (!list || !list->cmp)
+		return false;
+	node = eigrp_list_lookup(list, data);
+	if (!node)
+		return false;
+	if (node->prev)
+		node->prev->next = node->next;
+	else
+		list->head = node->next;
+	if (node->next)
+		node->next->prev = node->prev;
+	else
+		list->tail = node->prev;
+	for (next = list->head; next; next = next->next)
+		if (list->cmp(node->data, next->data) < 0)
+			break;
+	if (!next) {
+		node->next = NULL;
+		node->prev = list->tail;
+		if (list->tail)
+			list->tail->next = node;
+		else
+			list->head = node;
+		list->tail = node;
+	} else {
+		node->next = next;
+		node->prev = next->prev;
+		if (next->prev)
+			next->prev->next = node;
+		else
+			list->head = node;
+		next->prev = node;
+	}
+	return true;
+}
+
+/* Move an owned node between sorted queues without new storage. */
+bool eigrp_list_move(eigrp_list_t *from, eigrp_list_t *to, const void *data)
+{
+	eigrp_list_item_t *node, *next;
+
+	if (!from || !to || from == to)
+		return false;
+	node = eigrp_list_lookup(from, data);
+	if (!node)
+		return false;
+	eigrp_list_index_remove(from, node);
+	if (node->prev)
+		node->prev->next = node->next;
+	else
+		from->head = node->next;
+	if (node->next)
+		node->next->prev = node->prev;
+	else
+		from->tail = node->prev;
+	from->count--;
+	for (next = to->head; next; next = next->next)
+		if (to->cmp && to->cmp(node->data, next->data) < 0)
+			break;
+	if (!next) {
+		node->next = NULL;
+		node->prev = to->tail;
+		if (to->tail)
+			to->tail->next = node;
+		else
+			to->head = node;
+		to->tail = node;
+	} else {
+		node->next = next;
+		node->prev = next->prev;
+		if (next->prev)
+			next->prev->next = node;
+		else
+			to->head = node;
+		next->prev = node;
+	}
+	to->count++;
+	eigrp_list_index_add(to, node);
+	return true;
+}
+
 eigrp_list_item_t *eigrp_list_lookup(eigrp_list_t *list, const void *data)
 {
 	eigrp_list_item_t *node;

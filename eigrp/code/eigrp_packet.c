@@ -1474,8 +1474,9 @@ static bool eigrp_instance_wait(eigrp_instance_t *eigrp)
 
 		now = eigrp_sys_monotime_msec();
 		if (eigrp->event_head || eigrp->packet_head
-		    || eigrp->packetizer_head || eigrp->rib_head
-		    || eigrp->message_head || eigrp->write_ready
+		    || eigrp->packetizer_head || eigrp->deferred_prefixes
+		    || eigrp->rib_head || eigrp->message_head
+		    || eigrp->write_ready
 		    || (eigrp->timer_head
 			&& eigrp->timer_head->due_msec <= now))
 			break;
@@ -1563,6 +1564,7 @@ static void eigrp_instance_protocol_service(eigrp_instance_t *eigrp)
 		eigrp_packetizer_work_process(eigrp, packetizer);
 		eigrp_packetizer_work_free(packetizer);
 	}
+	eigrp_packetizer_deferred_collect(eigrp);
 
 	if (eigrp_instance_write_ready_take(eigrp))
 		eigrp_packet_write(eigrp);

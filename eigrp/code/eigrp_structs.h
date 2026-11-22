@@ -184,6 +184,7 @@ struct eigrp_instance {
 				       by last update*/
 	eigrp_list_t *topology_changes;
 
+	eigrp_prefix_descriptor_t *deferred_prefixes;
 	eigrp_packetizer_work_t *packetizer_head;
 	eigrp_packetizer_work_t *packetizer_tail;
 	size_t packetizer_count;
@@ -569,6 +570,8 @@ typedef struct eigrp_prefix_descriptor {
 	/* Direct table ownership for O(1) detachment of retired destinations.
 	 */
 	eigrp_table_node_t *table_node;
+	eigrp_prefix_descriptor_t *deferred_next;
+	eigrp_prefix_descriptor_t *retire_next;
 	bool limit_counted; /* Included in AF reachable-prefix accounting. */
 	bool retirement_queued; /* Once per packetizer work batch. */
 	eigrp_list_t *internal_routes, *external_routes, *rij;

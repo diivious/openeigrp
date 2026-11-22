@@ -110,7 +110,8 @@ void eigrp_fsm_reply_status_add(eigrp_prefix_descriptor_t *prefix,
 		return;
 	status->neighbor = nbr;
 	status->sia_response_received = true;
-	eigrp_list_add(prefix->rij, status);
+	if (!eigrp_list_add(prefix->rij, status))
+		free(status);
 }
 
 bool eigrp_fsm_reply_status_remove(eigrp_prefix_descriptor_t *prefix,
@@ -440,6 +441,10 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 
 	if (route == NULL) {
 		route = eigrp_topo_route_create(msg->adv_router->ei);
+		if (!route) {
+			msg->allocation_failed = true;
+			return EIGRP_FSM_KEEP_STATE;
+		}
 		route->adv_router = msg->adv_router;
 		route->prefix = prefix;
 		msg->route = route;
@@ -690,6 +695,11 @@ int eigrp_fsm_event(eigrp_fsm_action_message_t *msg)
 {
 	enum eigrp_fsm_events event = eigrp_fsm_event_select(msg);
 
+	if (msg->allocation_failed && msg->packet_type == EIGRP_OPC_UPDATE)
+		return 0;
+	if (msg->allocation_failed && !msg->route)
+		return 0;
+
 	if (IS_DEBUG_EIGRP(0, FSM)
 	    || eigrp_debug_af_enabled(msg->eigrp, EIGRP_DEBUG_AF_ROUTE,
 				      msg->adv_router ? &msg->adv_router->src
@@ -785,6 +795,7 @@ eigrp_fsm_active_non_successor_reply_send(eigrp_instance_t *eigrp,
 	eigrp_topology_route_iterator_t iterator;
 	eigrp_route_descriptor_t *route;
 	eigrp_route_descriptor_t *reply_route = NULL;
+	bool copy_failed = false;
 
 	if (!eigrp || !nbr || !prefix)
 		return;
@@ -802,8 +813,10 @@ eigrp_fsm_active_non_successor_reply_send(eigrp_instance_t *eigrp,
 			continue;
 
 		reply_route = eigrp_topo_route_create(route->ei);
-		if (!reply_route)
+		if (!reply_route) {
+			copy_failed = true;
 			break;
+		}
 		*reply_route = *route;
 		reply_route->owner_ref = false;
 		reply_route->metric = prefix->reported_metric;
@@ -815,6 +828,10 @@ eigrp_fsm_active_non_successor_reply_send(eigrp_instance_t *eigrp,
 				       EIGRP_PACKETIZER_WORK_F_OWN_ROUTE);
 		return;
 	}
+	/* Allocation failure is not evidence that the route is unreachable.
+	 * Never substitute a false poison response for a missing snapshot. */
+	if (copy_failed)
+		return;
 
 	/* No usable installed route remains for the destination.  An INTABLE
 	 * route whose current CD is infinite is no longer a reachable

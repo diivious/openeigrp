@@ -33,6 +33,7 @@ typedef struct eigrp_fsm_action_message {
 	/* DUAL must process a QUERY/REPLY even if a new peer path cannot be
 	 * retained. */
 	bool transient_route;
+	bool allocation_failed;
 } eigrp_fsm_action_message_t;
 
 extern int eigrp_fsm_event(eigrp_fsm_action_message_t *msg);

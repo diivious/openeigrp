@@ -1,0 +1,64 @@
+# OE-08 runtime ownership/convergence regression. Deterministic calloc failures
+# are exercised by eigrp/test/topology/allocation_failure.py; this scenario
+# validates normal admission, withdrawal, repeated recovery and retirement.
+schema: eigrp-uut-test/v1
+topology: two-router.yaml
+name: OE-08 - Topology Ownership and Recovery
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, active: false, successors: 1}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1}
+  - clear-topology: {uut: r1, prefix: 10.2.0.0/24}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, active: false, successors: 1}
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: topology, present: false}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, active: false, successors: 1}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: topology, active: false, successors: 1}
+  - links-down:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 8
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: topology, present: false}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: topology, present: false}
+  - links-up:
+      - {uut: r1, interface: eth0}
+      - {uut: r2, interface: eth0}
+  - validate-convergence:
+      timeout: 12
+      stable_for: 0.3
+      expect:
+        - route: {uut: r1, prefix: 10.2.0.0/24, table: rib, next_hop: 10.0.0.2}
+        - route: {uut: r2, prefix: 10.1.0.0/24, table: rib, next_hop: 10.0.0.1}
+  - stop: all

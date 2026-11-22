@@ -132,6 +132,8 @@ void eigrp_siaquery_send(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		eigrp, EIGRP_EVENTLOG_OPCODE_SIA_QUERY_TX, &prefix->destination,
 		nbr && nbr->ei ? nbr->ei->ifindex : 0, 0, 0, 0);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_SIAQUERY);
+	if (!work)
+		return;
 	work->nbr = nbr;
 	work->prefix = prefix;
 	work->owner = prefix;

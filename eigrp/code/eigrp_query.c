@@ -153,15 +153,18 @@ static bool eigrp_query_unknown_route_record(eigrp_instance_t *eigrp,
 	route->reported_distance =
 		eigrp_metric_calculate(eigrp, route->reported_metric);
 	route->distance = eigrp_metric_total_calculate(eigrp, route);
+	if (new_prefix && !eigrp_topo_pfx_add(eigrp->topology_table, prefix)) {
+		eigrp_topo_pfx_free(prefix);
+		return false;
+	}
 	if (!eigrp_topo_route_insert(eigrp, prefix, route, true)) {
 		if (new_prefix)
-			eigrp_topo_pfx_free(prefix);
+			eigrp_topo_pfx_delete(eigrp, eigrp->topology_table,
+					      prefix);
 		return false;
 	}
 	/* Route storage is intentionally separate from route_descriptor_add(),
 	 * which can install the first path into the host RIB. */
-	if (new_prefix)
-		eigrp_topo_pfx_add(eigrp->topology_table, prefix);
 	return true;
 }
 
@@ -175,6 +178,11 @@ void eigrp_query_send_route(eigrp_instance_t *eigrp,
 		return;
 
 	work = eigrp_packetizer_work_create(EIGRP_OPC_QUERY);
+	if (!work) {
+		if (flags & EIGRP_PACKETIZER_WORK_F_OWN_ROUTE)
+			eigrp_topo_route_free(route);
+		return;
+	}
 	work->prefix = prefix;
 	work->route = route;
 	work->owner = prefix;
@@ -204,6 +212,8 @@ uint32_t eigrp_query_send_all(eigrp_instance_t *eigrp)
 	 * destinations per interface and split only at complete TLV boundaries.
 	 */
 	work = eigrp_packetizer_work_create(EIGRP_OPC_QUERY);
+	if (!work)
+		return 0;
 	eigrp_packetizer_enqueue(eigrp, work);
 
 	return counter;

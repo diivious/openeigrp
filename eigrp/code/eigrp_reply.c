@@ -42,6 +42,13 @@ void eigrp_reply_send_route(eigrp_instance_t *eigrp, eigrp_nbr_t *nbr,
 		nbr->ei ? nbr->ei->ifindex : 0,
 		route ? route->distance : prefix->distance, 0, 0);
 	work = eigrp_packetizer_work_create(EIGRP_OPC_REPLY);
+	if (!work) {
+		if (flags & EIGRP_PACKETIZER_WORK_F_OWN_ROUTE)
+			eigrp_topo_route_free(route);
+		if (flags & EIGRP_PACKETIZER_WORK_F_OWN_PREFIX)
+			eigrp_topo_pfx_free(prefix);
+		return;
+	}
 	work->nbr = nbr;
 	work->prefix = prefix;
 	work->route = route;

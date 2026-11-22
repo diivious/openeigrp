@@ -502,8 +502,8 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 {
 	eigrp_intf_t *ei;
 	eigrp_prefix_descriptor_t *prefix;
-	eigrp_list_item_t *inode, *pnode, *pnnode, *rnode;
-	eigrp_list_t *retire = eigrp_list_create();
+	eigrp_list_item_t *inode, *pnode, *pnnode;
+	eigrp_prefix_descriptor_t *retire = NULL, *retire_next;
 
 	for (EIGRP_LIST_ITERATE_RO(eigrp->eiflist, inode, ei)) {
 		eigrp_packetizer_builder_t builder;
@@ -671,20 +671,22 @@ static void eigrp_packetizer_changes_send(eigrp_instance_t *eigrp,
 			 * this destination.  Never do so while iterating that
 			 * same list: DUAL can append a duplicate when QUERY
 			 * completes in-line. */
-			if (retire && action == EIGRP_FSM_NEED_UPDATE
+			if (action == EIGRP_FSM_NEED_UPDATE
 			    && prefix->state == EIGRP_FSM_STATE_PASSIVE
-			    && !prefix->retirement_queued
-			    && eigrp_list_add(retire, prefix))
+			    && !prefix->retirement_queued) {
 				prefix->retirement_queued = true;
+				prefix->retire_next = retire;
+				retire = prefix;
+			}
 		}
 	}
-	if (retire) {
-		for (EIGRP_LIST_ITERATE_RO(retire, rnode, prefix)) {
-			prefix->retirement_queued = false;
-			eigrp_topo_pfx_update(eigrp, eigrp->topology_table,
-					      prefix);
-		}
-		eigrp_list_delete(&retire);
+	while (retire) {
+		prefix = retire;
+		retire_next = prefix->retire_next;
+		retire = retire_next;
+		prefix->retire_next = NULL;
+		prefix->retirement_queued = false;
+		eigrp_topo_pfx_update(eigrp, eigrp->topology_table, prefix);
 	}
 }
 
@@ -773,6 +775,7 @@ void eigrp_packetizer_delete(eigrp_instance_t *eigrp)
 		eigrp_packetizer_work_free(work);
 		work = next;
 	}
+	eigrp_packetizer_deferred_collect(eigrp);
 }
 
 /* Remove references to an interface that is about to be freed.  The
@@ -830,6 +833,8 @@ eigrp_packetizer_work_t *eigrp_packetizer_work_create(uint8_t opcode)
 	eigrp_packetizer_work_t *work;
 
 	work = calloc(1, sizeof(*work));
+	if (!work)
+		return NULL;
 	work->opcode = opcode;
 	return work;
 }
@@ -889,9 +894,41 @@ void eigrp_packetizer_prefix_defer_free(eigrp_instance_t *eigrp,
 	if (!eigrp || !prefix)
 		return;
 	work = eigrp_packetizer_work_create(EIGRP_OPC_UPDATE);
+	if (!work) {
+		/* Keep the detached prefix alive until earlier packetizer work
+		 * drains. The intrusive retirement queue allocates no storage.
+		 */
+		pthread_mutex_lock(&eigrp->work_lock);
+		prefix->deferred_next = eigrp->deferred_prefixes;
+		eigrp->deferred_prefixes = prefix;
+		pthread_cond_signal(&eigrp->work_cond);
+		pthread_mutex_unlock(&eigrp->work_lock);
+		return;
+	}
 	work->prefix = prefix;
 	work->owner = prefix;
 	work->flags = EIGRP_PACKETIZER_WORK_F_OWN_PREFIX
 		      | EIGRP_PACKETIZER_WORK_F_DEFER_FREE;
 	eigrp_packetizer_enqueue(eigrp, work);
+}
+
+/* Only the AF thread may release retired descriptors. Before collecting,
+ * every earlier packetizer bead has to finish processing. */
+void eigrp_packetizer_deferred_collect(eigrp_instance_t *eigrp)
+{
+	eigrp_prefix_descriptor_t *prefix, *next;
+
+	if (!eigrp)
+		return;
+	pthread_mutex_lock(&eigrp->work_lock);
+	prefix = eigrp->packetizer_head ? NULL : eigrp->deferred_prefixes;
+	if (prefix)
+		eigrp->deferred_prefixes = NULL;
+	pthread_mutex_unlock(&eigrp->work_lock);
+	while (prefix) {
+		next = prefix->deferred_next;
+		prefix->deferred_next = NULL;
+		eigrp_topo_pfx_free(prefix);
+		prefix = next;
+	}
 }

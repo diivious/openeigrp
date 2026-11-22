@@ -31,6 +31,8 @@ bool eigrp_list_index_enable(eigrp_list_t *list);
 void eigrp_list_delete(eigrp_list_t **list);
 eigrp_list_item_t *eigrp_list_add(eigrp_list_t *list, void *data);
 eigrp_list_item_t *eigrp_list_insert(eigrp_list_t *list, void *data);
+bool eigrp_list_reorder(eigrp_list_t *list, const void *data);
+bool eigrp_list_move(eigrp_list_t *from, eigrp_list_t *to, const void *data);
 void eigrp_list_delete_data(eigrp_list_t *list, const void *data);
 void eigrp_list_remove(eigrp_list_t *list, eigrp_list_item_t *node);
 eigrp_list_item_t *eigrp_list_lookup(eigrp_list_t *list, const void *data);
