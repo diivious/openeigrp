@@ -18,7 +18,7 @@ This policy may change when production releases and a formal maintenance schedul
 
 Please report suspected vulnerabilities privately using either of these channels:
 
-1. **Preferred:** [GitHub private vulnerability reporting](https://github.com/diivious/eigrp/security/advisories/new), when enabled for the repository.
+1. **Preferred:** [GitHub private vulnerability reporting](https://github.com/diivious/openeigrp/security/advisories/new), when enabled for the repository.
 2. **Alternative:** Email `diivious@hotmail.com` with the subject `OpenEIGRP Security Report`.
 
 Please include, when available:
