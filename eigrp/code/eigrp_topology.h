@@ -91,6 +91,7 @@ extern void eigrp_topo_nbr_down(eigrp_instance_t *eigrp, eigrp_nbr_t *neigh);
  * 'peers' is reusable per-prefix storage sized for suspended neighbors. */
 void eigrp_topo_suspended_nbrs_down(eigrp_instance_t *eigrp,
 				    eigrp_nbr_t **peers, size_t capacity);
+extern void eigrp_topo_intf_detach(eigrp_instance_t *eigrp, eigrp_intf_t *ei);
 extern void eigrp_topo_connected_intf_down(eigrp_instance_t *eigrp,
 					   eigrp_intf_t *ei);
 extern void eigrp_topo_pfx_update(eigrp_instance_t *eigrp, eigrp_table_t *table,

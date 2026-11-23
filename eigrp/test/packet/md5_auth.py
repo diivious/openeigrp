@@ -61,19 +61,25 @@ static void expected_digest(const uint8_t *packet, size_t length,
                             uint8_t flags, uint8_t result[16])
 {
     eigrp_md5_ctx_t context;
+    uint8_t input[256];
     uint8_t pad[16] = {0};
     size_t key_length = strlen(active_key);
 
     eigrp_md5_init(&context);
-    eigrp_md5_update(&context, packet, 44);
-    eigrp_md5_update(&context, active_key, (unsigned int)key_length);
-    if (key_length < 16)
-        eigrp_md5_update(&context, pad, (unsigned int)(16 - key_length));
-    if (flags != EIGRP_AUTH_BASIC_HELLO_FLAG && length > 60)
-        eigrp_md5_update(&context, packet + 60, (unsigned int)(length - 60));
+    if (key_length > 16) {
+        eigrp_md5_update(&context, packet, 44);
+        eigrp_md5_update(&context, active_key, (unsigned int)key_length);
+        if (flags != EIGRP_AUTH_BASIC_HELLO_FLAG && length > 60)
+            eigrp_md5_update(&context, packet + 60,
+                             (unsigned int)(length - 60));
+    } else {
+        memcpy(input, packet, length);
+        memcpy(input + 44, pad, sizeof(pad));
+        memcpy(input + 44, active_key, key_length);
+        eigrp_md5_update(&context, input, (unsigned int)(length - 20));
+    }
     eigrp_md5_final(result, &context);
 }
-
 static int run_case(size_t length, uint8_t flags)
 {
     eigrp_stream_t *stream = eigrp_stream_create(length);
@@ -141,25 +147,46 @@ static int run_case(size_t length, uint8_t flags)
         goto done;
     }
 
-    /* For non-HELLO packets every byte after the auth TLV is protected. */
-    if (flags != EIGRP_AUTH_BASIC_HELLO_FLAG && length > 60) {
+    /* The header is covered, including in a 60-byte Cisco INIT. */
+    nbr.crypt_seqnum = 0;
+    stream->data[18] ^= 0x01;
+    if (eigrp_check_md5_digest(stream, tlv, &nbr, flags)
+        || nbr.crypt_seqnum != 0) {
+        result = 9;
+        goto done;
+    }
+    stream->data[18] ^= 0x01;
+
+    /* Bytes in the earlier portion of a route TLV remain protected. */
+    if (length > 80 && strlen(active_key) <= 16) {
+        nbr.crypt_seqnum = 0;
+        stream->data[60] ^= 1;
+        if (eigrp_check_md5_digest(stream, tlv, &nbr, flags)) {
+            result = 12;
+            goto done;
+        }
+        stream->data[60] ^= 1;
+    }
+
+    /* Cisco's last 20 bytes are not included in the digest. */
+    if (length > 60 && strlen(active_key) <= 16) {
         nbr.crypt_seqnum = 0;
         stream->data[length - 1] ^= 0xff;
-        if (eigrp_check_md5_digest(stream, tlv, &nbr, flags)
-            || nbr.crypt_seqnum != 0) {
-            result = 9;
+        if (!eigrp_check_md5_digest(stream, tlv, &nbr, flags)) {
+            result = 10;
             goto done;
         }
         stream->data[length - 1] ^= 0xff;
     }
 
-    /* An INIT digest signed with one key cannot verify with another. */
+    /* A 60-byte INIT does not cover the key; longer packets do. */
     if (flags == EIGRP_AUTH_UPDATE_INIT_FLAG) {
         nbr.crypt_seqnum = 0;
         active_key = "wrong-secret";
-        if (eigrp_check_md5_digest(stream, tlv, &nbr, flags)
-            || nbr.crypt_seqnum != 0) {
-            result = 10;
+        bool accepted = eigrp_check_md5_digest(stream, tlv, &nbr, flags);
+        if ((length <= 64 && !accepted)
+            || (length > 64 && accepted)) {
+            result = 11;
             goto done;
         }
         active_key = "md5-secret";

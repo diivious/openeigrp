@@ -93,6 +93,20 @@ static bool eigrp_packet_header_is_ack(const struct eigrp_header *header)
 	       && ntohl(header->sequence) == 0 && ntohl(header->ack) != 0;
 }
 
+/* Cisco MD5 peers use bare 20-byte Hello ACKs even when route packets
+ * carry authentication. This is a wire exception, not an authenticated
+ * Hello: ingress admits it only for an existing peer, and the AF-owned RTP
+ * handler checks the outstanding sequence. It cannot refresh liveness. */
+static bool eigrp_packet_ack_md5_unkeyed(const eigrp_intf_t *ei,
+					 const struct eigrp_header *header,
+					 uint16_t length)
+{
+	return ei && ei->params.auth_type == EIGRP_AUTH_TYPE_MD5
+	       && length == EIGRP_HEADER_LEN
+	       && eigrp_packet_header_is_ack(header)
+	       && ntohl(header->flags) == 0;
+}
+
 static void
 eigrp_packet_opcode_counter_increment(eigrp_intf_stats_t *stats, bool sent,
 				      const struct eigrp_header *header)
@@ -2658,6 +2672,8 @@ static int eigrp_packet_auth_header_validate(eigrp_intf_t *ei,
 	}
 
 	if (!auth_tlv) {
+		if (eigrp_packet_ack_md5_unkeyed(ei, eigrph, length))
+			return 0;
 		eigrp_log(
 			EIGRP_LOG_WARNING,
 			"interface %s: EIGRP authenticated interface received packet without auth TLV",
@@ -2789,6 +2805,7 @@ bool eigrp_packet_ingress_authenticate(eigrp_instance_t *instance,
 	size_t offset;
 	uint16_t length;
 	bool accepted = false;
+	bool unkeyed_ack;
 
 	if (!instance || !input || !input->stream
 	    || !eigrp_packet_input_bounds_validate(
@@ -2835,15 +2852,28 @@ bool eigrp_packet_ingress_authenticate(eigrp_instance_t *instance,
 	/* Reject excess sources before spending work authenticating them. */
 	if (!nbr && !eigrp_nbr_admit_locked(ei))
 		goto done;
-	if (eigrp_packet_auth_digest_validate(ei, nbr, &input->source, header,
-					      length)
-	    < 0)
+	unkeyed_ack = eigrp_packet_ack_md5_unkeyed(ei, header, length);
+	if (unkeyed_ack) {
+		/* A bare ACK has no digest. Require a known unicast peer.
+		 * The retransmission queue is AF-owned, so do not inspect it
+		 * here. eigrp_packet_ack() matches the outstanding RTP head.
+		 * Source, checksum and interface were already validated. */
+		if (input->meta.destination_multicast || !nbr)
+			goto done;
+	} else if (eigrp_packet_auth_digest_validate(ei, nbr, &input->source,
+						     header, length)
+		   < 0) {
 		goto done;
+	}
 
+	/* This admission bit includes the restricted unkeyed MD5 ACK case;
+	 * only the AF-owned ACK handler may consume its RTP sequence. */
 	input->ingress_authenticated = true;
 	input->ingress_neighbor_generation = nbr ? nbr->generation : 0;
 	input->ingress_discovery = !nbr || nbr->state != EIGRP_NEIGHBOR_UP;
-	if (nbr)
+	/* The exception admits an RTP ACK, not an authenticated Hello.
+	 * An unauthenticated packet must not extend the hold timer. */
+	if (nbr && !unkeyed_ack)
 		eigrp_nbr_holddown_update(nbr);
 	accepted = true;
 done:

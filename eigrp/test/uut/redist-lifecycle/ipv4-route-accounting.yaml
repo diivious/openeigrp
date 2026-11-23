@@ -1,0 +1,45 @@
+# Connected transit prefixes live in topology but not the learned UUT RIB.
+# Exercise source admission, withdrawal and recovery without counting the
+# local connected route as an installed learned route.
+schema: eigrp-uut-test/v1
+name: ipv4-redistribution-topology-vs-learned-rib
+topology: ../examples/two-router.yaml
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r2, neighbor: 10.0.0.1, state: up}
+        - route: {uut: r2, prefix: '10.0.0.0/24', table: topology, present: true}
+        - route: {uut: r2, prefix: '10.0.0.0/24', table: rib, present: false}
+  - source-route-add: {uut: r1, prefix: '198.51.100.73/32', metric: 20}
+  - redistribute-add: {uut: r1, source: static}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: topology, present: true}
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: true}
+        - route: {uut: r2, prefix: '10.0.0.0/24', table: topology, present: true}
+        - route: {uut: r2, prefix: '10.0.0.0/24', table: rib, present: false}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.73/32'}
+  - validate-convergence:
+      timeout: 18
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: topology, present: false}
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: false}
+        - route: {uut: r2, prefix: '10.0.0.0/24', table: topology, present: true}
+        - route: {uut: r2, prefix: '10.0.0.0/24', table: rib, present: false}
+  - source-route-add: {uut: r1, prefix: '198.51.100.73/32', metric: 20}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: topology, present: true}
+        - route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: true}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.73/32'}
+  - validate-route: {uut: r2, prefix: '198.51.100.73/32', table: rib, present: false, timeout: 18}
+  - redistribute-remove: {uut: r1, source: static}
+  - stop: all

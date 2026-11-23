@@ -1,0 +1,26 @@
+schema: openeigrp-cisco-md5-control/v1
+name: 2R-md5-cisco
+group: rtp
+platform: Cisco CSR1000v IOS XE 17.03.06
+asn: 4473
+family: ipv4
+keychain: OE03C2C
+key_id: 7
+key_string: oe03-lab-md5
+nodes:
+  csr1:
+    address: 10.44.53.1
+    neighbor: 10.44.53.2
+    router_id: 10.255.1.1
+    advertised: 198.18.253.1/32
+  csr2:
+    address: 10.44.53.2
+    neighbor: 10.44.53.1
+    router_id: 10.255.2.2
+    advertised: 198.19.253.2/32
+objectives:
+- C2C-01
+- C2C-02
+- C2C-03
+- C2C-04
+- C2C-05

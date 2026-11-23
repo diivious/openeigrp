@@ -27,15 +27,26 @@ static bool eigrp_auth_sequence_newer(uint32_t received_wire,
 	uint32_t stored = ntohl(stored_wire);
 	uint32_t delta = received - stored;
 
-	/* Zero is not transmitted.  A new neighbor has no prior sequence:
-	 * accept any nonzero starting value, including values above INT32_MAX.
-	 * Once initialized, use half-range serial-number arithmetic to reject
-	 * duplicate and stale packets while permitting 32-bit wraparound. */
+	/* A new neighbor has no prior sequence: accept any nonzero start,
+	 * including values above INT32_MAX. Thereafter use half-range serial
+	 * arithmetic to reject stale packets and permit 32-bit wraparound. */
 	if (received == 0)
 		return false;
 	if (stored == 0)
 		return true;
 	return delta != 0 && delta < 0x80000000U;
+}
+
+/* Cisco IOS XE sends zero in the MD5 key sequence field, including on
+ * authenticated UPDATEs. Permit that profile only until a nonzero
+ * cryptographic sequence is observed. Cisco's zero profile has no
+ * sequence-based replay defense; the keyed digest remains mandatory. */
+static bool eigrp_auth_md5_sequence_accept(uint32_t received_wire,
+					   uint32_t stored_wire)
+{
+	if (received_wire == 0)
+		return stored_wire == 0;
+	return eigrp_auth_sequence_newer(received_wire, stored_wire);
 }
 
 /* Each actual interface transmission receives a fresh cryptographic sequence.
@@ -55,13 +66,20 @@ bool eigrp_auth_discovery_sequence_accept(eigrp_nbr_t *nbr,
 					  const struct eigrp_header *header)
 {
 	const struct TLV_MD5_Authentication_Type *auth;
+	bool accepted;
 
 	if (!nbr || !header)
 		return false;
 	if (nbr->ei->params.auth_type == EIGRP_AUTH_TYPE_NONE)
 		return true;
 	auth = (const struct TLV_MD5_Authentication_Type *)header->tlv;
-	if (!eigrp_auth_sequence_newer(auth->key_sequence, nbr->crypt_seqnum))
+	if (nbr->ei->params.auth_type == EIGRP_AUTH_TYPE_MD5)
+		accepted = eigrp_auth_md5_sequence_accept(auth->key_sequence,
+							  nbr->crypt_seqnum);
+	else
+		accepted = eigrp_auth_sequence_newer(auth->key_sequence,
+						     nbr->crypt_seqnum);
+	if (!accepted)
 		return false;
 	nbr->crypt_seqnum = auth->key_sequence;
 	return true;
@@ -129,14 +147,12 @@ static bool eigrp_auth_sha256_source(eigrp_intf_t *ei, eigrp_nbr_t *nbr,
 }
 
 /*
- * MD5 input: EIGRP header and authentication TLV fields
- * through the reserved bytes, followed by the configured key (zero-padded
- * to 16 octets when shorter). UPDATEs, including INIT UPDATEs, then cover
- * every TLV after the authentication TLV. The digest field itself is omitted.
- * Basic HELLOs retain the existing 44-byte Cisco compatibility profile.
- *
- * Use the same computation for transmit and receive so the authenticated
- * byte ranges cannot diverge. Validate length before any MD5 update.
+ * Cisco MD5 covers the first packet_length - EIGRP_HEADER_LEN bytes,
+ * with the checksum cleared and the digest slot replaced by the key padded
+ * to 16 bytes. This includes only the first 40 bytes of a 60-byte INIT and
+ * excludes the final 20 bytes of all packets. Confirmed by Cisco captures.
+ * Keep the historical OpenEIGRP calculation for keys longer than 16 bytes;
+ * Cisco handling of these keys has not been established by capture.
  */
 _Static_assert(EIGRP_MD5_BASIC_COMPUTE
 		       == EIGRP_HEADER_LEN
@@ -153,7 +169,7 @@ eigrp_auth_md5_compute(const uint8_t *packet, size_t packet_len,
 		       unsigned char digest[EIGRP_AUTH_TYPE_MD5_LEN])
 {
 	const size_t tlv_end = EIGRP_HEADER_LEN + EIGRP_AUTH_MD5_TLV_SIZE;
-	size_t key_len;
+	size_t key_len, covered, prefix, remaining, count;
 	eigrp_md5_ctx_t ctx;
 
 	if (!packet || !key || !digest || packet_len < tlv_end
@@ -166,15 +182,40 @@ eigrp_auth_md5_compute(const uint8_t *packet, size_t packet_len,
 	key_len = strlen(key);
 	memset(&ctx, 0, sizeof(ctx));
 	eigrp_md5_init(&ctx);
-	eigrp_md5_update(&ctx, packet, EIGRP_MD5_BASIC_COMPUTE);
-	eigrp_md5_update(&ctx, key, (unsigned int)key_len);
-	if (key_len < sizeof(zeropad))
-		eigrp_md5_update(&ctx, zeropad,
-				 (unsigned int)(sizeof(zeropad) - key_len));
 
-	if (!(flags & EIGRP_AUTH_BASIC_HELLO_FLAG) && packet_len > tlv_end)
-		eigrp_md5_update(&ctx, packet + tlv_end,
-				 (unsigned int)(packet_len - tlv_end));
+	if (key_len > sizeof(zeropad)) {
+		/* Preserve existing OpenEIGRP behavior for unverified long
+		 * keys. */
+		eigrp_md5_update(&ctx, packet, EIGRP_MD5_BASIC_COMPUTE);
+		eigrp_md5_update(&ctx, key, (unsigned int)key_len);
+		if (!(flags & EIGRP_AUTH_BASIC_HELLO_FLAG)
+		    && packet_len > tlv_end)
+			eigrp_md5_update(&ctx, packet + tlv_end,
+					 (unsigned int)(packet_len - tlv_end));
+	} else {
+		covered = packet_len - EIGRP_HEADER_LEN;
+		prefix = covered < EIGRP_MD5_BASIC_COMPUTE
+				 ? covered
+				 : EIGRP_MD5_BASIC_COMPUTE;
+		eigrp_md5_update(&ctx, packet, (unsigned int)prefix);
+		remaining = covered - prefix;
+		if (remaining) {
+			count = remaining < key_len ? remaining : key_len;
+			eigrp_md5_update(&ctx, key, (unsigned int)count);
+			remaining -= count;
+			if (remaining && count < sizeof(zeropad)) {
+				size_t zeros = sizeof(zeropad) - count;
+				if (zeros > remaining)
+					zeros = remaining;
+				eigrp_md5_update(&ctx, zeropad,
+						 (unsigned int)zeros);
+				remaining -= zeros;
+			}
+			if (remaining)
+				eigrp_md5_update(&ctx, packet + tlv_end,
+						 (unsigned int)remaining);
+		}
+	}
 
 	eigrp_md5_final(digest, &ctx);
 	return true;
@@ -233,8 +274,8 @@ int eigrp_check_md5_digest(eigrp_stream_t *s,
 	    || ntohs(authTLV->auth_length) != EIGRP_AUTH_TYPE_MD5_LEN)
 		return 0;
 
-	if (!eigrp_auth_sequence_newer(authTLV->key_sequence,
-				       nbr->crypt_seqnum)) {
+	if (!eigrp_auth_md5_sequence_accept(authTLV->key_sequence,
+					    nbr->crypt_seqnum)) {
 		eigrp_log(
 			EIGRP_LOG_WARNING,
 			"interface %s: eigrp_check_md5 bad sequence %u (expect %u)",

@@ -1,0 +1,43 @@
+schema: eigrp-uut-test/v1
+topology: ipv4-md5-mixed-lan.yaml
+name: MD5 authenticated static route redistribution withdrawal recovery
+steps:
+  - start: all
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - neighbor: {uut: r1, neighbor: 10.41.0.2, state: up, reliable_q: 0}
+        - neighbor: {uut: r2, neighbor: 10.41.0.1, state: up, reliable_q: 0}
+        - neighbor: {uut: r1, neighbor: 10.41.0.3, state: down}
+  - source-route-add: {uut: r1, prefix: '198.51.100.123/32', metric: 1}
+  - redistribute-add: {uut: r1, source: static}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.123/32', table: rib, present: true}
+        - route: {uut: r3, prefix: '198.51.100.123/32', table: rib, present: false}
+        - neighbor: {uut: r1, neighbor: 10.41.0.2, state: up}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.123/32'}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.123/32', table: rib, present: false}
+        - route: {uut: r1, prefix: '198.51.100.123/32', table: topology, present: false}
+  - source-route-add: {uut: r1, prefix: '198.51.100.123/32', metric: 1}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.123/32', table: rib, present: true}
+        - neighbor: {uut: r2, neighbor: 10.41.0.1, state: up, reliable_q: 0}
+  - redistribute-remove: {uut: r1, source: static}
+  - validate-convergence:
+      timeout: 15
+      stable_for: 0.3
+      expect:
+        - route: {uut: r2, prefix: '198.51.100.123/32', table: rib, present: false}
+  - source-route-remove: {uut: r1, prefix: '198.51.100.123/32'}
+  - stop: all

@@ -1,0 +1,29 @@
+schema: openeigrp-live-md5-interop/v1
+name: 2R-md5-interop
+group: rtp
+platform: OpenEIGRP FRR and Cisco CSR1000v IOS XE 17.03.06
+asn: 4473
+family: ipv4
+keychain: OE03C2OE
+key_id: 7
+key_string: oe03-lab-md5
+# The local MDI-05/06/07 topology probe uses:
+# show eigrp address-family ipv4 topology 4473 198.18.253.1/32
+origin:
+  kind: veth
+  interface: md5rt0
+  peer: md5rt1
+diagnostics:
+  cisco_packet_debug: true
+nodes:
+  oe:
+    address: 10.44.53.1
+    neighbor: 10.44.53.2
+    router_id: 10.255.0.1
+    advertised: 198.18.253.1/32
+  ce:
+    address: 10.44.53.2
+    neighbor: 10.44.53.1
+    router_id: 10.255.0.2
+    advertised: 198.19.253.2/32
+objectives: [MDI-01, MDI-02, MDI-03, MDI-04, MDI-05, MDI-06, MDI-07]

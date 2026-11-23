@@ -17,4 +17,7 @@ steps:
         - route: {uut: r2, prefix: 10.21.0.0/24, table: rib, next_hop: 10.41.0.1}
         - neighbor: {uut: r1, neighbor: 10.41.0.3, state: down}
         - neighbor: {uut: r2, neighbor: 10.41.0.3, state: down}
+  # Accepting Cisco MD5 key sequence zero must not weaken the local
+  # nonzero profile: new Hellos still use distinct crypto sequences.
+  - validate-packet: {source_uut: r2, destination_uut: r1, opcode: hello, event: delivered, group_by: auth_sequence, min_groups: 2, timeout: 12}
   - validate-neighbor: {uut: r1, neighbor: 10.41.0.2, state: up, observe: 3}

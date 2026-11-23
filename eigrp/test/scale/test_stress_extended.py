@@ -34,7 +34,11 @@ def test_source_prefixes_stay_in_disjoint_test_space():
 def test_md5_configuration_applies_authentication_before_interface_up():
     config = scale.router_config("r1", "10.41.0.1", source_count=3, md5=True)
     assert config.count("\nsource ") == 3
-    assert config.count("auth-md5 eth0 scale-test-keychain scale-test-only-secret") == 1
+    auth = next(line.split() for line in config.splitlines()
+                if line.startswith("auth-md5 "))
+    assert auth == ["auth-md5", "eth0", "scale-test-keychain",
+                    "scale-md5-secret", "7"]
+    assert len(auth[3]) == 16
     assert config.index("auth-md5 ") < config.index("up eth0")
     assert config.index("redistribute static") < config.index("up eth0")
 

@@ -18,6 +18,7 @@ GROUPS = {
         "auth-topology/md5-duplicate.yaml", "auth-topology/md5-lost-ack.yaml",
         "auth-topology/md5-mixed-lan.yaml",
         "auth-topology/md5-key-id-isolation.yaml",
+        "auth-topology/md5-scale-redist.yaml",
     },
     "dual-diamond": {"dual-diamond/feasible-successor.yaml"},
     "kite-topology": {

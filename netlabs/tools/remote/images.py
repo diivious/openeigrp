@@ -136,6 +136,20 @@ def staged_release(topology_path):
 def prepare(topology_path, artifact_path):
     """Pin a verified image in the staged topology, never the source fixture."""
     topology_path = Path(topology_path)
+    # Control experiments can contain only Cisco routers. No FRR image is
+    # required, and pinning an unrelated OpenEIGRP image would add a false
+    # dependency to independent Cisco wire evidence.
+    topology = yaml.safe_load(topology_path.read_text(encoding='utf8'))
+    nodes = topology.get('nodes', {}) if isinstance(topology, dict) else {}
+    if (len(nodes) == 2 and all(isinstance(node, dict) and
+                                node.get('device') == 'csr'
+                                for node in nodes.values())):
+        evidence = {'source': 'cisco-only', 'image': None,
+                    'nodes': sorted(nodes)}
+        Path(artifact_path).write_text(json.dumps(evidence, indent=2) + '\n',
+                                       encoding='utf8')
+        print('Cisco-only control: no OpenEIGRP image required', flush=True)
+        return
     dev = staged_image(topology_path)
     release = staged_release(topology_path)
     if dev and release:

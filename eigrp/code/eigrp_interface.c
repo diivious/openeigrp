@@ -1830,9 +1830,6 @@ void eigrp_intf_multicast_update(eigrp_operation_t operation, eigrp_intf_t *ei)
 void eigrp_intf_free(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 		     eigrp_intf_remove_reason_t reason)
 {
-	eigrp_prefix_t destination;
-	eigrp_prefix_descriptor_t *pe = NULL;
-
 	/* The distribute callback owns a raw ei pointer; link-down preserves
 	 * this timer, but interface destruction must retire it. */
 	eigrp_timer_cancel(ei->eigrp, &ei->t_distribute);
@@ -1842,13 +1839,12 @@ void eigrp_intf_free(eigrp_instance_t *eigrp, eigrp_intf_t *ei,
 		eigrp_hello_send(ei, EIGRP_HELLO_GRACEFUL_SHUTDOWN, NULL);
 	}
 
-	if (eigrp_intf_destination(ei, &destination))
-		pe = eigrp_topo_table_lookup(eigrp->topology_table,
-					     &destination);
-	if (pe)
-		eigrp_topo_pfx_delete(eigrp, eigrp->topology_table, pe);
-
+	/* Process the connected successor loss through DUAL before retiring
+	 * the interface. The packetizer still needs the poisoned descriptor to
+	 * advertise withdrawal on surviving interfaces. It owns retirement
+	 * after the pending topology changes are transmitted. */
 	eigrp_intf_down(ei);
+	eigrp_topo_intf_detach(eigrp, ei);
 	eigrp_packetizer_intf_detach(eigrp, ei);
 
 	pthread_mutex_lock(&ei->eigrp->peer_lock);

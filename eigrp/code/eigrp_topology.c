@@ -1718,6 +1718,31 @@ void eigrp_topo_rib_update(eigrp_instance_t *eigrp,
 }
 
 
+/* A destroyed interface must not remain referenced by topology paths.
+ * DUAL has already processed their loss; packetizer may still need the
+ * poisoned descriptors until it has sent their withdrawals. */
+void eigrp_topo_intf_detach(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
+{
+	eigrp_table_node_t *rn;
+	eigrp_prefix_descriptor_t *prefix;
+	eigrp_route_descriptor_t *route;
+	eigrp_topology_route_iterator_t iterator;
+
+	if (!eigrp || !ei || !eigrp->topology_table)
+		return;
+	for (rn = eigrp_table_first(eigrp->topology_table); rn;
+	     rn = eigrp_table_next(rn)) {
+		prefix = rn->info;
+		if (!prefix)
+			continue;
+		for (route = eigrp_topo_route_iterator_first(prefix, &iterator);
+		     route; route = eigrp_topo_route_iterator_next(&iterator)) {
+			if (route->ei == ei)
+				route->ei = NULL;
+		}
+	}
+}
+
 void eigrp_topo_connected_intf_down(eigrp_instance_t *eigrp, eigrp_intf_t *ei)
 {
 	eigrp_table_node_t *rn;

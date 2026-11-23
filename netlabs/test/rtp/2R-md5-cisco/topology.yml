@@ -1,0 +1,22 @@
+# Cisco-to-Cisco control: no OpenEIGRP, no preconfigured EIGRP process.
+name: eigrp-c2c-md5
+provider: clab
+
+defaults:
+  devices.csr.clab.image: vrnetlab/vr-csr:17.03.06
+
+nodes:
+  csr1:
+    device: csr
+    netlab_check_retries: 120
+    loopback.ipv4: 10.255.1.1/32
+  csr2:
+    device: csr
+    netlab_check_retries: 120
+    loopback.ipv4: 10.255.2.2/32
+
+links:
+- csr1:
+    ipv4: 10.44.53.1/30
+  csr2:
+    ipv4: 10.44.53.2/30

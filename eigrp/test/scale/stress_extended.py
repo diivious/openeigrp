@@ -84,7 +84,8 @@ def wait_for(node, minimum: int, deadline: float, description: str,
             print(f"  {description}: TOPO={counts['TOPO']} RIB={counts['RIB']} "
                   f"UP={len(up)} queues={outputs}", flush=True)
             return counts, up, outputs
-        print(f"  {description}: waiting, topology={counts['TOPO']}, peers={len(up)}", flush=True)
+        print(f"  {description}: waiting, TOPO={counts['TOPO']} RIB={counts['RIB']} "
+              f"UP={len(up)}", flush=True)
         time.sleep(1)
     raise AssertionError(f"{description}: route/peer state stalled; last={last}")
 
@@ -109,7 +110,9 @@ def router_config(name, address: str, *, source_count=0, md5=False):
              f"address {iface} {address}/24", f"segment {iface} shared",
              f"network {ipaddress.ip_network(address + '/24', strict=False)}"]
     if md5:
-        lines.append("auth-md5 eth0 scale-test-keychain scale-test-only-secret")
+        # The UUT requires an explicit key ID. Keep the key within the
+        # Cisco-verified 16-byte MD5 profile used by the production core.
+        lines.append("auth-md5 eth0 scale-test-keychain scale-md5-secret 7")
     if source_count:
         lines.extend(f"source {prefix(i)} 1" for i in range(source_count))
         lines.append("redistribute static")
@@ -141,13 +144,14 @@ def paired_nodes(path: Path, count: int, *, md5=False):
 
 
 def withdraw():
-    deadline = time.monotonic() + WATCHDOG
     with base.tempfile.TemporaryDirectory(prefix="eigrp-withdraw-") as tmp:
         with paired_nodes(Path(tmp), ROUTES) as (nodes, broker):
-            wait_for(nodes["r2"], ROUTES + 1, deadline, "initial redistribution",
-                     maximum=ROUTES + 1, min_peers=1,
-                     min_rib=ROUTES + 1, max_rib=ROUTES + 1)
+            # The local transit prefix is in TOPO but not in the learned RIB.
+            wait_for(nodes["r2"], ROUTES + 1, time.monotonic() + WATCHDOG,
+                     "initial redistribution", maximum=ROUTES + 1, min_peers=1,
+                     min_rib=ROUTES, max_rib=ROUTES)
             peak = rss_kib(nodes["r2"].proc.pid)
+            deadline = time.monotonic() + WATCHDOG
             for i in range(ROUTES):
                 command(nodes["r1"], "SOURCE-DEL " + prefix(i))
                 if i % 10000 == 9999:
@@ -156,17 +160,19 @@ def withdraw():
                 if time.monotonic() >= deadline:
                     raise AssertionError("withdraw watchdog expired")
             # Allow connected prefixes; none of the 100/8 source routes may remain.
-            wait_for(nodes["r2"], 1, deadline, "withdrawn topology",
-                     maximum=1, min_peers=1, min_rib=1, max_rib=1)
+            wait_for(nodes["r2"], 1, time.monotonic() + WATCHDOG,
+                     "withdrawn topology", maximum=1, min_peers=1,
+                     min_rib=0, max_rib=0)
+            deadline = time.monotonic() + WATCHDOG
             for i in range(ROUTES):
                 command(nodes["r1"], f"SOURCE-ADD {prefix(i)} 1")
                 if i % 10000 == 9999:
                     print(f"  reinjected {i+1}/{ROUTES}", flush=True)
                 if time.monotonic() >= deadline:
                     raise AssertionError("reinject watchdog expired")
-            wait_for(nodes["r2"], ROUTES + 1, deadline, "reinstall after withdrawal",
-                     maximum=ROUTES + 1, min_peers=1,
-                     min_rib=ROUTES + 1, max_rib=ROUTES + 1)
+            wait_for(nodes["r2"], ROUTES + 1, time.monotonic() + WATCHDOG,
+                     "reinstall after withdrawal", maximum=ROUTES + 1, min_peers=1,
+                     min_rib=ROUTES, max_rib=ROUTES)
             check_live(nodes, broker=broker)
             print(f"PASS scale/withdraw: {ROUTES} routes withdrawn and reinstalled; "
                   f"RSS_before={peak}KiB RSS_after={rss_kib(nodes['r2'].proc.pid)}KiB")
@@ -182,7 +188,7 @@ def churn():
         with paired_nodes(Path(tmp), ROUTES) as (nodes, broker):
             wait_for(nodes["r2"], ROUTES + 1, time.monotonic() + WATCHDOG,
                      "churn initial routes", maximum=ROUTES + 1, min_peers=1,
-                     min_rib=ROUTES + 1, max_rib=ROUTES + 1)
+                     min_rib=ROUTES, max_rib=ROUTES)
             rss_before = rss_kib(nodes["r1"].proc.pid)
             for cycle in range(CHURN_CYCLES):
                 phase_start = time.monotonic()
@@ -201,7 +207,7 @@ def churn():
                 expected = ROUTES - CHURN_ROUTES + 1
                 wait_for(nodes["r2"], expected, time.monotonic() + WATCHDOG,
                          f"churn cycle {cycle+1} withdraw", maximum=expected,
-                         min_peers=1, min_rib=expected, max_rib=expected)
+                         min_peers=1, min_rib=expected - 1, max_rib=expected - 1)
                 phase_deadline = time.monotonic() + WATCHDOG
                 for i in range(CHURN_ROUTES):
                     command(nodes["r1"], f"SOURCE-ADD {prefix(i)} {cycle+2}")
@@ -209,7 +215,7 @@ def churn():
                         raise AssertionError(f"churn cycle {cycle+1}: restore injection exceeded watchdog")
                 wait_for(nodes["r2"], ROUTES + 1, time.monotonic() + WATCHDOG,
                          f"churn cycle {cycle+1} restore", maximum=ROUTES + 1,
-                         min_peers=1, min_rib=ROUTES + 1, max_rib=ROUTES + 1)
+                         min_peers=1, min_rib=ROUTES, max_rib=ROUTES)
                 check_live(nodes, broker=broker)
                 print(f"  cycle={cycle+1}/{CHURN_CYCLES} "
                       f"elapsed={time.monotonic()-phase_start:.3f}s "

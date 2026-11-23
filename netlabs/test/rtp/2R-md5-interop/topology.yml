@@ -1,0 +1,24 @@
+# Netlab configures link and loopback addressing, not EIGRP authentication.
+# The driver enables EIGRP only after the bidirectional capture is active.
+name: eigrp-2r-md5
+provider: clab
+
+defaults:
+  devices.frr.clab.image: ghcr.io/diivious/openeigrp-frr:0.5.0
+  devices.csr.clab.image: vrnetlab/vr-csr:17.03.06
+  devices.frr.clab.group_vars.netlab_config_exec: [ 'sleep 10' ]
+
+nodes:
+  oe:
+    device: frr
+    frr.daemons: [ eigrpd ]
+    loopback.ipv4: 10.255.0.1/32
+  csr:
+    device: csr
+    loopback.ipv4: 10.255.0.2/32
+
+links:
+- oe:
+    ipv4: 10.44.53.1/30
+  csr:
+    ipv4: 10.44.53.2/30

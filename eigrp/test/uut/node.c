@@ -1327,11 +1327,13 @@ int main(int argc, char **argv)
 			    || sscanf(line, "%*s %u %u %u %u %u", &bw, &delay,
 				      &reliability, &load, &mtu)
 				       == 5) {
-				values.bandwidth = bw;
-				values.delay = delay;
-				values.reliability = reliability;
-				values.load = load;
-				values.mtu = mtu;
+				if (!reset) {
+					values.bandwidth = bw;
+					values.delay = delay;
+					values.reliability = reliability;
+					values.load = load;
+					values.mtu = mtu;
+				}
 				result = uut_redist_metric_update(
 					!strcmp(verb, "REDIST-DEFAULT"), reset,
 					&values);
